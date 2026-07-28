@@ -10,6 +10,12 @@
   - [Active Directory Bulk User Creation](https://github.com/joshmadakor1/AD_PS)
   - [FIM (File Integrity Monitor)](https://github.com/joshmadakor1/PowerShell-Integrity-FIM)
 
+<h2>🤖 Automation Projects</h2>
+
+- <b>AI Prospect Tiering Pipeline (n8n)</b> — finds and tiers high-intent prospects for AI-automation outreach across personal injury law, medical practices, and home services in California. Apollo discovery → website AI-signal scraping → maturity/intent scoring → Supabase storage → weekly Tier 1 email digest → approval-gated Vapi voice outreach with automated call-outcome handling.
+  - Workflows: [`n8n/workflows/`](n8n/workflows/) · Schema: [`supabase/schema.sql`](supabase/schema.sql) · [Setup guide](docs/setup.md) · [Compliance notes](docs/compliance.md)
+  - Pipeline: `Apollo search → dedupe vs Supabase → scrape site → detect chatbots/booking/CRM/email tools → score (Tier 1 = no AI detected = highest intent) → reveal top contacts (free-tier credit capped) → upsert → digest → approved calls via Vapi → webhook logs outcome + follow-ups`
+
 <h2>📊 Data Projects</h2>
 <b>LAGOS LOGISTICS </b>
 - [Praciting DS & Algos in Python](https://github.com/ismailwright-rgb/Alfred)
