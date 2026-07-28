@@ -1,0 +1,86 @@
+{
+  "name": "Prospecting - 03 Global Error Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Global error handler\n\nAttach this workflow as the **Error Workflow** of the other prospecting workflows:\nWorkflow > Settings > Error Workflow > \"Prospecting - 03 Global Error Handler\".\n\nEvery unhandled failure lands in the Supabase `error_log` table with `level = 'fatal'`.\n\nRequires:\n- env var `SUPABASE_URL`\n- Header Auth credential \"Supabase Service Role (Header Auth)\" (header `apikey` = service role key)",
+        "height": 320,
+        "width": 420
+      },
+      "id": "c3000000-0000-4000-8000-000000000099",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [180, 60]
+    },
+    {
+      "parameters": {},
+      "id": "c3000000-0000-4000-8000-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 460]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Shape the Error Trigger payload into an error_log row.\nconst data = $input.first().json;\nconst execution = data.execution || {};\nconst error = execution.error || {};\n\nreturn [{\n  json: {\n    workflow: (data.workflow && data.workflow.name) || 'unknown',\n    node: execution.lastNodeExecuted || (error.node && error.node.name) || null,\n    level: 'fatal',\n    message: String(error.message || 'unknown error').slice(0, 2000),\n    payload: {\n      execution_id: execution.id || null,\n      execution_url: execution.url || null,\n      stack: String(error.stack || '').slice(0, 4000),\n    },\n  },\n}];"
+      },
+      "id": "c3000000-0000-4000-8000-000000000002",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/error_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "c3000000-0000-4000-8000-000000000003",
+      "name": "Insert Error Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 460],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [ { "node": "Format Error", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [ { "node": "Insert Error Log", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  },
+  "pinData": {},
+  "meta": {}
+}

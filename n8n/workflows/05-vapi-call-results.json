@@ -1,0 +1,468 @@
+{
+  "name": "Prospecting - 05 Vapi Call Results",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Vapi end-of-call-report webhook\n\nReceives Vapi server messages. Set your Vapi assistant's **Server URL** to this workflow's production webhook URL (shown on the `Vapi Webhook` node after activation) and set the server secret to the same value as the `VAPI_WEBHOOK_SECRET` env var.\n\nOn each completed call:\n1. Updates `outreach_log` (outcome, summary, transcript, cost)\n2. Updates the prospect's `outreach_status`\n3. `asked_not_to_call` -> sets `do_not_contact` + adds to `suppression_list`\n4. interested / voicemail -> follow-up email to the prospect\n5. interested / callback -> alert email to you\n\nRequires:\n- env vars `SUPABASE_URL`, `VAPI_WEBHOOK_SECRET`, `DIGEST_FROM_EMAIL`, `DIGEST_TO_EMAIL`\n- credentials: \"Supabase Service Role (Header Auth)\", \"SMTP Account\"",
+        "height": 440,
+        "width": 480
+      },
+      "id": "e5000000-0000-4000-8000-000000000099",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [60, 0]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-call-results",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e5000000-0000-4000-8000-000000000001",
+      "name": "Vapi Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [140, 560],
+      "webhookId": "e5000000-0000-4000-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "secret-ok",
+              "leftValue": "={{ !!$env.VAPI_WEBHOOK_SECRET && $json.headers['x-vapi-secret'] === $env.VAPI_WEBHOOK_SECRET }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5000000-0000-4000-8000-000000000002",
+      "name": "Verify Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [360, 560]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"error\": \"unauthorized\" }",
+        "options": { "responseCode": 401 }
+      },
+      "id": "e5000000-0000-4000-8000-000000000003",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [580, 760]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"ok\": true }",
+        "options": { "responseCode": 200 }
+      },
+      "id": "e5000000-0000-4000-8000-000000000004",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [580, 460]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "eocr",
+              "leftValue": "={{ $json.body && $json.body.message && $json.body.message.type === 'end-of-call-report' }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5000000-0000-4000-8000-000000000005",
+      "name": "Is End Of Call Report?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [800, 460]
+    },
+    {
+      "parameters": {},
+      "id": "e5000000-0000-4000-8000-000000000006",
+      "name": "Ignore Other Events",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1020, 620]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Map the Vapi end-of-call-report to an outcome + outreach status.\nconst msg = $input.first().json.body.message;\nconst call = msg.call || {};\nconst prospectId = (call.metadata && call.metadata.prospect_id) || (msg.metadata && msg.metadata.prospect_id) || null;\nconst analysis = msg.analysis || {};\nconst structured = analysis.structuredData || {};\nconst summary = String(analysis.summary || msg.summary || '');\nconst endedReason = String(msg.endedReason || call.endedReason || '');\n\n// Prefer a structured outcome from the assistant's analysis schema; fall back to keywords.\nlet outcome = String(structured.outcome || '').toLowerCase().replace(/[^a-z_]/g, '_');\nconst VALID = ['interested', 'callback', 'not_interested', 'voicemail', 'asked_not_to_call', 'no_answer', 'contacted'];\nif (!VALID.includes(outcome)) {\n  const s = summary.toLowerCase();\n  if (/do not call|don't call|stop calling|remove (me|us)|take (me|us) off/.test(s)) outcome = 'asked_not_to_call';\n  else if (/interested|wants? (a )?(demo|meeting|quote|follow[- ]?up)|schedule[sd]? (a )?(call|meeting)/.test(s)) outcome = 'interested';\n  else if (/call (them |me |us )?back|callback|better time|try again/.test(s)) outcome = 'callback';\n  else if (/not interested|declined|no thanks/.test(s)) outcome = 'not_interested';\n  else if (/voicemail|left a message/.test(s) || /voicemail/i.test(endedReason)) outcome = 'voicemail';\n  else if (/no answer|did not (pick|answer)|busy/.test(s) || /(no-answer|busy)/i.test(endedReason)) outcome = 'no_answer';\n  else outcome = 'contacted';\n}\n\nconst statusMap = {\n  interested: 'interested',\n  callback: 'callback',\n  not_interested: 'not_interested',\n  asked_not_to_call: 'do_not_call',\n  voicemail: 'contacted',\n  no_answer: 'contacted',\n  contacted: 'contacted',\n};\n\nlet durationSeconds = null;\nif (typeof msg.durationSeconds === 'number') durationSeconds = Math.round(msg.durationSeconds);\nelse if (msg.startedAt && msg.endedAt) durationSeconds = Math.max(0, Math.round((new Date(msg.endedAt) - new Date(msg.startedAt)) / 1000));\n\nreturn [{\n  json: {\n    prospect_id: prospectId,\n    vapi_call_id: call.id || null,\n    outcome,\n    outreach_status: statusMap[outcome] || 'contacted',\n    ended_reason: endedReason || null,\n    duration_seconds: durationSeconds,\n    cost: typeof msg.cost === 'number' ? msg.cost : null,\n    summary: summary.slice(0, 4000) || null,\n    transcript: String(msg.transcript || '').slice(0, 20000) || null,\n    recording_url: msg.recordingUrl || (msg.artifact && msg.artifact.recordingUrl) || null,\n    ended_at: msg.endedAt || new Date().toISOString(),\n  },\n}];"
+      },
+      "id": "e5000000-0000-4000-8000-000000000007",
+      "name": "Parse Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 360]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/prospects?id=eq.{{ $json.prospect_id }}&select=company_name,contact_name,contact_email,contact_phone,domain,vertical",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "e5000000-0000-4000-8000-000000000008",
+      "name": "Get Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1240, 360],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Combine the parsed call outcome with the prospect record.\nconst parsed = $('Parse Outcome').first().json;\nconst p = $input.first().json || {};\nreturn [{\n  json: {\n    ...parsed,\n    company_name: p.company_name || null,\n    contact_name: p.contact_name || null,\n    contact_email: p.contact_email || null,\n    contact_phone: p.contact_phone || null,\n    domain: p.domain || null,\n    vertical: p.vertical || null,\n  },\n}];"
+      },
+      "id": "e5000000-0000-4000-8000-000000000009",
+      "name": "Merge Prospect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1460, 360]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/outreach_log?vapi_call_id=eq.{{ $json.vapi_call_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'completed', outcome: $json.outcome, ended_reason: $json.ended_reason, duration_seconds: $json.duration_seconds, cost: $json.cost, summary: $json.summary, transcript: $json.transcript, recording_url: $json.recording_url, ended_at: $json.ended_at }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "e5000000-0000-4000-8000-000000000010",
+      "name": "Update Outreach Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 360],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/prospects?id=eq.{{ $('Merge Prospect').first().json.prospect_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ outreach_status: $('Merge Prospect').first().json.outreach_status }, $('Merge Prospect').first().json.outcome === 'asked_not_to_call' ? { do_not_contact: true } : {})) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "e5000000-0000-4000-8000-000000000011",
+      "name": "Update Prospect Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1900, 360],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "dnc",
+              "leftValue": "={{ $('Merge Prospect').first().json.outcome === 'asked_not_to_call' }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5000000-0000-4000-8000-000000000012",
+      "name": "Asked Not To Call?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2120, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/suppression_list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ domain: $('Merge Prospect').first().json.domain, email: $('Merge Prospect').first().json.contact_email, phone: $('Merge Prospect').first().json.contact_phone, reason: 'asked not to be called (vapi outreach)' }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "e5000000-0000-4000-8000-000000000013",
+      "name": "Add To Suppression",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2340, 260],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "follow-up",
+              "leftValue": "={{ ['interested', 'voicemail'].includes($('Merge Prospect').first().json.outcome) && !!$('Merge Prospect').first().json.contact_email }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5000000-0000-4000-8000-000000000014",
+      "name": "Follow Up Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2560, 360]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.DIGEST_FROM_EMAIL }}",
+        "toEmail": "={{ $('Merge Prospect').first().json.contact_email }}",
+        "subject": "=Following up on our call - {{ $('Merge Prospect').first().json.company_name }}",
+        "emailFormat": "html",
+        "html": "=<p>Hi {{ $('Merge Prospect').first().json.contact_name || 'there' }},</p><p>Thanks for taking the time today - this is a quick follow-up from our call to {{ $('Merge Prospect').first().json.company_name }}.</p><p>We help businesses like yours automate appointment booking, lead follow-up, and front-desk calls with AI so you never miss a customer. I'd love to show you a quick demo tailored to your business.</p><p>Just reply to this email and I'll set something up at a time that works for you.</p><p>Best,<br>Ismail</p><p style=\"color:#888;font-size:12px;\">If you'd rather not hear from us again, just reply with \"unsubscribe\" and we'll remove you immediately.</p>",
+        "options": {}
+      },
+      "id": "e5000000-0000-4000-8000-000000000015",
+      "name": "Send Follow-up Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2780, 260],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-account",
+          "name": "SMTP Account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "notify",
+              "leftValue": "={{ ['interested', 'callback'].includes($('Merge Prospect').first().json.outcome) }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5000000-0000-4000-8000-000000000016",
+      "name": "Notify Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [3000, 360]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.DIGEST_FROM_EMAIL }}",
+        "toEmail": "={{ $env.DIGEST_TO_EMAIL }}",
+        "subject": "=[{{ $('Merge Prospect').first().json.outcome }}] {{ $('Merge Prospect').first().json.company_name }} - act on this lead",
+        "emailFormat": "html",
+        "html": "=<h3>{{ $('Merge Prospect').first().json.company_name }} ({{ $('Merge Prospect').first().json.domain }})</h3><p><strong>Outcome:</strong> {{ $('Merge Prospect').first().json.outcome }}<br><strong>Contact:</strong> {{ $('Merge Prospect').first().json.contact_name || '-' }} / {{ $('Merge Prospect').first().json.contact_email || '-' }} / {{ $('Merge Prospect').first().json.contact_phone || '-' }}<br><strong>Duration:</strong> {{ $('Merge Prospect').first().json.duration_seconds || '?' }}s</p><p><strong>Call summary:</strong></p><blockquote>{{ $('Merge Prospect').first().json.summary || '(no summary)' }}</blockquote><p>Recording: {{ $('Merge Prospect').first().json.recording_url || '(none)' }}</p>",
+        "options": {}
+      },
+      "id": "e5000000-0000-4000-8000-000000000017",
+      "name": "Notify Me",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [3220, 260],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-account",
+          "name": "SMTP Account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "e5000000-0000-4000-8000-000000000018",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [3440, 360]
+    }
+  ],
+  "connections": {
+    "Vapi Webhook": {
+      "main": [
+        [ { "node": "Verify Secret", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Verify Secret": {
+      "main": [
+        [ { "node": "Respond OK", "type": "main", "index": 0 } ],
+        [ { "node": "Respond 401", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Respond OK": {
+      "main": [
+        [ { "node": "Is End Of Call Report?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Is End Of Call Report?": {
+      "main": [
+        [ { "node": "Parse Outcome", "type": "main", "index": 0 } ],
+        [ { "node": "Ignore Other Events", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Parse Outcome": {
+      "main": [
+        [ { "node": "Get Prospect", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Get Prospect": {
+      "main": [
+        [ { "node": "Merge Prospect", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Merge Prospect": {
+      "main": [
+        [ { "node": "Update Outreach Log", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Update Outreach Log": {
+      "main": [
+        [ { "node": "Update Prospect Status", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Update Prospect Status": {
+      "main": [
+        [ { "node": "Asked Not To Call?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Asked Not To Call?": {
+      "main": [
+        [ { "node": "Add To Suppression", "type": "main", "index": 0 } ],
+        [ { "node": "Follow Up Needed?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Add To Suppression": {
+      "main": [
+        [ { "node": "Follow Up Needed?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Follow Up Needed?": {
+      "main": [
+        [ { "node": "Send Follow-up Email", "type": "main", "index": 0 } ],
+        [ { "node": "Notify Needed?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Send Follow-up Email": {
+      "main": [
+        [ { "node": "Notify Needed?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Notify Needed?": {
+      "main": [
+        [ { "node": "Notify Me", "type": "main", "index": 0 } ],
+        [ { "node": "Done", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Notify Me": {
+      "main": [
+        [ { "node": "Done", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  },
+  "pinData": {},
+  "meta": {}
+}

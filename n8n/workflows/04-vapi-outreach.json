@@ -1,0 +1,375 @@
+{
+  "name": "Prospecting - 04 Vapi Outreach",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Vapi voice outreach (approval-gated)\n\nDials ONLY prospects you have explicitly approved:\n`update prospects set outreach_status = 'approved' where id in (...);`\n\nRuns weekdays at 10:00 workflow time (inside the 8am-9pm TCPA calling window for California prospects). Caps at 10 calls per run (`maxCallsPerRun` in `Call Config`), 30s pause between dials.\n\nCall results arrive via workflow 05 (Vapi end-of-call-report webhook).\n\nRequires:\n- env vars `SUPABASE_URL`, `VAPI_ASSISTANT_ID`, `VAPI_PHONE_NUMBER_ID`\n- credentials: \"Supabase Service Role (Header Auth)\", \"Vapi API Key (Header Auth)\" (header `Authorization` = `Bearer <vapi key>`)\n\nCompliance: the Vapi assistant MUST disclose it is an AI assistant and on whose behalf it is calling. See docs/compliance.md.",
+        "height": 440,
+        "width": 480
+      },
+      "id": "d4000000-0000-4000-8000-000000000099",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [120, 0]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 10 * * 1-5" }
+          ]
+        }
+      },
+      "id": "d4000000-0000-4000-8000-000000000001",
+      "name": "Outreach Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 560]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Run configuration + env sanity checks (a throw here lands in the error workflow).\nconst assistantId = $env.VAPI_ASSISTANT_ID || '';\nconst phoneNumberId = $env.VAPI_PHONE_NUMBER_ID || '';\nif (!assistantId || !phoneNumberId) {\n  throw new Error('VAPI_ASSISTANT_ID and VAPI_PHONE_NUMBER_ID env vars must be set');\n}\nreturn [{ json: { maxCallsPerRun: 10, assistantId, phoneNumberId } }];"
+      },
+      "id": "d4000000-0000-4000-8000-000000000002",
+      "name": "Call Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 560]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/prospects?outreach_status=eq.approved&contact_phone=not.is.null&do_not_contact=is.false&order=intent_score.desc&limit=25&select=id,company_name,domain,vertical,contact_name,contact_phone,contact_email,intent_score",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "d4000000-0000-4000-8000-000000000003",
+      "name": "Get Approved Prospects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 560],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/suppression_list?select=domain,email,phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "d4000000-0000-4000-8000-000000000004",
+      "name": "Get Call Suppression",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 560],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalize phones to E.164 (+1XXXXXXXXXX), drop suppressed rows, cap per run.\n// First output item is a marker carrying the skipped list for the run summary.\nconst cfg = $('Call Config').first().json;\nconst supp = $('Get Call Suppression').all().map((i) => i.json).filter((s) => s && (s.domain || s.email || s.phone));\nconst suppPhones = new Set(supp.map((s) => s.phone).filter(Boolean));\nconst suppDomains = new Set(supp.map((s) => (s.domain || '').toLowerCase()).filter(Boolean));\n\nconst out = [];\nconst skipped = [];\nfor (const i of $('Get Approved Prospects').all()) {\n  const p = i.json;\n  if (!p || !p.id) continue;\n  const digits = String(p.contact_phone || '').replace(/[^\\d+]/g, '');\n  let e164 = null;\n  if (/^\\+1\\d{10}$/.test(digits)) e164 = digits;\n  else if (/^1\\d{10}$/.test(digits)) e164 = '+' + digits;\n  else if (/^\\d{10}$/.test(digits)) e164 = '+1' + digits;\n  if (!e164) {\n    skipped.push({ domain: p.domain, reason: 'invalid phone: ' + p.contact_phone });\n    continue;\n  }\n  if (suppPhones.has(e164) || suppDomains.has((p.domain || '').toLowerCase())) {\n    skipped.push({ domain: p.domain, reason: 'suppressed' });\n    continue;\n  }\n  if (out.length >= cfg.maxCallsPerRun) {\n    skipped.push({ domain: p.domain, reason: 'over per-run call cap' });\n    continue;\n  }\n  out.push({ json: { ...p, phone_e164: e164, assistantId: cfg.assistantId, phoneNumberId: cfg.phoneNumberId } });\n}\n\nreturn [{ json: { _marker: true, _skipped: skipped, _queued: out.length } }, ...out];"
+      },
+      "id": "d4000000-0000-4000-8000-000000000005",
+      "name": "Filter + Normalize Phones",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 560]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "d4000000-0000-4000-8000-000000000006",
+      "name": "Per Call",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1300, 560]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "valid-call",
+              "leftValue": "={{ !!$json.phone_e164 }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4000000-0000-4000-8000-000000000007",
+      "name": "Valid Call?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1520, 660]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ assistantId: $('Per Call').first().json.assistantId, phoneNumberId: $('Per Call').first().json.phoneNumberId, customer: { number: $('Per Call').first().json.phone_e164, name: $('Per Call').first().json.company_name }, assistantOverrides: { variableValues: { company_name: $('Per Call').first().json.company_name, contact_name: $('Per Call').first().json.contact_name || 'there', vertical: $('Per Call').first().json.vertical } }, metadata: { prospect_id: $('Per Call').first().json.id, domain: $('Per Call').first().json.domain } }) }}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "d4000000-0000-4000-8000-000000000008",
+      "name": "Vapi Create Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 660],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "vapi-header-auth",
+          "name": "Vapi API Key (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/outreach_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ prospect_id: $('Per Call').first().json.id, vapi_call_id: $json.id || null, status: 'initiated' }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "d4000000-0000-4000-8000-000000000009",
+      "name": "Insert Outreach Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1960, 660],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/prospects?id=eq.{{ $('Per Call').first().json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ outreach_status: 'calling' }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "d4000000-0000-4000-8000-000000000010",
+      "name": "Set Status Calling",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 660],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "d4000000-0000-4000-8000-000000000011",
+      "name": "Pace Calls",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2400, 660],
+      "webhookId": "d4000000-0000-4000-8000-00000000w011"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/error_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, node: 'Vapi Create Call', level: 'error', domain: $('Per Call').first().json.domain || null, message: String(($json.error && $json.error.message) || 'vapi call creation failed').slice(0, 2000) }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "d4000000-0000-4000-8000-000000000012",
+      "name": "Log Call Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1960, 860],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/error_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, node: 'Log Outreach Summary', level: 'info', message: 'vapi outreach run complete', payload: { queued: $('Filter + Normalize Phones').first().json._queued || 0, skipped: $('Filter + Normalize Phones').first().json._skipped || [] } }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "d4000000-0000-4000-8000-000000000013",
+      "name": "Log Outreach Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1520, 420],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Outreach Trigger": {
+      "main": [
+        [ { "node": "Call Config", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Call Config": {
+      "main": [
+        [ { "node": "Get Approved Prospects", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Get Approved Prospects": {
+      "main": [
+        [ { "node": "Get Call Suppression", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Get Call Suppression": {
+      "main": [
+        [ { "node": "Filter + Normalize Phones", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Filter + Normalize Phones": {
+      "main": [
+        [ { "node": "Per Call", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Per Call": {
+      "main": [
+        [ { "node": "Log Outreach Summary", "type": "main", "index": 0 } ],
+        [ { "node": "Valid Call?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Valid Call?": {
+      "main": [
+        [ { "node": "Vapi Create Call", "type": "main", "index": 0 } ],
+        [ { "node": "Per Call", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Vapi Create Call": {
+      "main": [
+        [ { "node": "Insert Outreach Log", "type": "main", "index": 0 } ],
+        [ { "node": "Log Call Failed", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Insert Outreach Log": {
+      "main": [
+        [ { "node": "Set Status Calling", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Set Status Calling": {
+      "main": [
+        [ { "node": "Pace Calls", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Pace Calls": {
+      "main": [
+        [ { "node": "Per Call", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Log Call Failed": {
+      "main": [
+        [ { "node": "Per Call", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  },
+  "pinData": {},
+  "meta": {}
+}

@@ -1,0 +1,149 @@
+{
+  "name": "Prospecting - 02 Tier 1 Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Tier 1 weekly digest\n\nEmails a ranked list of **Tier 1** prospects (no AI tooling detected = highest intent), read from the Supabase `tier1_prospects` view.\n\n**Cadence**: Mondays 08:00 (workflow timezone). For a DAILY digest change the cron expression in `Digest Trigger` to `0 8 * * 1-5`.\n\n**Approving prospects for Vapi calling**: run in Supabase SQL editor:\n`update prospects set outreach_status = 'approved' where id in ('<uuid>', ...);`\n\nRequires:\n- env vars `SUPABASE_URL`, `DIGEST_FROM_EMAIL`, `DIGEST_TO_EMAIL`\n- credentials: \"Supabase Service Role (Header Auth)\", \"SMTP Account\"",
+        "height": 380,
+        "width": 460
+      },
+      "id": "b2000000-0000-4000-8000-000000000099",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [140, 20]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 8 * * 1" }
+          ]
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000001",
+      "name": "Digest Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 480]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/tier1_prospects?select=*&order=intent_score.desc&limit=25",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000002",
+      "name": "Get Tier 1 Prospects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 480],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "has-rows",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000003",
+      "name": "Has Prospects?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [640, 480]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Build the ranked Tier 1 digest (HTML + plain text).\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.id);\nconst date = new Date().toISOString().slice(0, 10);\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\nconst verticalLabel = {\n  personal_injury_law: 'Personal injury law',\n  medical_practice: 'Medical practice',\n  home_services: 'Home services',\n};\n\nconst tr = rows\n  .map((r, i) => {\n    const sig = r.signals || {};\n    const notes = [];\n    if (sig.email_pending) notes.push('email pending');\n    if (sig.active_job_postings) notes.push(sig.active_job_postings + ' open roles');\n    return (\n      '<tr>' +\n      '<td style=\"padding:6px 10px;\">' + (i + 1) + '</td>' +\n      '<td style=\"padding:6px 10px;\"><strong>' + esc(r.company_name) + '</strong><br><a href=\"https://' + esc(r.domain) + '\">' + esc(r.domain) + '</a></td>' +\n      '<td style=\"padding:6px 10px;\">' + esc(verticalLabel[r.vertical] || r.vertical) + '</td>' +\n      '<td style=\"padding:6px 10px;\">' + esc(r.city || '') + '</td>' +\n      '<td style=\"padding:6px 10px;\">' + esc(r.contact_name || '-') + '<br><small>' + esc(r.contact_title || '') + '</small></td>' +\n      '<td style=\"padding:6px 10px;\">' + esc(r.contact_email || '(pending)') + '<br>' + esc(r.contact_phone || '') + '</td>' +\n      '<td style=\"padding:6px 10px;text-align:center;\"><strong>' + r.intent_score + '</strong></td>' +\n      '<td style=\"padding:6px 10px;\">' + esc(r.outreach_status) + (notes.length ? '<br><small>' + esc(notes.join(', ')) + '</small>' : '') + '</td>' +\n      '</tr>'\n    );\n  })\n  .join('');\n\nconst html =\n  '<h2>Tier 1 AI-automation prospects - ' + date + '</h2>' +\n  '<p>' + rows.length + ' businesses with <strong>no AI tooling detected</strong>, ranked by intent score (highest first).</p>' +\n  '<table border=\"1\" cellspacing=\"0\" style=\"border-collapse:collapse;border-color:#ddd;font-family:sans-serif;font-size:14px;\">' +\n  '<tr style=\"background:#f5f5f5;\"><th style=\"padding:6px 10px;\">#</th><th style=\"padding:6px 10px;\">Company</th><th style=\"padding:6px 10px;\">Vertical</th><th style=\"padding:6px 10px;\">City</th><th style=\"padding:6px 10px;\">Contact</th><th style=\"padding:6px 10px;\">Email / Phone</th><th style=\"padding:6px 10px;\">Intent</th><th style=\"padding:6px 10px;\">Status</th></tr>' +\n  tr +\n  '</table>' +\n  '<p><strong>To queue a prospect for a Vapi call</strong>, set its status to approved in Supabase:<br>' +\n  '<code>update prospects set outreach_status = \\'approved\\' where domain = \\'&lt;domain&gt;\\';</code></p>' +\n  '<p style=\"color:#888;font-size:12px;\">Opt-outs: add the domain/email/phone to the <code>suppression_list</code> table and the prospect is excluded from all future digests, enrichment, and calls. See docs/compliance.md.</p>';\n\nconst text = rows\n  .map((r, i) => (i + 1) + '. ' + r.company_name + ' (' + r.domain + ') - ' + (verticalLabel[r.vertical] || r.vertical) + ', intent ' + r.intent_score + ', ' + (r.contact_email || 'email pending') + ' ' + (r.contact_phone || ''))\n  .join('\\n');\n\nreturn [{ json: { subject: 'Tier 1 AI-Automation Prospects - ' + date + ' (' + rows.length + ')', html, text } }];"
+      },
+      "id": "b2000000-0000-4000-8000-000000000004",
+      "name": "Format Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 380]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.DIGEST_FROM_EMAIL }}",
+        "toEmail": "={{ $env.DIGEST_TO_EMAIL }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000005",
+      "name": "Send Digest Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1080, 380],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-account",
+          "name": "SMTP Account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {},
+      "id": "b2000000-0000-4000-8000-000000000006",
+      "name": "No Prospects",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [860, 580]
+    }
+  ],
+  "connections": {
+    "Digest Trigger": {
+      "main": [
+        [ { "node": "Get Tier 1 Prospects", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Get Tier 1 Prospects": {
+      "main": [
+        [ { "node": "Has Prospects?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Has Prospects?": {
+      "main": [
+        [ { "node": "Format Digest", "type": "main", "index": 0 } ],
+        [ { "node": "No Prospects", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Format Digest": {
+      "main": [
+        [ { "node": "Send Digest Email", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  },
+  "pinData": {},
+  "meta": {}
+}
