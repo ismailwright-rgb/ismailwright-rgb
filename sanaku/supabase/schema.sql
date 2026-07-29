@@ -47,8 +47,11 @@ create table if not exists sanaku_prospects (
   notes             text
 );
 
+-- NOTE: must be a FULL unique index - PostgREST upserts (?on_conflict=domain)
+-- cannot use a partial index for conflict detection (Postgres limitation).
+-- Multiple NULL domains remain allowed either way.
 create unique index if not exists sanaku_prospects_domain_key
-  on sanaku_prospects (domain) where domain is not null;
+  on sanaku_prospects (domain);
 create index if not exists sanaku_prospects_phone_idx on sanaku_prospects (contact_phone);
 create index if not exists sanaku_prospects_status_idx on sanaku_prospects (status);
 create index if not exists sanaku_prospects_tier_intent_idx on sanaku_prospects (tier, intent_score desc);
