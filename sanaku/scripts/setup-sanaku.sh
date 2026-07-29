@@ -28,7 +28,8 @@ set -euo pipefail
 : "${N8N_KEY:?Set N8N_KEY (n8n Settings > n8n API)}"
 : "${SUPABASE_URL:?Set SUPABASE_URL (https://<ref>.supabase.co)}"
 : "${SUPABASE_SERVICE_KEY:?Set SUPABASE_SERVICE_KEY (service_role key)}"
-: "${APOLLO_KEY:?Set APOLLO_KEY (Apollo API key)}"
+: "${PLACES_KEY:?Set PLACES_KEY (Google Places API key - the primary data source)}"
+APOLLO_KEY="${APOLLO_KEY:-}"   # optional: Apollo's free plan has no API access
 : "${OWNER_EMAIL:?Set OWNER_EMAIL (your email for digests)}"
 MAX_NEW="${MAX_NEW:-20}"
 
@@ -71,14 +72,17 @@ print(json.dumps({
   "type": "httpCustomAuth",
   "data": {"json": json.dumps({"headers": {"apikey": key, "Authorization": "Bearer " + key}})},
 }))')" | jsonget 'd["id"]')
-APOLLO_CRED_ID=$(api POST "/credentials" "$(python3 -c '
+APOLLO_CRED_ID=""
+if [ -n "$APOLLO_KEY" ]; then
+  APOLLO_CRED_ID=$(api POST "/credentials" "$(python3 -c '
 import json, os
 print(json.dumps({
   "name": "Apollo API Key (Header Auth)",
   "type": "httpHeaderAuth",
   "data": {"name": "x-api-key", "value": os.environ["APOLLO_KEY"]},
 }))')" | jsonget 'd["id"]')
-echo "    supabase cred: $SUPA_CRED_ID | apollo cred: $APOLLO_CRED_ID"
+fi
+echo "    supabase cred: $SUPA_CRED_ID | apollo cred: ${APOLLO_CRED_ID:-skipped (no APOLLO_KEY)}"
 
 echo "==> Downloading + patching W1..."
 curl -fsSL "$RAW_WF" -o "$TMP/w1.json"
@@ -93,6 +97,8 @@ owner = os.environ["OWNER_EMAIL"]
 supa_id, apollo_id = os.environ["SUPA_CRED_ID"], os.environ["APOLLO_CRED_ID"]
 max_new = int(os.environ["MAX_NEW"])
 
+places_key = os.environ["PLACES_KEY"]
+
 def patch_strings(obj):
     if isinstance(obj, dict):
         return {k: patch_strings(v) for k, v in obj.items()}
@@ -102,7 +108,9 @@ def patch_strings(obj):
         # hardcode values this instance has no env vars for
         obj = obj.replace("{{ $env.SUPABASE_URL }}", supa_url)
         obj = obj.replace("{{ $env.SANAKU_OWNER_EMAIL }}", owner)
-        obj = obj.replace("{{ $env.GOOGLE_PLACES_API_KEY }}", "")
+        obj = obj.replace("{{ $env.GOOGLE_PLACES_API_KEY }}", places_key)
+        # the Places gate expression must stay truthy after patching
+        obj = obj.replace("!!$env.GOOGLE_PLACES_API_KEY", "true")
         # expressions that became pure literals don't need the '=' prefix,
         # but n8n accepts it either way, so leave prefixes alone.
         return obj
@@ -121,7 +129,14 @@ for node in wf["nodes"]:
             del creds["httpHeaderAuth"]
             creds["httpCustomAuth"] = {"id": supa_id, "name": "Supabase Service Role (Custom Auth)"}
         elif "Apollo" in name:
-            creds["httpHeaderAuth"] = {"id": apollo_id, "name": "Apollo API Key (Header Auth)"}
+            if apollo_id:
+                creds["httpHeaderAuth"] = {"id": apollo_id, "name": "Apollo API Key (Header Auth)"}
+            else:
+                # No Apollo key: the Apollo nodes are gated off (useApollo=false)
+                # and must not reference a credential that doesn't exist.
+                del creds["httpHeaderAuth"]
+                node["parameters"].pop("authentication", None)
+                node["parameters"].pop("genericAuthType", None)
     if node["name"] == "Run Config":
         node["parameters"]["jsCode"] = node["parameters"]["jsCode"].replace(
             "maxNewPerRun: 50", f"maxNewPerRun: {max_new}")
