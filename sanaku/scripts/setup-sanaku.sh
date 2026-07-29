@@ -178,10 +178,14 @@ if not rows:
     print("  (none - check the execution log in the n8n UI and sanaku_errors in Supabase)")
 for i, r in enumerate(rows, 1):
     why = (r.get("signals") or {}).get("reason", "")
-    print(f"{i:2}. T{r[\"tier\"]} {r[\"intent_score\"]:>3}  {r[\"company_name\"][:38]:38} "
-          f"{r[\"vertical\"][:13]:13} {(r.get(\"contact_email\") or \"no email\")[:30]}")
+    line = "%2d. T%s %3s  %-38s %-13s %s" % (
+        i, r.get("tier"), r.get("intent_score"),
+        (r.get("company_name") or "")[:38],
+        (r.get("vertical") or "")[:13],
+        (r.get("contact_email") or "no email")[:30])
+    print(line)
     if why:
-        print(f"        why: {why}")
+        print("        why: " + why)
 '
 echo ""
 echo "Done. Errors/skips (if any): $SUPABASE_URL  -> table sanaku_errors"
