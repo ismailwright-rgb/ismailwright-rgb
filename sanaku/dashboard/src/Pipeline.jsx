@@ -239,7 +239,8 @@ function Row({ p, expanded, onExpand, checked, onCheck, onApprove, onThread }) {
           <b>{p.company_name}</b>
           <div className="muted">
             {p.domain} · {p.contact_name || 'no contact'}{p.contact_title ? ` (${p.contact_title})` : ''}
-            {!p.contact_email && ' · no email yet'}
+            {p.contact_phone ? ` · ${p.contact_phone}` : ''}
+            {p.contact_email ? ` · ${p.contact_email}` : ' · no email yet'}
           </div>
         </td>
         <td className="hide-m">{VERTICALS[p.vertical] || p.vertical}</td>
