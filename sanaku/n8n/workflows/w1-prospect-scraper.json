@@ -1,0 +1,631 @@
+{
+  "name": "Sanaku - W1 Prospect Scraper & Scorer",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## W1 - Prospect scraper & scorer\n\nMondays 08:00 + manual trigger for testing. Per run:\n1. Apollo `mixed_people/search` per vertical (decision-maker titles only, LA County) + Google Places supplement (25mi around Azusa) when `GOOGLE_PLACES_API_KEY` is set\n2. Dedupe against existing prospects (domain + phone) BEFORE any scraping\n3. robots.txt check -> fetch site (SanakuBot UA, 10s timeout, 3 retries) -> detect chat/booking/CRM/ads/forms signals\n4. Score maturity (0 = no automation = best) + intent (0-100) -> tier\n5. Reveal contact emails via Apollo `people/match` for Tier 1 only (max 12/run - the ONLY credit-consuming call)\n6. Upsert to `sanaku_prospects` (cap 50 new/run), email me a digest with top 10 Tier 1 + why they scored\n\nTune caps in `Run Config`. Dead sites/API failures log to `sanaku_errors` and never kill the run.\n\nCredentials: \"Supabase Service Role (Header Auth)\" (apikey), \"Apollo API Key (Header Auth)\" (x-api-key), \"Gmail Account\" (OAuth2).\nEnv: SUPABASE_URL, SANAKU_OWNER_EMAIL, optional GOOGLE_PLACES_API_KEY.",
+        "height": 480,
+        "width": 560
+      },
+      "id": "f1000000-0000-4000-8000-000000000099",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [40, 0]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 8 * * 1" }
+          ]
+        }
+      },
+      "id": "f1000000-0000-4000-8000-000000000001",
+      "name": "Weekly Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [120, 620]
+    },
+    {
+      "parameters": {},
+      "id": "f1000000-0000-4000-8000-000000000002",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [120, 780]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Central run config. Azusa CA = 34.1336, -117.9075; 40km ~ 25 miles.\nconst DM_TITLES = ['Owner', 'Founder', 'Managing Partner', 'Partner', 'Practice Owner', 'Practice Manager', 'Office Manager', 'General Manager', 'President'];\nconst bias = { circle: { center: { latitude: 34.1336, longitude: -117.9075 }, radius: 40000 } };\nconst apolloBase = {\n  person_titles: DM_TITLES,\n  person_locations: ['Los Angeles, California, US'],\n  organization_num_employees_ranges: ['2,100'],\n  contact_email_status: ['verified'],\n  per_page: 25,\n  page: 1,\n};\nreturn [{\n  json: {\n    currentYear: new Date().getFullYear(),\n    maxNewPerRun: 50,\n    maxPerVertical: 17,\n    maxRevealsPerRun: 12,\n    excludeTitleRe: 'receptionist|associate|paralegal|assistant',\n    excludeCompanyRe: 'marketing|agency|agencies|automation|\\\\bai\\\\b|artificial intelligence|software|saas|consult|growth partner|lead gen',\n    verticals: [\n      {\n        vertical: 'law_firm',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['personal injury law'] },\n        placesBody: { textQuery: 'personal injury lawyer', pageSize: 10, locationBias: bias },\n      },\n      {\n        vertical: 'medical',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['dental practice', 'medical clinic', 'med spa'] },\n        placesBody: { textQuery: 'dentist OR medical clinic OR med spa', pageSize: 10, locationBias: bias },\n      },\n      {\n        vertical: 'home_services',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['plumbing', 'hvac', 'electrical contractor'] },\n        placesBody: { textQuery: 'plumber OR hvac contractor OR electrician', pageSize: 10, locationBias: bias },\n      },\n    ],\n  },\n}];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000003",
+      "name": "Run Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [340, 700]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?select=domain,contact_phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Range", "value": "0-9999" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "f1000000-0000-4000-8000-000000000004",
+      "name": "Get Existing Prospects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 700],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// One item per vertical carrying the API bodies + dedupe sets.\nconst cfg = $('Run Config').first().json;\nconst norm = (d) => String(d || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].trim();\nconst digits = (p) => String(p || '').replace(/\\D/g, '').slice(-10);\nconst knownDomains = [];\nconst knownPhones = [];\nfor (const i of $('Get Existing Prospects').all()) {\n  const d = norm(i.json && i.json.domain);\n  if (d) knownDomains.push(d);\n  const p = digits(i.json && i.json.contact_phone);\n  if (p) knownPhones.push(p);\n}\nreturn cfg.verticals.map((v) => ({\n  json: {\n    vertical: v.vertical,\n    apolloBody: v.apolloBody,\n    placesBody: v.placesBody,\n    knownDomains,\n    knownPhones,\n    maxPerVertical: cfg.maxPerVertical,\n    excludeTitleRe: cfg.excludeTitleRe,\n    excludeCompanyRe: cfg.excludeCompanyRe,\n  },\n}));"
+      },
+      "id": "f1000000-0000-4000-8000-000000000005",
+      "name": "Build Vertical Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 700]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000006",
+      "name": "Per Vertical",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1000, 700]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/api/v1/mixed_people/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Per Vertical').first().json.apolloBody) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "f1000000-0000-4000-8000-000000000007",
+      "name": "Apollo People Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 800],
+      "credentials": {
+        "httpHeaderAuth": { "id": "apollo-header-auth", "name": "Apollo API Key (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Goog-Api-Key", "value": "={{ $env.GOOGLE_PLACES_API_KEY }}" },
+            { "name": "X-Goog-FieldMask", "value": "places.displayName,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.formattedAddress" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Per Vertical').first().json.placesBody) }}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "f1000000-0000-4000-8000-000000000008",
+      "name": "Google Places Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 800],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Merge Apollo + Places candidates for this vertical, apply hard excludes,\n// dedupe against the table and within the run, cap per vertical.\nconst ctx = $('Per Vertical').first().json;\nconst norm = (d) => String(d || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].trim();\nconst digits = (p) => String(p || '').replace(/\\D/g, '').slice(-10);\nconst exTitle = new RegExp(ctx.excludeTitleRe, 'i');\nconst exCompany = new RegExp(ctx.excludeCompanyRe, 'i');\nconst known = new Set(ctx.knownDomains);\nconst knownPh = new Set(ctx.knownPhones);\nconst seen = new Set();\nconst out = [];\n\nlet apollo = {};\ntry { apollo = $('Apollo People Search').first().json || {}; } catch (e) { apollo = {}; }\nlet places = $input.first().json || {};\nif (places.error) places = {};\n\n// Google Places rating/review data indexed by domain (also used to enrich Apollo hits)\nconst placeByDomain = {};\nfor (const p of places.places || []) {\n  const d = norm(p.websiteUri);\n  if (d) placeByDomain[d] = p;\n}\n\nfor (const person of apollo.people || []) {\n  const org = person.organization || {};\n  const domain = norm(org.primary_domain || org.website_url);\n  const phone = digits(org.sanitized_phone || org.phone);\n  if (!domain) continue;                                   // hard exclude: no website\n  if (known.has(domain) || seen.has(domain)) continue;      // dedupe on domain\n  if (phone && knownPh.has(phone)) continue;                // dedupe on phone\n  if (exTitle.test(person.title || '')) continue;           // not a decision maker\n  if (exCompany.test(org.name || '')) continue;             // agencies/vendors/SaaS\n  const emp = org.estimated_num_employees || null;\n  if (emp !== null && emp < 2) continue;                    // solo, no staff\n  seen.add(domain);\n  const place = placeByDomain[domain] || {};\n  out.push({ json: {\n    company_name: org.name || domain,\n    vertical: ctx.vertical,\n    website_url: org.website_url || 'https://' + domain,\n    domain,\n    contact_name: person.name || [person.first_name, person.last_name].filter(Boolean).join(' ') || null,\n    contact_title: person.title || null,\n    apollo_person_id: person.id || null,\n    decision_maker: true,\n    city: org.city || person.city || null,\n    state: org.state || person.state || 'California',\n    contact_phone: org.sanitized_phone || org.phone || null,\n    employee_count: emp,\n    rating: place.rating ?? null,\n    review_count: place.userRatingCount ?? null,\n    source: 'apollo',\n  }});\n}\n\nfor (const p of places.places || []) {\n  const domain = norm(p.websiteUri);\n  const phone = digits(p.nationalPhoneNumber);\n  if (!domain || known.has(domain) || seen.has(domain)) continue;\n  if (phone && knownPh.has(phone)) continue;\n  const name = (p.displayName && p.displayName.text) || domain;\n  if (exCompany.test(name)) continue;\n  seen.add(domain);\n  out.push({ json: {\n    company_name: name,\n    vertical: ctx.vertical,\n    website_url: p.websiteUri,\n    domain,\n    contact_name: null,\n    contact_title: null,\n    apollo_person_id: null,\n    decision_maker: false,\n    city: null,\n    state: 'California',\n    contact_phone: p.nationalPhoneNumber || null,\n    employee_count: null,\n    rating: p.rating ?? null,\n    review_count: p.userRatingCount ?? null,\n    source: 'google_places',\n  }});\n}\n\nconst capped = out.slice(0, ctx.maxPerVertical);\nreturn capped.length ? capped : [{ json: { _empty: true, vertical: ctx.vertical } }];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000009",
+      "name": "Filter & Dedupe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 800]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'Apollo people search failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000), payload: { vertical: $('Per Vertical').first().json.vertical } }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f1000000-0000-4000-8000-000000000010",
+      "name": "Log Apollo Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 980],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Flatten vertical results, drop markers, cap total new prospects per run.\nconst cfg = $('Run Config').first().json;\nconst all = $input.all().filter((i) => i.json && i.json.domain);\nreturn all.slice(0, cfg.maxNewPerRun);"
+      },
+      "id": "f1000000-0000-4000-8000-000000000011",
+      "name": "Collect Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1220, 480]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000012",
+      "name": "Per Company",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1440, 480]
+    },
+    {
+      "parameters": {
+        "url": "=https://{{ $('Per Company').first().json.domain }}/robots.txt",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "SanakuBot/1.0 (+lead-automation research; contact: sanaku)" }
+          ]
+        },
+        "options": { "timeout": 5000 }
+      },
+      "id": "f1000000-0000-4000-8000-000000000013",
+      "name": "Fetch Robots",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 480],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Minimal robots.txt check: honor a blanket \"Disallow: /\" for * or for us.\n// Missing/unreachable robots.txt => allowed (standard convention).\nconst company = $('Per Company').first().json;\nconst resp = $input.first().json || {};\nlet allowed = true;\nconst txt = typeof resp === 'string' ? resp : (resp.data || resp.body || '');\nif (!resp.error && typeof txt === 'string' && txt.length) {\n  const lines = txt.split(/\\r?\\n/).map((l) => l.trim().toLowerCase());\n  let applies = false;\n  for (const line of lines) {\n    if (line.startsWith('user-agent:')) {\n      const agent = line.slice(11).trim();\n      applies = agent === '*' || agent.includes('sanaku');\n    } else if (applies && line.startsWith('disallow:')) {\n      if (line.slice(9).trim() === '/') { allowed = false; break; }\n    }\n  }\n}\nreturn [{ json: { ...company, robots_allowed: allowed } }];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000014",
+      "name": "Check Robots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1880, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "robots-ok",
+              "leftValue": "={{ $json.robots_allowed === true }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000015",
+      "name": "Robots OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2100, 480]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Per Company').first().json.website_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "SanakuBot/1.0 (+lead-automation research; contact: sanaku)" }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": { "response": { "fullResponse": true } }
+        }
+      },
+      "id": "f1000000-0000-4000-8000-000000000016",
+      "name": "Fetch Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2320, 400],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'robots.txt disallows fetch', payload: { domain: $('Per Company').first().json.domain } }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f1000000-0000-4000-8000-000000000017",
+      "name": "Log Robots Skip",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2320, 620],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'website fetch failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000), payload: { domain: $('Per Company').first().json.domain } }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f1000000-0000-4000-8000-000000000018",
+      "name": "Log Fetch Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2320, 220],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Detect automation signals in the HTML, then score maturity + intent + tier.\nconst company = $('Check Robots').first().json;\nconst cfg = $('Run Config').first().json;\nconst resp = $input.first().json || {};\nconst html = String(resp.body || '').toLowerCase();\nconst headers = resp.headers || {};\n\n// Category -> [name, regex] pairs. Names feed tech_stack; categories feed scoring.\nconst MARKERS = {\n  chat: [\n    ['Intercom', /widget\\.intercom|intercomcdn|\\bintercom\\b/], ['Drift', /drift\\.com|driftt\\.com/],\n    ['Tidio', /tidio/], ['Podium', /podiumwebchat|podium\\.com/], ['Birdeye', /birdeye/],\n    ['Ngage', /ngagelive|ngage\\.com/], ['Smith.ai', /smith\\.ai/], ['LiveChat', /livechatinc|livechat\\.com/],\n    ['Tawk.to', /tawk\\.to/], ['ChatBot.com', /chatbot\\.com|chatbotcdn/],\n  ],\n  booking: [\n    ['Calendly', /calendly/], ['Acuity', /acuityscheduling/], ['Squarespace Scheduling', /squarespacescheduling|squarespace-scheduling/],\n    ['YouCanBook.me', /youcanbook/], ['ServiceTitan', /servicetitan/], ['Housecall Pro', /housecallpro/],\n    ['NexHealth', /nexhealth/], ['Zocdoc', /zocdoc/],\n  ],\n  crm: [\n    ['HubSpot', /hs-scripts|hsforms|hubspot/], ['ActiveCampaign', /activecampaign|activehosted/],\n    ['Klaviyo', /klaviyo/], ['Mailchimp', /mailchimp|chimpstatic|list-manage/],\n    ['Clio Grow', /cliogrow|clio\\.com/], ['Lawmatics', /lawmatics/], ['Filevine', /filevine/],\n    ['Jobber', /getjobber|jobber\\.com/],\n  ],\n  ads: [\n    ['Google Ads tag', /googleadservices|gtag\\(.{0,40}aw-|google_conversion/], ['Google Tag Manager', /googletagmanager/],\n    ['Meta Pixel', /fbevents\\.js|fbq\\(/],\n  ],\n};\n\nconst techStack = [];\nconst detected = {};\nfor (const [cat, pairs] of Object.entries(MARKERS)) {\n  const hits = pairs.filter(([, re]) => re.test(html));\n  if (hits.length) {\n    detected[cat] = hits.map(([name]) => name);\n    techStack.push(...hits.map(([name]) => name));\n  }\n}\n\nconst hasForm = /<form/.test(html);\nconst phoneVisible = /href=\"tel:|\\(\\d{3}\\)\\s?\\d{3}[- .]\\d{4}|\\d{3}[-.]\\d{3}[-.]\\d{4}/.test(html);\nconst answerLanguage = /24\\/7|24-7|we answer|answered? live|always (open|available)|available 24/.test(html);\nconst painKeywords = /call now|24\\/7|free consultation|same[- ]day/.test(html);\nconst multiLocation = /(our|all|view) locations|locations<\\/a>|serving .{0,40}(county|counties|areas)/.test(html);\nconst linkedinPresence = /linkedin\\.com\\/(in|company)\\//.test(html);\n\nconst yearMatches = [...html.matchAll(/(?:\\u00a9|&copy;|copyright)[^0-9]{0,20}(20\\d{2})/g)].map((m) => Number(m[1]));\nconst copyrightYear = yearMatches.length ? Math.max(...yearMatches) : null;\nlet freshSite = copyrightYear !== null && copyrightYear >= cfg.currentYear - 1;\nif (!freshSite && headers['last-modified']) {\n  const age = (Date.now() - new Date(headers['last-modified']).getTime()) / 86400000;\n  if (!Number.isNaN(age) && age <= 365) freshSite = true;\n}\n\n// Hard exclude: the site itself is an automation/marketing vendor.\nif (/we build (ai|automation|chatbots)|marketing agency|lead generation (agency|company)|ai (agency|solutions for)/.test(html)) {\n  return [{ json: { _excluded: true, domain: company.domain } }];\n}\n\n// --- AI maturity: 0 no automation (best) / 1 partial / 2 mature ---\nlet maturity = 0;\nif (detected.chat) maturity = 2;\nelse if (detected.booking || detected.crm) maturity = 1;\n\n// --- Intent 0-100 ---\nlet intent = 0;\nconst reasons = [];\nif (detected.ads) { intent += 30; reasons.push('paying for ads (' + detected.ads.join(', ') + ')'); }\nconst emp = company.employee_count || 0;\nif (emp >= 5 && emp <= 50) { intent += 20; reasons.push(emp + ' staff'); }\nif ((company.review_count || 0) >= 25 && (company.rating || 0) >= 4.0) { intent += 15; reasons.push(company.review_count + ' Google reviews at ' + company.rating); }\nif (freshSite) { intent += 10; reasons.push('site updated recently'); }\nif (painKeywords) { intent += 10; reasons.push('pain language on site'); }\nif (multiLocation) { intent += 10; reasons.push('multiple locations'); }\nif (linkedinPresence) { intent += 5; }\nintent = Math.min(100, intent);\n\nif (maturity === 0) reasons.unshift('zero intake automation');\nelse if (maturity === 1) reasons.unshift('only basic tools (' + techStack.join(', ') + ')');\n\n// --- Tier ---\nlet tier = 3;\nif (maturity === 0 && intent >= 65) tier = 1;\nelse if (maturity <= 1 && intent >= 45 && intent <= 64) tier = 2;\n\nreturn [{ json: {\n  ...company,\n  tech_stack: techStack,\n  signals: {\n    detected,\n    has_contact_form: hasForm,\n    phone_visible: phoneVisible,\n    answer_language: answerLanguage,\n    pain_keywords: painKeywords,\n    multi_location: multiLocation,\n    linkedin_on_site: linkedinPresence,\n    copyright_year: copyrightYear,\n    fresh_site: freshSite,\n    rating: company.rating,\n    review_count: company.review_count,\n    reason: reasons.slice(0, 4).join('; '),\n  },\n  ai_maturity_score: maturity,\n  intent_score: intent,\n  tier,\n  scored: true,\n} }];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000019",
+      "name": "Detect & Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2540, 400]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "f1000000-0000-4000-8000-000000000020",
+      "name": "Politeness Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2760, 400],
+      "webhookId": "f1000000-0000-4000-8000-000000000301"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Keep only scored prospects (drops error-log responses, robots skips, excludes).\nreturn $input.all().filter((i) => i.json && i.json.scored === true);"
+      },
+      "id": "f1000000-0000-4000-8000-000000000021",
+      "name": "Collect Scored",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 260]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Reveal emails for Tier 1 prospects that came from Apollo, best intent first.\n// HARD CAP: this is the only Apollo credit spend.\nconst cfg = $('Run Config').first().json;\nconst items = $input.all().map((i) => i.json);\nconst eligible = items\n  .filter((x) => x.tier === 1 && x.apollo_person_id)\n  .sort((a, b) => b.intent_score - a.intent_score)\n  .slice(0, cfg.maxRevealsPerRun);\nconst revealSet = new Set(eligible.map((x) => x.domain));\nreturn items.map((x) => ({ json: { ...x, needsReveal: revealSet.has(x.domain) } }));"
+      },
+      "id": "f1000000-0000-4000-8000-000000000022",
+      "name": "Cap Reveals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1880, 260]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000023",
+      "name": "Per Reveal",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [2100, 260]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "needs-reveal",
+              "leftValue": "={{ $json.needsReveal === true }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000024",
+      "name": "Needs Reveal?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2320, 40]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/api/v1/people/match",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $json.apollo_person_id, reveal_personal_emails: false }) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "f1000000-0000-4000-8000-000000000025",
+      "name": "Apollo Enrich Person",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2540, 40],
+      "credentials": {
+        "httpHeaderAuth": { "id": "apollo-header-auth", "name": "Apollo API Key (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Attach the revealed business email (never personal) to the prospect.\nconst company = $('Per Reveal').first().json;\nconst resp = $input.first().json || {};\nconst person = resp.person || {};\nconst email = person.email && !String(person.email).includes('email_not_unlocked') ? person.email : null;\nreturn [{ json: { ...company, contact_email: email, contact_phone: company.contact_phone || person.sanitized_phone || null } }];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000026",
+      "name": "Attach Contact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2760, 40]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Build the upsert payload + the digest email.\nconst items = $input.all().map((i) => i.json).filter((x) => x && x.scored);\nconst nowIso = new Date().toISOString();\nconst rows = items.map((x) => ({\n  company_name: x.company_name,\n  vertical: x.vertical,\n  website_url: x.website_url || null,\n  domain: x.domain,\n  contact_name: x.contact_name || null,\n  contact_title: x.contact_title || null,\n  contact_email: x.contact_email || null,\n  contact_phone: x.contact_phone || null,\n  decision_maker: !!x.decision_maker,\n  city: x.city || null,\n  state: x.state || 'California',\n  employee_count: x.employee_count ?? null,\n  ai_maturity_score: x.ai_maturity_score,\n  intent_score: x.intent_score,\n  tech_stack: x.tech_stack || [],\n  signals: x.signals || {},\n  tier: x.tier,\n  status: 'new',\n  source: x.source,\n}));\n\nconst byVertical = {};\nfor (const r of rows) byVertical[r.vertical] = (byVertical[r.vertical] || 0) + 1;\nconst tier1 = rows.filter((r) => r.tier === 1).sort((a, b) => b.intent_score - a.intent_score);\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst top10 = tier1.slice(0, 10).map((r, i) =>\n  '<tr><td style=\"padding:4px 8px;\">' + (i + 1) + '</td>' +\n  '<td style=\"padding:4px 8px;\"><b>' + esc(r.company_name) + '</b><br>' + esc(r.domain) + '</td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_name || '-') + '<br><small>' + esc(r.contact_title || '') + '</small></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_phone || '-') + '<br>' + esc(r.contact_email || '(no email yet)') + '</td>' +\n  '<td style=\"padding:4px 8px;text-align:center;\"><b>' + r.intent_score + '</b></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc((r.signals && r.signals.reason) || '') + '</td></tr>'\n).join('');\n\nconst html =\n  '<h2>Sanaku scraper run - ' + nowIso.slice(0, 10) + '</h2>' +\n  '<p><b>' + rows.length + '</b> new prospects stored. ' +\n  Object.entries(byVertical).map(([v, n]) => v + ': ' + n).join(' | ') +\n  ' | Tier 1: <b>' + tier1.length + '</b></p>' +\n  (top10\n    ? '<table border=\"1\" cellspacing=\"0\" style=\"border-collapse:collapse;font-family:sans-serif;font-size:13px;\">' +\n      '<tr style=\"background:#f5f5f5;\"><th>#</th><th>Company</th><th>Contact</th><th>Phone / Email</th><th>Intent</th><th>Why they scored</th></tr>' +\n      top10 + '</table>'\n    : '<p>No Tier 1 prospects this run.</p>') +\n  '<p>Review and approve in the Pipeline dashboard. Nothing is contacted until you approve it.</p>';\n\nreturn [{ json: { rows, digestHtml: html, digestSubject: 'Sanaku: ' + rows.length + ' new prospects, ' + tier1.length + ' Tier 1 (' + nowIso.slice(0, 10) + ')' } }];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000027",
+      "name": "Build Upsert Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2320, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?on_conflict=domain",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Build Upsert Rows').first().json.rows) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "f1000000-0000-4000-8000-000000000028",
+      "name": "Upsert Prospects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2540, 260],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.SANAKU_OWNER_EMAIL }}",
+        "subject": "={{ $('Build Upsert Rows').first().json.digestSubject }}",
+        "emailType": "html",
+        "message": "={{ $('Build Upsert Rows').first().json.digestHtml }}",
+        "options": {}
+      },
+      "id": "f1000000-0000-4000-8000-000000000029",
+      "name": "Send Digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2760, 260],
+      "credentials": {
+        "gmailOAuth2": { "id": "gmail-oauth2", "name": "Gmail Account" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Weekly Trigger": {
+      "main": [ [ { "node": "Run Config", "type": "main", "index": 0 } ] ]
+    },
+    "Manual Trigger": {
+      "main": [ [ { "node": "Run Config", "type": "main", "index": 0 } ] ]
+    },
+    "Run Config": {
+      "main": [ [ { "node": "Get Existing Prospects", "type": "main", "index": 0 } ] ]
+    },
+    "Get Existing Prospects": {
+      "main": [ [ { "node": "Build Vertical Queries", "type": "main", "index": 0 } ] ]
+    },
+    "Build Vertical Queries": {
+      "main": [ [ { "node": "Per Vertical", "type": "main", "index": 0 } ] ]
+    },
+    "Per Vertical": {
+      "main": [
+        [ { "node": "Collect Candidates", "type": "main", "index": 0 } ],
+        [ { "node": "Apollo People Search", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Apollo People Search": {
+      "main": [
+        [ { "node": "Google Places Search", "type": "main", "index": 0 } ],
+        [ { "node": "Log Apollo Error", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Google Places Search": {
+      "main": [ [ { "node": "Filter & Dedupe", "type": "main", "index": 0 } ] ]
+    },
+    "Filter & Dedupe": {
+      "main": [ [ { "node": "Per Vertical", "type": "main", "index": 0 } ] ]
+    },
+    "Log Apollo Error": {
+      "main": [ [ { "node": "Per Vertical", "type": "main", "index": 0 } ] ]
+    },
+    "Collect Candidates": {
+      "main": [ [ { "node": "Per Company", "type": "main", "index": 0 } ] ]
+    },
+    "Per Company": {
+      "main": [
+        [ { "node": "Collect Scored", "type": "main", "index": 0 } ],
+        [ { "node": "Fetch Robots", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Fetch Robots": {
+      "main": [ [ { "node": "Check Robots", "type": "main", "index": 0 } ] ]
+    },
+    "Check Robots": {
+      "main": [ [ { "node": "Robots OK?", "type": "main", "index": 0 } ] ]
+    },
+    "Robots OK?": {
+      "main": [
+        [ { "node": "Fetch Website", "type": "main", "index": 0 } ],
+        [ { "node": "Log Robots Skip", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Fetch Website": {
+      "main": [
+        [ { "node": "Detect & Score", "type": "main", "index": 0 } ],
+        [ { "node": "Log Fetch Error", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Log Robots Skip": {
+      "main": [ [ { "node": "Per Company", "type": "main", "index": 0 } ] ]
+    },
+    "Log Fetch Error": {
+      "main": [ [ { "node": "Per Company", "type": "main", "index": 0 } ] ]
+    },
+    "Detect & Score": {
+      "main": [ [ { "node": "Politeness Wait", "type": "main", "index": 0 } ] ]
+    },
+    "Politeness Wait": {
+      "main": [ [ { "node": "Per Company", "type": "main", "index": 0 } ] ]
+    },
+    "Collect Scored": {
+      "main": [ [ { "node": "Cap Reveals", "type": "main", "index": 0 } ] ]
+    },
+    "Cap Reveals": {
+      "main": [ [ { "node": "Per Reveal", "type": "main", "index": 0 } ] ]
+    },
+    "Per Reveal": {
+      "main": [
+        [ { "node": "Build Upsert Rows", "type": "main", "index": 0 } ],
+        [ { "node": "Needs Reveal?", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Needs Reveal?": {
+      "main": [
+        [ { "node": "Apollo Enrich Person", "type": "main", "index": 0 } ],
+        [ { "node": "Per Reveal", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Apollo Enrich Person": {
+      "main": [ [ { "node": "Attach Contact", "type": "main", "index": 0 } ] ]
+    },
+    "Attach Contact": {
+      "main": [ [ { "node": "Per Reveal", "type": "main", "index": 0 } ] ]
+    },
+    "Build Upsert Rows": {
+      "main": [ [ { "node": "Upsert Prospects", "type": "main", "index": 0 } ] ]
+    },
+    "Upsert Prospects": {
+      "main": [ [ { "node": "Send Digest", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  },
+  "pinData": {},
+  "meta": {}
+}

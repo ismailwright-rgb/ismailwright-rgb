@@ -18,12 +18,17 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const workflowsDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'n8n', 'workflows');
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const workflowDirs = [
+  join(repoRoot, 'n8n', 'workflows'),
+  join(repoRoot, 'sanaku', 'n8n', 'workflows'),
+];
 const TRIGGER_TYPES = [
   'n8n-nodes-base.scheduleTrigger',
   'n8n-nodes-base.errorTrigger',
   'n8n-nodes-base.webhook',
   'n8n-nodes-base.manualTrigger',
+  'n8n-nodes-base.gmailTrigger',
 ];
 const SECRET_PATTERNS = [
   /Bearer\s+[A-Za-z0-9_\-]{20,}/,
@@ -37,14 +42,20 @@ const fail = (file, msg) => {
   console.error(`  FAIL  ${file}: ${msg}`);
 };
 
-const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.json')).sort();
+const files = workflowDirs.flatMap((dir) => {
+  try {
+    return readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => ({ dir, name: f }));
+  } catch {
+    return [];
+  }
+}).sort((a, b) => a.name.localeCompare(b.name));
 if (files.length === 0) {
-  console.error(`No workflow JSON files found in ${workflowsDir}`);
+  console.error(`No workflow JSON files found in: ${workflowDirs.join(', ')}`);
   process.exit(1);
 }
 
-for (const file of files) {
-  const raw = readFileSync(join(workflowsDir, file), 'utf8');
+for (const { dir, name: file } of files) {
+  const raw = readFileSync(join(dir, file), 'utf8');
 
   let wf;
   try {

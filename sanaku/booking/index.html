@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book a call — Sanaku</title>
+<style>
+  :root { --ink:#111418; --sub:#5b6470; --line:#e3e6ea; --accent:#0f62fe; --bg:#f7f8fa; }
+  * { box-sizing:border-box; margin:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:640px; margin:0 auto; padding:40px 20px 80px; }
+  h1 { font-size:26px; margin-bottom:6px; }
+  .sub { color:var(--sub); margin-bottom:28px; line-height:1.5; }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:var(--sub); margin:26px 0 10px; }
+  .slots { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .slot { padding:10px 8px; border:1px solid var(--line); background:#fff; border-radius:8px; font-size:13px; cursor:pointer; text-align:center; }
+  .slot:hover { border-color:var(--accent); }
+  .slot.sel { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .day-label { grid-column:1/-1; font-size:12px; font-weight:600; color:var(--sub); margin-top:10px; }
+  form { margin-top:10px; }
+  label { display:block; font-size:13px; font-weight:600; margin:14px 0 4px; }
+  input, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:15px; background:#fff; }
+  input:focus, textarea:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .hint { font-size:12px; color:var(--sub); margin-top:3px; }
+  button { margin-top:22px; width:100%; padding:14px; background:var(--accent); color:#fff; border:0; border-radius:8px; font-size:16px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .msg { margin-top:16px; padding:12px; border-radius:8px; font-size:14px; display:none; }
+  .msg.ok { display:block; background:#e6f4ea; color:#1e6b34; }
+  .msg.err { display:block; background:#fdecea; color:#a12622; }
+  .loss { margin-top:10px; font-size:14px; color:var(--sub); }
+  .loss b { color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Grab 30 minutes</h1>
+  <p class="sub">Pick a time and tell me two numbers. I'll show you — with your own figures — roughly what missed leads are costing you per month, and whether it's worth fixing.</p>
+
+  <h2>1 · Pick a time (Pacific)</h2>
+  <div class="slots" id="slots"><span class="hint">Loading open times…</span></div>
+
+  <h2>2 · Your details</h2>
+  <form id="f">
+    <div class="row">
+      <div><label>Your name</label><input name="name" required></div>
+      <div><label>Company</label><input name="company" required></div>
+    </div>
+    <div class="row">
+      <div><label>Phone</label><input name="phone" type="tel" required></div>
+      <div><label>Email</label><input name="email" type="email" required></div>
+    </div>
+    <label>Roughly how many leads (calls + forms) come in per month?</label>
+    <input name="lead_volume" type="number" min="1" required>
+    <label>What's one closed client / job worth to you, on average? ($)</label>
+    <input name="lead_value" type="number" min="1" required>
+    <div class="loss" id="loss"></div>
+    <label>Biggest headache with inbound leads right now? (optional)</label>
+    <textarea name="pain" rows="2"></textarea>
+    <button type="submit" id="go" disabled>Pick a time above first</button>
+    <div class="msg" id="msg"></div>
+  </form>
+</div>
+
+<script>
+// ---- CONFIG: set this to your n8n instance before deploying ----
+const N8N_BASE = "https://YOUR-N8N-HOST/webhook";
+
+let selected = null;
+const $slots = document.getElementById("slots");
+const $go = document.getElementById("go");
+const $msg = document.getElementById("msg");
+const $f = document.getElementById("f");
+const $loss = document.getElementById("loss");
+
+fetch(N8N_BASE + "/sanaku-slots")
+  .then(r => r.json())
+  .then(d => {
+    const slots = d.slots || [];
+    if (!slots.length) { $slots.innerHTML = "<span class='hint'>No open times — email me instead.</span>"; return; }
+    $slots.innerHTML = "";
+    let lastDay = "";
+    slots.forEach(s => {
+      const day = s.label.split(",")[0] + " " + s.label.split(" ")[1] + " " + s.label.split(" ")[2];
+      if (day !== lastDay) {
+        lastDay = day;
+        const dl = document.createElement("div");
+        dl.className = "day-label";
+        dl.textContent = s.label.replace(/\d{1,2}:\d{2}.*$/, "").trim();
+        $slots.appendChild(dl);
+      }
+      const b = document.createElement("div");
+      b.className = "slot";
+      b.textContent = s.label.match(/\d{1,2}:\d{2}\s?(AM|PM)?/i) ? s.label.split(", ").pop() : s.label;
+      b.title = s.label;
+      b.onclick = () => {
+        document.querySelectorAll(".slot").forEach(x => x.classList.remove("sel"));
+        b.classList.add("sel");
+        selected = s.iso;
+        $go.disabled = false;
+        $go.textContent = "Book " + s.label;
+      };
+      $slots.appendChild(b);
+    });
+  })
+  .catch(() => { $slots.innerHTML = "<span class='hint'>Couldn't load times. Refresh or email me.</span>"; });
+
+function updateLoss() {
+  const v = Number($f.lead_volume.value), val = Number($f.lead_value.value);
+  if (v > 0 && val > 0) {
+    const loss = Math.round(v * 0.25 * val);
+    $loss.innerHTML = "At a typical 25% miss rate, that's roughly <b>$" + loss.toLocaleString() + "/month</b> walking out the door.";
+  } else { $loss.textContent = ""; }
+}
+$f.lead_volume.addEventListener("input", updateLoss);
+$f.lead_value.addEventListener("input", updateLoss);
+
+$f.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!selected) return;
+  $go.disabled = true; $go.textContent = "Booking…";
+  $msg.className = "msg";
+  const data = new URLSearchParams(new FormData($f));
+  data.set("slot", selected);
+  try {
+    const r = await fetch(N8N_BASE + "/sanaku-book", { method: "POST", body: data });
+    const j = await r.json();
+    if (j.ok) {
+      $msg.className = "msg ok";
+      $msg.textContent = "Booked. Calendar invite is on its way to your email — see you then.";
+      $go.textContent = "Booked ✓";
+    } else { throw new Error(j.error || "failed"); }
+  } catch (err) {
+    $msg.className = "msg err";
+    $msg.textContent = "Something broke (" + err.message + "). Try again or just email me.";
+    $go.disabled = false; $go.textContent = "Try again";
+  }
+});
+</script>
+</body>
+</html>

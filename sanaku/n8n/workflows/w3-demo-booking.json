@@ -1,0 +1,589 @@
+{
+  "name": "Sanaku - W3 Demo Booking",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## W3 - Demo booking (Google Calendar, not Calendly)\n\nFour entry points:\n1. **GET /webhook/sanaku-slots** - the Netlify booking page calls this to render open slots (weekdays 10:00-16:00 PT, 30-min, next 10 business days, minus GCal busy blocks, nothing inside 24h)\n2. **POST /webhook/sanaku-book** - creates the GCal event (both attendees), writes `sanaku_demos` with the computed `est_monthly_loss` (volume x 25% miss rate x lead value) in the invite description, flips the prospect to `demo_booked`, texts me via RingCentral + emails me\n3. **Hourly** - 24h and 1h email reminders to the prospect\n4. **Daily 08:00** - no-shows get a follow-up email next morning and `outcome = 'no_show'`\n\nCredentials: \"Google Calendar account\" (OAuth2, used by the HTTP nodes as predefined credential), \"Supabase Service Role (Header Auth)\", \"RingCentral (Header Auth)\" (Authorization: Bearer <token>), \"Gmail Account\".\nEnv: SUPABASE_URL, SANAKU_OWNER_EMAIL, MY_CELL_NUMBER, RC_SMS_FROM, SANAKU_BOOKING_URL.",
+        "height": 460,
+        "width": 580
+      },
+      "id": "f4000000-0000-4000-8000-000000000099",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [40, 0]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "sanaku-slots",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "f4000000-0000-4000-8000-000000000001",
+      "name": "Slots Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 560],
+      "webhookId": "f4000000-0000-4000-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/calendar/v3/freeBusy",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ timeMin: new Date().toISOString(), timeMax: new Date(Date.now() + 15 * 86400000).toISOString(), items: [ { id: 'primary' } ] }) }}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000002",
+      "name": "Get Busy Times",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [340, 560],
+      "credentials": {
+        "googleCalendarOAuth2Api": { "id": "gcal-oauth2", "name": "Google Calendar account" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 30-min slots, weekdays 10:00-16:00 America/Los_Angeles, next 10 business\n// days, minus busy blocks, nothing inside the next 24h.\nconst resp = $input.first().json || {};\nconst busy = ((resp.calendars || {}).primary || {}).busy || [];\nconst busyRanges = busy.map((b) => [new Date(b.start).getTime(), new Date(b.end).getTime()]);\n\nconst TZ = 'America/Los_Angeles';\nconst tzOffsetMs = (d) => d.getTime() - new Date(d.toLocaleString('en-US', { timeZone: TZ })).getTime() + (d.getTime() - new Date(d.toLocaleString('en-US', { timeZone: 'UTC' })).getTime()) * 0;\n// Simpler: build a Date for a wall-clock time in TZ by iterating candidate offsets.\nfunction wallClockToUtc(y, mo, day, h, mi) {\n  // try each plausible PT offset; pick the one that round-trips\n  for (const off of [7, 8]) {\n    const guess = Date.UTC(y, mo, day, h + off, mi);\n    const d = new Date(guess);\n    const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(d);\n    const get = (t) => Number(parts.find((p) => p.type === t).value);\n    if (get('year') === y && get('month') === mo + 1 && get('day') === day && get('hour') % 24 === h && get('minute') === mi) return d;\n  }\n  return new Date(Date.UTC(y, mo, day, h + 8, mi));\n}\n\nconst now = Date.now();\nconst minStart = now + 24 * 3600000;\nconst slots = [];\nconst cursor = new Date();\nlet businessDays = 0;\nfor (let i = 0; i < 20 && businessDays < 10; i++) {\n  const d = new Date(now + i * 86400000);\n  const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);\n  const get = (t) => parts.find((p) => p.type === t).value;\n  const wd = get('weekday');\n  if (wd === 'Sat' || wd === 'Sun') continue;\n  businessDays++;\n  const y = Number(get('year')); const mo = Number(get('month')) - 1; const day = Number(get('day'));\n  for (let h = 10; h < 16; h++) {\n    for (const mi of [0, 30]) {\n      const start = wallClockToUtc(y, mo, day, h, mi);\n      const startMs = start.getTime();\n      const endMs = startMs + 30 * 60000;\n      if (startMs < minStart) continue;\n      const clash = busyRanges.some(([bs, be]) => startMs < be && endMs > bs);\n      if (clash) continue;\n      const label = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(start) + ' PT';\n      slots.push({ iso: start.toISOString(), label });\n    }\n  }\n}\nreturn [{ json: { slots: slots.slice(0, 60) } }];"
+      },
+      "id": "f4000000-0000-4000-8000-000000000003",
+      "name": "Compute Slots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 560]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ slots: $json.slots }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "f4000000-0000-4000-8000-000000000004",
+      "name": "Respond Slots",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [780, 560]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sanaku-book",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "f4000000-0000-4000-8000-000000000005",
+      "name": "Book Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 900],
+      "webhookId": "f4000000-0000-4000-8000-000000000102"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Validate the booking form and compute the number I open the call with:\n// est_monthly_loss = monthly leads x 25% assumed miss rate x value per closed lead.\nconst b = ($input.first().json || {}).body || {};\nconst required = ['name', 'company', 'phone', 'email', 'slot', 'lead_volume', 'lead_value'];\nconst missing = required.filter((k) => !String(b[k] || '').trim());\nconst slotMs = Date.parse(b.slot || '');\nif (missing.length || Number.isNaN(slotMs)) {\n  return [{ json: { invalid: true, error: missing.length ? 'missing: ' + missing.join(', ') : 'bad slot timestamp' } }];\n}\nconst volume = Math.max(0, Number(b.lead_volume) || 0);\nconst value = Math.max(0, Number(b.lead_value) || 0);\nconst loss = Math.round(volume * 0.25 * value);\nreturn [{ json: {\n  invalid: false,\n  name: String(b.name).trim(),\n  company: String(b.company).trim(),\n  phone: String(b.phone).trim(),\n  email: String(b.email).trim().toLowerCase(),\n  stated_pain: String(b.pain || '').trim() || null,\n  monthly_lead_volume: volume,\n  est_lead_value: value,\n  est_monthly_loss: loss,\n  slot_start: new Date(slotMs).toISOString(),\n  slot_end: new Date(slotMs + 30 * 60000).toISOString(),\n} }];"
+      },
+      "id": "f4000000-0000-4000-8000-000000000006",
+      "name": "Validate Booking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [340, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.invalid === false }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f4000000-0000-4000-8000-000000000007",
+      "name": "Valid Booking?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [560, 900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: $json.error || 'booking failed' }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "f4000000-0000-4000-8000-000000000008",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [780, 1080]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?contact_email=ilike.{{ $json.email }}&select=id&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000009",
+      "name": "Find Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 900],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ summary: 'Sanaku demo - ' + $('Validate Booking').first().json.company, description: 'ESTIMATED MONTHLY LOSS: $' + $('Validate Booking').first().json.est_monthly_loss.toLocaleString('en-US') + ' (' + $('Validate Booking').first().json.monthly_lead_volume + ' leads/mo x 25% missed x $' + $('Validate Booking').first().json.est_lead_value + ')\\n\\nContact: ' + $('Validate Booking').first().json.name + ' | ' + $('Validate Booking').first().json.phone + ' | ' + $('Validate Booking').first().json.email + '\\nStated pain: ' + ($('Validate Booking').first().json.stated_pain || '(none given)'), start: { dateTime: $('Validate Booking').first().json.slot_start, timeZone: 'America/Los_Angeles' }, end: { dateTime: $('Validate Booking').first().json.slot_end, timeZone: 'America/Los_Angeles' }, attendees: [ { email: $('Validate Booking').first().json.email } ], reminders: { useDefault: true } }) }}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000010",
+      "name": "Create GCal Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 900],
+      "credentials": {
+        "googleCalendarOAuth2Api": { "id": "gcal-oauth2", "name": "Google Calendar account" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'gcal event creation failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000), payload: { company: $('Validate Booking').first().json.company, email: $('Validate Booking').first().json.email } }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000011",
+      "name": "Log Booking Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 1080],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_demos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ prospect_id: $('Find Prospect').first().json.id || null, scheduled_for: $('Validate Booking').first().json.slot_start, gcal_event_id: $json.id || null, stated_pain: $('Validate Booking').first().json.stated_pain, monthly_lead_volume: $('Validate Booking').first().json.monthly_lead_volume, est_lead_value: $('Validate Booking').first().json.est_lead_value, est_monthly_loss: $('Validate Booking').first().json.est_monthly_loss }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000012",
+      "name": "Insert Demo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, 900],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?id=eq.{{ $('Find Prospect').first().json.id || '00000000-0000-0000-0000-000000000000' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'demo_booked' }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000013",
+      "name": "Mark Demo Booked",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 900],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://platform.ringcentral.com/restapi/v1.0/account/~/extension/~/sms",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ from: { phoneNumber: $env.RC_SMS_FROM }, to: [ { phoneNumber: $env.MY_CELL_NUMBER } ], text: 'DEMO BOOKED: ' + $('Validate Booking').first().json.company + ' | loss est $' + $('Validate Booking').first().json.est_monthly_loss + '/mo | pain: ' + ($('Validate Booking').first().json.stated_pain || 'n/a').slice(0, 80) + ' | ' + $('Validate Booking').first().json.slot_start }) }}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000014",
+      "name": "SMS Me (RingCentral)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 900],
+      "credentials": {
+        "httpHeaderAuth": { "id": "ringcentral-header-auth", "name": "RingCentral (Header Auth)" }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.SANAKU_OWNER_EMAIL }}",
+        "subject": "=DEMO BOOKED: {{ $('Validate Booking').first().json.company }} (est ${{ $('Validate Booking').first().json.est_monthly_loss }}/mo leak)",
+        "emailType": "html",
+        "message": "=<h3>{{ $('Validate Booking').first().json.company }}</h3><p><b>When:</b> {{ $('Validate Booking').first().json.slot_start }}<br><b>Who:</b> {{ $('Validate Booking').first().json.name }} | {{ $('Validate Booking').first().json.phone }} | {{ $('Validate Booking').first().json.email }}</p><p><b>Estimated monthly loss: ${{ $('Validate Booking').first().json.est_monthly_loss }}</b> ({{ $('Validate Booking').first().json.monthly_lead_volume }} leads x 25% x ${{ $('Validate Booking').first().json.est_lead_value }})</p><p><b>Stated pain:</b> {{ $('Validate Booking').first().json.stated_pain || '(none given)' }}</p><p>Open the call with the loss number.</p>",
+        "options": {}
+      },
+      "id": "f4000000-0000-4000-8000-000000000015",
+      "name": "Email Me",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1880, 900],
+      "credentials": {
+        "gmailOAuth2": { "id": "gmail-oauth2", "name": "Gmail Account" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "f4000000-0000-4000-8000-000000000016",
+      "name": "Respond Booked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2100, 900]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 * * * *" }
+          ]
+        }
+      },
+      "id": "f4000000-0000-4000-8000-000000000017",
+      "name": "Hourly Reminder Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [120, 1400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_demos?scheduled_for=gte.{{ new Date().toISOString() }}&scheduled_for=lte.{{ new Date(Date.now() + 25 * 3600000).toISOString() }}&outcome=is.null&select=id,scheduled_for,est_monthly_loss,sanaku_prospects(contact_name,contact_email,company_name)",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000018",
+      "name": "Get Upcoming Demos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [340, 1400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Fire the 24h reminder inside the [23h, 24h) window and the 1h reminder\n// inside (0, 1h] - the hourly cron hits each window exactly once.\nconst now = Date.now();\nconst out = [];\nfor (const i of $input.all()) {\n  const d = i.json;\n  if (!d || !d.id || !d.scheduled_for) continue;\n  const p = d.sanaku_prospects || {};\n  if (!p.contact_email) continue;\n  const deltaH = (new Date(d.scheduled_for).getTime() - now) / 3600000;\n  let kind = null;\n  if (deltaH > 23 && deltaH <= 24) kind = '24h';\n  else if (deltaH > 0 && deltaH <= 1) kind = '1h';\n  if (!kind) continue;\n  out.push({ json: {\n    email: p.contact_email,\n    name: (p.contact_name || '').split(' ')[0] || 'there',\n    company: p.company_name || '',\n    when: d.scheduled_for,\n    kind,\n  } });\n}\nreturn out;"
+      },
+      "id": "f4000000-0000-4000-8000-000000000019",
+      "name": "Compute Due Reminders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 1400]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.kind === '24h' ? 'Tomorrow: quick call about ' + $json.company : 'Starting soon: our call' }}",
+        "emailType": "text",
+        "message": "={{ 'Hi ' + $json.name + ' - ' + ($json.kind === '24h' ? 'quick reminder about our call tomorrow. ' : 'we are on in about an hour. ') + 'Calendar invite has the details. If the time stopped working, just reply here and we will move it.\\n\\nIsmail' }}",
+        "options": {}
+      },
+      "id": "f4000000-0000-4000-8000-000000000020",
+      "name": "Send Reminder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [780, 1400],
+      "credentials": {
+        "gmailOAuth2": { "id": "gmail-oauth2", "name": "Gmail Account" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 8 * * *" }
+          ]
+        }
+      },
+      "id": "f4000000-0000-4000-8000-000000000021",
+      "name": "Daily No-Show Sweep",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [120, 1640]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_demos?scheduled_for=lt.{{ new Date().toISOString() }}&outcome=is.null&showed=is.null&select=id,scheduled_for,sanaku_prospects(contact_name,contact_email,company_name)",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000022",
+      "name": "Get Unresolved Demos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [340, 1640],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// One item per past, unresolved demo with a reachable email.\nconst out = [];\nfor (const i of $input.all()) {\n  const d = i.json;\n  if (!d || !d.id) continue;\n  const p = d.sanaku_prospects || {};\n  if (!p.contact_email) continue;\n  out.push({ json: {\n    demo_id: d.id,\n    email: p.contact_email,\n    name: (p.contact_name || '').split(' ')[0] || 'there',\n    company: p.company_name || '',\n  } });\n}\nreturn out;"
+      },
+      "id": "f4000000-0000-4000-8000-000000000023",
+      "name": "Prep No-Show Follow-ups",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 1640]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=we missed each other",
+        "emailType": "text",
+        "message": "={{ 'Hi ' + $json.name + ' - looks like our call did not happen yesterday, no worries at all. Still happy to walk through where ' + $json.company + ' might be losing leads. Want to grab a new time? ' + ($env.SANAKU_BOOKING_URL || '') + '\\n\\nIsmail' }}",
+        "options": {}
+      },
+      "id": "f4000000-0000-4000-8000-000000000024",
+      "name": "Send No-Show Follow-up",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [780, 1640],
+      "credentials": {
+        "gmailOAuth2": { "id": "gmail-oauth2", "name": "Gmail Account" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_demos?id=eq.{{ $('Prep No-Show Follow-ups').item.json.demo_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ outcome: 'no_show', showed: false }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f4000000-0000-4000-8000-000000000025",
+      "name": "Mark No-Show",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 1640],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Slots Webhook": {
+      "main": [ [ { "node": "Get Busy Times", "type": "main", "index": 0 } ] ]
+    },
+    "Get Busy Times": {
+      "main": [ [ { "node": "Compute Slots", "type": "main", "index": 0 } ] ]
+    },
+    "Compute Slots": {
+      "main": [ [ { "node": "Respond Slots", "type": "main", "index": 0 } ] ]
+    },
+    "Book Webhook": {
+      "main": [ [ { "node": "Validate Booking", "type": "main", "index": 0 } ] ]
+    },
+    "Validate Booking": {
+      "main": [ [ { "node": "Valid Booking?", "type": "main", "index": 0 } ] ]
+    },
+    "Valid Booking?": {
+      "main": [
+        [ { "node": "Find Prospect", "type": "main", "index": 0 } ],
+        [ { "node": "Respond Error", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Find Prospect": {
+      "main": [ [ { "node": "Create GCal Event", "type": "main", "index": 0 } ] ]
+    },
+    "Create GCal Event": {
+      "main": [
+        [ { "node": "Insert Demo", "type": "main", "index": 0 } ],
+        [ { "node": "Log Booking Error", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Log Booking Error": {
+      "main": [ [ { "node": "Respond Error", "type": "main", "index": 0 } ] ]
+    },
+    "Insert Demo": {
+      "main": [ [ { "node": "Mark Demo Booked", "type": "main", "index": 0 } ] ]
+    },
+    "Mark Demo Booked": {
+      "main": [ [ { "node": "SMS Me (RingCentral)", "type": "main", "index": 0 } ] ]
+    },
+    "SMS Me (RingCentral)": {
+      "main": [ [ { "node": "Email Me", "type": "main", "index": 0 } ] ]
+    },
+    "Email Me": {
+      "main": [ [ { "node": "Respond Booked", "type": "main", "index": 0 } ] ]
+    },
+    "Hourly Reminder Check": {
+      "main": [ [ { "node": "Get Upcoming Demos", "type": "main", "index": 0 } ] ]
+    },
+    "Get Upcoming Demos": {
+      "main": [ [ { "node": "Compute Due Reminders", "type": "main", "index": 0 } ] ]
+    },
+    "Compute Due Reminders": {
+      "main": [ [ { "node": "Send Reminder", "type": "main", "index": 0 } ] ]
+    },
+    "Daily No-Show Sweep": {
+      "main": [ [ { "node": "Get Unresolved Demos", "type": "main", "index": 0 } ] ]
+    },
+    "Get Unresolved Demos": {
+      "main": [ [ { "node": "Prep No-Show Follow-ups", "type": "main", "index": 0 } ] ]
+    },
+    "Prep No-Show Follow-ups": {
+      "main": [ [ { "node": "Send No-Show Follow-up", "type": "main", "index": 0 } ] ]
+    },
+    "Send No-Show Follow-up": {
+      "main": [ [ { "node": "Mark No-Show", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  },
+  "pinData": {},
+  "meta": {}
+}
