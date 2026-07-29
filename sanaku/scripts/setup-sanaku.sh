@@ -28,7 +28,7 @@ set -euo pipefail
 : "${N8N_KEY:?Set N8N_KEY (n8n Settings > n8n API)}"
 : "${SUPABASE_URL:?Set SUPABASE_URL (https://<ref>.supabase.co)}"
 : "${SUPABASE_SERVICE_KEY:?Set SUPABASE_SERVICE_KEY (service_role key)}"
-: "${PLACES_KEY:?Set PLACES_KEY (Google Places API key - the primary data source)}"
+: "${SERPAPI_KEY:?Set SERPAPI_KEY (serpapi.com key - free tier, the primary data source)}"
 APOLLO_KEY="${APOLLO_KEY:-}"   # optional: Apollo's free plan has no API access
 : "${OWNER_EMAIL:?Set OWNER_EMAIL (your email for digests)}"
 MAX_NEW="${MAX_NEW:-20}"
@@ -97,7 +97,7 @@ owner = os.environ["OWNER_EMAIL"]
 supa_id, apollo_id = os.environ["SUPA_CRED_ID"], os.environ["APOLLO_CRED_ID"]
 max_new = int(os.environ["MAX_NEW"])
 
-places_key = os.environ["PLACES_KEY"]
+serp_key = os.environ["SERPAPI_KEY"]
 
 def patch_strings(obj):
     if isinstance(obj, dict):
@@ -108,9 +108,7 @@ def patch_strings(obj):
         # hardcode values this instance has no env vars for
         obj = obj.replace("{{ $env.SUPABASE_URL }}", supa_url)
         obj = obj.replace("{{ $env.SANAKU_OWNER_EMAIL }}", owner)
-        obj = obj.replace("{{ $env.GOOGLE_PLACES_API_KEY }}", places_key)
-        # the Places gate expression must stay truthy after patching
-        obj = obj.replace("!!$env.GOOGLE_PLACES_API_KEY", "true")
+        obj = obj.replace("{{ $env.SERPAPI_KEY }}", serp_key)
         # expressions that became pure literals don't need the '=' prefix,
         # but n8n accepts it either way, so leave prefixes alone.
         return obj

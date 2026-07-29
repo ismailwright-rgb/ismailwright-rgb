@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## W1 - Prospect scraper & scorer\n\nMondays 08:00 + manual trigger for testing. Per run:\n1. **Google Places** text search per vertical (25mi around Azusa) - the primary source. Apollo people-search is OPTIONAL (`useApollo` in Run Config, default false - Apollo's FREE plan has NO API access at all)\n2. Dedupe against existing prospects (domain + phone) BEFORE any scraping\n3. robots.txt check -> fetch site (SanakuBot UA, 10s timeout, 3 retries) -> detect chat/booking/CRM/ads/forms signals + scrape a contact email off the page\n4. Score maturity (0 = no automation = best) + intent (0-100) -> tier (unknown size = neutral +10, not a penalty)\n5. If Apollo is enabled: reveal decision-maker emails for Tier 1 only (max 12/run)\n6. Upsert to `sanaku_prospects` (cap 50 new/run), email me a digest with top 10 Tier 1 + why they scored\n\nTune caps in `Run Config`. Dead sites/API failures log to `sanaku_errors` and never kill the run.\n\nCredentials: \"Supabase Service Role (Custom Auth)\" (apikey + Authorization Bearer), optional \"Apollo API Key (Header Auth)\", \"Gmail Account\" (OAuth2).\nEnv: SUPABASE_URL, SANAKU_OWNER_EMAIL, GOOGLE_PLACES_API_KEY (required).",
+        "content": "## W1 - Prospect scraper & scorer\n\nMondays 08:00 + manual trigger for testing. Per run:\n1. **SerpAPI Google Maps** search per vertical (centered on Azusa) - the primary source, free tier 100 searches/mo, no card. Apollo people-search is OPTIONAL (`useApollo` in Run Config, default false - Apollo's FREE plan has NO API access at all)\n2. Dedupe against existing prospects (domain + phone) BEFORE any scraping\n3. robots.txt check -> fetch site (SanakuBot UA, 10s timeout, 3 retries) -> detect chat/booking/CRM/ads/forms signals + scrape a contact email off the page\n4. Score maturity (0 = no automation = best) + intent (0-100) -> tier (unknown size = neutral +10, not a penalty)\n5. If Apollo is enabled: reveal decision-maker emails for Tier 1 only (max 12/run)\n6. Upsert to `sanaku_prospects` (cap 50 new/run), email me a digest with top 10 Tier 1 + why they scored\n\nTune caps in `Run Config`. Dead sites/API failures log to `sanaku_errors` and never kill the run.\n\nCredentials: \"Supabase Service Role (Custom Auth)\" (apikey + Authorization Bearer), optional \"Apollo API Key (Header Auth)\", \"Gmail Account\" (OAuth2).\nEnv: SUPABASE_URL, SANAKU_OWNER_EMAIL, SERPAPI_KEY (required).",
         "height": 480,
         "width": 560
       },
@@ -38,7 +38,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Central run config. Azusa CA = 34.1336, -117.9075; 40km ~ 25 miles.\nconst DM_TITLES = ['Owner', 'Founder', 'Managing Partner', 'Partner', 'Practice Owner', 'Practice Manager', 'Office Manager', 'General Manager', 'President'];\nconst bias = { circle: { center: { latitude: 34.1336, longitude: -117.9075 }, radius: 40000 } };\nconst apolloBase = {\n  person_titles: DM_TITLES,\n  person_locations: ['Los Angeles, California, US'],\n  organization_num_employees_ranges: ['2,100'],\n  contact_email_status: ['verified'],\n  per_page: 25,\n  page: 1,\n};\nreturn [{\n  json: {\n    currentYear: new Date().getFullYear(),\n    maxNewPerRun: 50,\n    maxPerVertical: 17,\n    maxRevealsPerRun: 12,\n    useApollo: false,  // flip to true once Apollo is on a paid plan (free plan has NO API access)\n    excludeTitleRe: 'receptionist|associate|paralegal|assistant',\n    excludeCompanyRe: 'marketing|agency|agencies|automation|\\\\bai\\\\b|artificial intelligence|software|saas|consult|growth partner|lead gen',\n    verticals: [\n      {\n        vertical: 'law_firm',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['personal injury law'] },\n        placesBody: { textQuery: 'personal injury lawyer', pageSize: 20, locationBias: bias },\n      },\n      {\n        vertical: 'medical',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['dental practice', 'medical clinic', 'med spa'] },\n        placesBody: { textQuery: 'dentist OR medical clinic OR med spa', pageSize: 20, locationBias: bias },\n      },\n      {\n        vertical: 'home_services',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['plumbing', 'hvac', 'electrical contractor'] },\n        placesBody: { textQuery: 'plumber OR hvac contractor OR electrician', pageSize: 20, locationBias: bias },\n      },\n    ],\n  },\n}];"
+        "jsCode": "// Central run config. Azusa CA = 34.1336, -117.9075; 40km ~ 25 miles.\nconst DM_TITLES = ['Owner', 'Founder', 'Managing Partner', 'Partner', 'Practice Owner', 'Practice Manager', 'Office Manager', 'General Manager', 'President'];\nconst apolloBase = {\n  person_titles: DM_TITLES,\n  person_locations: ['Los Angeles, California, US'],\n  organization_num_employees_ranges: ['2,100'],\n  contact_email_status: ['verified'],\n  per_page: 25,\n  page: 1,\n};\nreturn [{\n  json: {\n    currentYear: new Date().getFullYear(),\n    maxNewPerRun: 50,\n    maxPerVertical: 17,\n    maxRevealsPerRun: 12,\n    useApollo: false,  // flip to true once Apollo is on a paid plan (free plan has NO API access)\n    excludeTitleRe: 'receptionist|associate|paralegal|assistant',\n    excludeCompanyRe: 'marketing|agency|agencies|automation|\\\\bai\\\\b|artificial intelligence|software|saas|consult|growth partner|lead gen',\n    verticals: [\n      {\n        vertical: 'law_firm',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['personal injury law'] },\n        serpQuery: 'personal injury law firm near Azusa, CA',\n      },\n      {\n        vertical: 'medical',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['dental practice', 'medical clinic', 'med spa'] },\n        serpQuery: 'dentist med spa clinic near Azusa, CA',\n      },\n      {\n        vertical: 'home_services',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['plumbing', 'hvac', 'electrical contractor'] },\n        serpQuery: 'plumber hvac electrician near Azusa, CA',\n      },\n    ],\n  },\n}];"
       },
       "id": "f1000000-0000-4000-8000-000000000003",
       "name": "Run Config",
@@ -76,7 +76,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// One item per vertical carrying the API bodies + dedupe sets.\nconst cfg = $('Run Config').first().json;\nconst norm = (d) => String(d || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].trim();\nconst digits = (p) => String(p || '').replace(/\\D/g, '').slice(-10);\nconst knownDomains = [];\nconst knownPhones = [];\nfor (const i of $('Get Existing Prospects').all()) {\n  const d = norm(i.json && i.json.domain);\n  if (d) knownDomains.push(d);\n  const p = digits(i.json && i.json.contact_phone);\n  if (p) knownPhones.push(p);\n}\nreturn cfg.verticals.map((v) => ({\n  json: {\n    vertical: v.vertical,\n    apolloBody: v.apolloBody,\n    placesBody: v.placesBody,\n    knownDomains,\n    knownPhones,\n    maxPerVertical: cfg.maxPerVertical,\n    useApollo: cfg.useApollo === true,\n    excludeTitleRe: cfg.excludeTitleRe,\n    excludeCompanyRe: cfg.excludeCompanyRe,\n  },\n}));"
+        "jsCode": "// One item per vertical carrying the API bodies + dedupe sets.\nconst cfg = $('Run Config').first().json;\nconst norm = (d) => String(d || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].trim();\nconst digits = (p) => String(p || '').replace(/\\D/g, '').slice(-10);\nconst knownDomains = [];\nconst knownPhones = [];\nfor (const i of $('Get Existing Prospects').all()) {\n  const d = norm(i.json && i.json.domain);\n  if (d) knownDomains.push(d);\n  const p = digits(i.json && i.json.contact_phone);\n  if (p) knownPhones.push(p);\n}\nreturn cfg.verticals.map((v) => ({\n  json: {\n    vertical: v.vertical,\n    apolloBody: v.apolloBody,\n    serpQuery: v.serpQuery,\n    knownDomains,\n    knownPhones,\n    maxPerVertical: cfg.maxPerVertical,\n    useApollo: cfg.useApollo === true,\n    excludeTitleRe: cfg.excludeTitleRe,\n    excludeCompanyRe: cfg.excludeCompanyRe,\n  },\n}));"
       },
       "id": "f1000000-0000-4000-8000-000000000005",
       "name": "Build Vertical Queries",
@@ -142,32 +142,25 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://places.googleapis.com/v1/places:searchText",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-Goog-Api-Key", "value": "={{ $env.GOOGLE_PLACES_API_KEY }}" },
-            { "name": "X-Goog-FieldMask", "value": "places.displayName,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.formattedAddress" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Per Vertical').first().json.placesBody) }}",
-        "options": { "timeout": 20000 }
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?engine=google_maps&type=search&q={{ encodeURIComponent($('Per Vertical').first().json.serpQuery) }}&ll=%4034.1336,-117.9075,11z&api_key={{ $env.SERPAPI_KEY }}",
+        "options": { "timeout": 30000 }
       },
       "id": "f1000000-0000-4000-8000-000000000008",
-      "name": "Google Places Search",
+      "name": "Maps Search (SerpAPI)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1440, 800],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Merge Apollo + Places candidates for this vertical, apply hard excludes,\n// dedupe against the table and within the run, cap per vertical.\nconst ctx = $('Per Vertical').first().json;\nconst norm = (d) => String(d || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].trim();\nconst digits = (p) => String(p || '').replace(/\\D/g, '').slice(-10);\nconst exTitle = new RegExp(ctx.excludeTitleRe, 'i');\nconst exCompany = new RegExp(ctx.excludeCompanyRe, 'i');\nconst known = new Set(ctx.knownDomains);\nconst knownPh = new Set(ctx.knownPhones);\nconst seen = new Set();\nconst out = [];\n\nlet apollo = {};\ntry { apollo = $('Apollo People Search').first().json || {}; } catch (e) { apollo = {}; }\nlet places = $input.first().json || {};\nif (places.error) places = {};\n\n// Google Places rating/review data indexed by domain (also used to enrich Apollo hits)\nconst placeByDomain = {};\nfor (const p of places.places || []) {\n  const d = norm(p.websiteUri);\n  if (d) placeByDomain[d] = p;\n}\n\nfor (const person of apollo.people || []) {\n  const org = person.organization || {};\n  const domain = norm(org.primary_domain || org.website_url);\n  const phone = digits(org.sanitized_phone || org.phone);\n  if (!domain) continue;                                   // hard exclude: no website\n  if (known.has(domain) || seen.has(domain)) continue;      // dedupe on domain\n  if (phone && knownPh.has(phone)) continue;                // dedupe on phone\n  if (exTitle.test(person.title || '')) continue;           // not a decision maker\n  if (exCompany.test(org.name || '')) continue;             // agencies/vendors/SaaS\n  const emp = org.estimated_num_employees || null;\n  if (emp !== null && emp < 2) continue;                    // solo, no staff\n  seen.add(domain);\n  const place = placeByDomain[domain] || {};\n  out.push({ json: {\n    company_name: org.name || domain,\n    vertical: ctx.vertical,\n    website_url: org.website_url || 'https://' + domain,\n    domain,\n    contact_name: person.name || [person.first_name, person.last_name].filter(Boolean).join(' ') || null,\n    contact_title: person.title || null,\n    apollo_person_id: person.id || null,\n    decision_maker: true,\n    city: org.city || person.city || null,\n    state: org.state || person.state || 'California',\n    contact_phone: org.sanitized_phone || org.phone || null,\n    employee_count: emp,\n    rating: place.rating ?? null,\n    review_count: place.userRatingCount ?? null,\n    source: 'apollo',\n  }});\n}\n\nfor (const p of places.places || []) {\n  const domain = norm(p.websiteUri);\n  const phone = digits(p.nationalPhoneNumber);\n  if (!domain || known.has(domain) || seen.has(domain)) continue;\n  if (phone && knownPh.has(phone)) continue;\n  const name = (p.displayName && p.displayName.text) || domain;\n  if (exCompany.test(name)) continue;\n  seen.add(domain);\n  out.push({ json: {\n    company_name: name,\n    vertical: ctx.vertical,\n    website_url: p.websiteUri,\n    domain,\n    contact_name: null,\n    contact_title: null,\n    apollo_person_id: null,\n    decision_maker: false,\n    city: null,\n    state: 'California',\n    contact_phone: p.nationalPhoneNumber || null,\n    employee_count: null,\n    rating: p.rating ?? null,\n    review_count: p.userRatingCount ?? null,\n    source: 'google_places',\n  }});\n}\n\nconst capped = out.slice(0, ctx.maxPerVertical);\nreturn capped.length ? capped : [{ json: { _empty: true, vertical: ctx.vertical } }];"
+        "jsCode": "// Merge Apollo + Places candidates for this vertical, apply hard excludes,\n// dedupe against the table and within the run, cap per vertical.\nconst ctx = $('Per Vertical').first().json;\nconst norm = (d) => String(d || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].trim();\nconst digits = (p) => String(p || '').replace(/\\D/g, '').slice(-10);\nconst exTitle = new RegExp(ctx.excludeTitleRe, 'i');\nconst exCompany = new RegExp(ctx.excludeCompanyRe, 'i');\nconst known = new Set(ctx.knownDomains);\nconst knownPh = new Set(ctx.knownPhones);\nconst seen = new Set();\nconst out = [];\n\nlet apollo = {};\ntry { apollo = $('Apollo People Search').first().json || {}; } catch (e) { apollo = {}; }\nlet places = $input.first().json || {};\nif (places.error) places = {};\n\n// SerpAPI google_maps local_results indexed by domain (also enriches Apollo hits)\nconst localResults = places.local_results || [];\nconst placeByDomain = {};\nfor (const p of localResults) {\n  const d = norm(p.website);\n  if (d) placeByDomain[d] = p;\n}\n\nfor (const person of apollo.people || []) {\n  const org = person.organization || {};\n  const domain = norm(org.primary_domain || org.website_url);\n  const phone = digits(org.sanitized_phone || org.phone);\n  if (!domain) continue;                                   // hard exclude: no website\n  if (known.has(domain) || seen.has(domain)) continue;      // dedupe on domain\n  if (phone && knownPh.has(phone)) continue;                // dedupe on phone\n  if (exTitle.test(person.title || '')) continue;           // not a decision maker\n  if (exCompany.test(org.name || '')) continue;             // agencies/vendors/SaaS\n  const emp = org.estimated_num_employees || null;\n  if (emp !== null && emp < 2) continue;                    // solo, no staff\n  seen.add(domain);\n  const place = placeByDomain[domain] || {};\n  out.push({ json: {\n    company_name: org.name || domain,\n    vertical: ctx.vertical,\n    website_url: org.website_url || 'https://' + domain,\n    domain,\n    contact_name: person.name || [person.first_name, person.last_name].filter(Boolean).join(' ') || null,\n    contact_title: person.title || null,\n    apollo_person_id: person.id || null,\n    decision_maker: true,\n    city: org.city || person.city || null,\n    state: org.state || person.state || 'California',\n    contact_phone: org.sanitized_phone || org.phone || null,\n    employee_count: emp,\n    rating: place.rating ?? null,\n    review_count: place.reviews ?? null,\n    source: 'apollo',\n  }});\n}\n\nfor (const p of localResults) {\n  const domain = norm(p.website);\n  const phone = digits(p.phone);\n  if (!domain || known.has(domain) || seen.has(domain)) continue;\n  if (phone && knownPh.has(phone)) continue;\n  const name = p.title || domain;\n  if (exCompany.test(name)) continue;\n  seen.add(domain);\n  out.push({ json: {\n    company_name: name,\n    vertical: ctx.vertical,\n    website_url: p.website,\n    domain,\n    contact_name: null,\n    contact_title: null,\n    apollo_person_id: null,\n    decision_maker: false,\n    city: null,\n    state: 'California',\n    contact_phone: p.phone || null,\n    employee_count: null,\n    rating: p.rating ?? null,\n    review_count: p.reviews ?? null,\n    source: 'google_places',\n  }});\n}\n\nconst capped = out.slice(0, ctx.maxPerVertical);\nreturn capped.length ? capped : [{ json: { _empty: true, vertical: ctx.vertical } }];"
       },
       "id": "f1000000-0000-4000-8000-000000000009",
       "name": "Filter & Dedupe",
@@ -562,23 +555,23 @@
     "Apollo Enabled?": {
       "main": [
         [ { "node": "Apollo People Search", "type": "main", "index": 0 } ],
-        [ { "node": "Google Places Search", "type": "main", "index": 0 } ]
+        [ { "node": "Maps Search (SerpAPI)", "type": "main", "index": 0 } ]
       ]
     },
     "Apollo People Search": {
       "main": [
-        [ { "node": "Google Places Search", "type": "main", "index": 0 } ],
+        [ { "node": "Maps Search (SerpAPI)", "type": "main", "index": 0 } ],
         [ { "node": "Log Apollo Error", "type": "main", "index": 0 } ]
       ]
     },
-    "Google Places Search": {
+    "Maps Search (SerpAPI)": {
       "main": [ [ { "node": "Filter & Dedupe", "type": "main", "index": 0 } ] ]
     },
     "Filter & Dedupe": {
       "main": [ [ { "node": "Per Vertical", "type": "main", "index": 0 } ] ]
     },
     "Log Apollo Error": {
-      "main": [ [ { "node": "Google Places Search", "type": "main", "index": 0 } ] ]
+      "main": [ [ { "node": "Maps Search (SerpAPI)", "type": "main", "index": 0 } ] ]
     },
     "Collect Candidates": {
       "main": [ [ { "node": "Per Company", "type": "main", "index": 0 } ] ]
