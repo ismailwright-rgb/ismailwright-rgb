@@ -55,17 +55,21 @@ api GET "/workflows?limit=1" > /dev/null
 echo "    ok"
 
 echo "==> Checking Supabase (schema must already be applied)..."
+# BOTH headers are required: apikey alone is treated as an anonymous request
+# and RLS silently blanks reads / rejects writes.
 curl -fsS "$SUPABASE_URL/rest/v1/sanaku_prospects?select=id&limit=1" \
-  -H "apikey: $SUPABASE_SERVICE_KEY" > /dev/null
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" > /dev/null
 echo "    ok"
 
 echo "==> Creating credentials in n8n..."
 SUPA_CRED_ID=$(api POST "/credentials" "$(python3 -c '
 import json, os
+key = os.environ["SUPABASE_SERVICE_KEY"]
 print(json.dumps({
-  "name": "Supabase Service Role (Header Auth)",
-  "type": "httpHeaderAuth",
-  "data": {"name": "apikey", "value": os.environ["SUPABASE_SERVICE_KEY"]},
+  "name": "Supabase Service Role (Custom Auth)",
+  "type": "httpCustomAuth",
+  "data": {"json": json.dumps({"headers": {"apikey": key, "Authorization": "Bearer " + key}})},
 }))')" | jsonget 'd["id"]')
 APOLLO_CRED_ID=$(api POST "/credentials" "$(python3 -c '
 import json, os
@@ -111,7 +115,11 @@ for node in wf["nodes"]:
     if "httpHeaderAuth" in creds:
         name = creds["httpHeaderAuth"].get("name", "")
         if "Supabase" in name:
-            creds["httpHeaderAuth"] = {"id": supa_id, "name": "Supabase Service Role (Header Auth)"}
+            # Supabase needs two headers (apikey + Authorization), which Header
+            # Auth can't express - switch these nodes to the Custom Auth credential.
+            node["parameters"]["genericAuthType"] = "httpCustomAuth"
+            del creds["httpHeaderAuth"]
+            creds["httpCustomAuth"] = {"id": supa_id, "name": "Supabase Service Role (Custom Auth)"}
         elif "Apollo" in name:
             creds["httpHeaderAuth"] = {"id": apollo_id, "name": "Apollo API Key (Header Auth)"}
     if node["name"] == "Run Config":
@@ -143,6 +151,17 @@ json.dump(payload, open(f"{tmp}/w1-patched.json", "w"))
 print("    patched")
 PY
 
+echo "==> Removing any previous Sanaku W1 imports (idempotent re-runs)..."
+api GET "/workflows?limit=250" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+for w in d.get("data", []):
+    if w.get("name") == "Sanaku - W1 Prospect Scraper & Scorer":
+        print(w["id"])
+' | while read -r wid; do
+  [ -n "$wid" ] && api DELETE "/workflows/$wid" > /dev/null && echo "    deleted stale workflow $wid"
+done
+
 echo "==> Importing workflow..."
 WF_ID=$(curl -fsS -X POST "$N8N_URL/api/v1/workflows" \
   -H "X-N8N-API-KEY: $N8N_KEY" -H "Content-Type: application/json" \
@@ -171,7 +190,8 @@ done
 echo ""
 echo "==> Scored prospects in Supabase (best first):"
 curl -fsS "$SUPABASE_URL/rest/v1/sanaku_prospects?select=company_name,vertical,tier,intent_score,employee_count,contact_name,contact_email,signals&order=intent_score.desc&limit=25" \
-  -H "apikey: $SUPABASE_SERVICE_KEY" | python3 -c '
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" | python3 -c '
 import sys, json
 rows = json.load(sys.stdin)
 if not rows:

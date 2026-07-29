@@ -46,7 +46,7 @@ On macOS/launchd, add them as `EnvironmentVariables` in the n8n plist (or an
 ### 2. n8n credentials (names must match exactly)
 | Name | Type | Config |
 |---|---|---|
-| `Supabase Service Role (Header Auth)` | Header Auth | header `apikey` = service_role key |
+| `Supabase Service Role (Custom Auth)` | Custom Auth | JSON: `{"headers":{"apikey":"<service_role>","Authorization":"Bearer <service_role>"}}` — BOTH headers are required; apikey alone is treated as anonymous and RLS silently blanks reads / rejects writes (`scripts/setup-sanaku.sh` creates this and rewires the workflow automatically) |
 | `Apollo API Key (Header Auth)` | Header Auth | header `x-api-key` = Apollo key |
 | `OpenRouter (Header Auth)` | Header Auth | header `Authorization` = `Bearer <key>` |
 | `RingCentral (Header Auth)` | Header Auth | header `Authorization` = `Bearer <access token>` * |
