@@ -23,6 +23,35 @@ Validate workflow JSON anytime: `node scripts/validate-workflows.mjs` (repo root
 
 ---
 
+## Day-to-day operations — one script
+
+Install once (works on macOS or inside a Docker container; `sh`, `bash`, or `zsh`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ismailwright-rgb/ismailwright-rgb/claude/n8n-prospect-tiering-hgkjb0/sanaku/scripts/sanaku.sh -o ~/sanaku.sh
+sh ~/sanaku.sh status
+```
+
+The first run asks for your keys **once** and stores them in `~/.sanaku.env`
+(chmod 600). After that, no command ever needs a secret pasted into it again.
+
+| Command | What it does |
+|---|---|
+| `sh ~/sanaku.sh status` | Read-only health check: n8n + Supabase reachable, prospect counts by tier, how many are contactable, recent errors |
+| `sh ~/sanaku.sh scrape` | Installs/updates W1 on n8n and runs it now (`MAX_NEW=50 sh ~/sanaku.sh scrape` to raise the cap) |
+| `sh ~/sanaku.sh dashboard` | Deploys the internal command center to Netlify |
+| `sh ~/sanaku.sh site` | Deploys the public landing page to Netlify |
+| `sh ~/sanaku.sh config` | Re-enter stored keys (after rotating a key, say) |
+
+**Running in Docker?** Two gotchas:
+- Mount a volume so the config and the Netlify login survive container restarts:
+  `docker run -it -v sanaku-home:/root <image> sh`
+- `dashboard` and `site` need Node in the image (the script says so plainly if
+  it's missing). `status` and `scrape` need only curl + python3 — run those
+  anywhere.
+
+---
+
 ## Setup
 
 ### 0. Supabase (5 min)
