@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sanaku — Stop losing the leads you already paid for</title>
+<meta name="description" content="Sanaku installs lead-capture automation for law firms, medical practices, and home-service businesses. Every missed call has a price tag — we catch it, under your brand.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #faf8f3;
+    --paper-2: #f2eee5;
+    --ink: #172a23;
+    --ink-soft: #51625b;
+    --line: #e2ddd1;
+    --green: #0d6b42;
+    --green-deep: #0a5434;
+    --gold: #b98a2f;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Instrument Sans", -apple-system, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.6;
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, .serif { font-family: "Fraunces", Georgia, serif; font-weight: 500; letter-spacing: -0.01em; }
+  a { color: var(--green); text-decoration: none; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---- nav ---- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(250, 248, 243, 0.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner { display: flex; align-items: center; gap: 28px; padding: 16px 24px; max-width: 1080px; margin: 0 auto; }
+  .wordmark { font-family: "Fraunces", serif; font-weight: 600; font-size: 21px; letter-spacing: 0.06em; color: var(--ink); }
+  .wordmark span { color: var(--green); }
+  .nav-links { display: flex; gap: 22px; font-size: 14.5px; font-weight: 500; color: var(--ink-soft); margin-left: auto; }
+  .nav-links a { color: inherit; }
+  .nav-links a:hover { color: var(--ink); }
+  .btn {
+    display: inline-block; background: var(--green); color: #fff !important;
+    padding: 12px 22px; border-radius: 999px; font-weight: 600; font-size: 15px;
+    border: 0; cursor: pointer; transition: transform .15s ease, background .15s ease;
+  }
+  .btn:hover { background: var(--green-deep); transform: translateY(-1px); }
+  .btn.ghost { background: transparent; color: var(--ink) !important; border: 1.5px solid var(--ink); }
+  .btn.ghost:hover { background: var(--ink); color: var(--paper) !important; }
+  .btn.small { padding: 9px 18px; font-size: 14px; }
+  @media (max-width: 720px) { .nav-links { display: none; } }
+
+  /* ---- hero ---- */
+  header { padding: 88px 0 40px; position: relative; overflow: hidden; }
+  header::before {
+    content: ""; position: absolute; right: -140px; top: -140px; width: 460px; height: 460px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(13,107,66,.09), transparent 65%);
+  }
+  .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--green); margin-bottom: 18px; }
+  h1 { font-size: clamp(38px, 6vw, 64px); line-height: 1.05; max-width: 780px; font-weight: 500; }
+  h1 em { font-style: italic; font-weight: 300; color: var(--green); }
+  .hero-sub { font-size: 19px; color: var(--ink-soft); max-width: 620px; margin: 26px 0 34px; }
+  .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .hero-note { font-size: 13.5px; color: var(--ink-soft); margin-top: 18px; }
+
+  /* ---- stat strip ---- */
+  .strip { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--paper-2); margin-top: 64px; }
+  .strip-inner { display: grid; grid-template-columns: repeat(3, 1fr); max-width: 1080px; margin: 0 auto; }
+  .strip .cell { padding: 26px 24px; border-left: 1px solid var(--line); }
+  .strip .cell:first-child { border-left: 0; }
+  .strip b { font-family: "Fraunces", serif; font-size: 26px; display: block; }
+  .strip span { font-size: 13.5px; color: var(--ink-soft); }
+  @media (max-width: 720px) { .strip-inner { grid-template-columns: 1fr; } .strip .cell { border-left: 0; border-top: 1px solid var(--line); } }
+
+  /* ---- sections ---- */
+  section { padding: 84px 0; }
+  .kicker { font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); margin-bottom: 14px; }
+  h2 { font-size: clamp(28px, 4vw, 40px); line-height: 1.15; margin-bottom: 14px; max-width: 640px; }
+  .section-sub { color: var(--ink-soft); max-width: 620px; margin-bottom: 44px; }
+
+  /* ---- calculator ---- */
+  #calc { background: var(--ink); color: #eef3ef; }
+  #calc .kicker { color: #86caa4; }
+  #calc h2 { color: #fff; }
+  #calc .section-sub { color: #a9bcb1; }
+  .calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+  @media (max-width: 840px) { .calc-grid { grid-template-columns: 1fr; } }
+  .calc-field { margin-bottom: 26px; }
+  .calc-field label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #cfe0d5; }
+  .calc-field input[type="range"] { width: 100%; accent-color: #2fa771; }
+  .calc-field .val { font-family: "Fraunces", serif; font-size: 22px; color: #fff; }
+  .calc-result {
+    background: #10241d; border: 1px solid #24483a; border-radius: var(--radius);
+    padding: 38px 34px; text-align: center;
+  }
+  .calc-result .label { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #86caa4; }
+  .calc-result .figure { font-family: "Fraunces", serif; font-size: clamp(44px, 6vw, 64px); color: #ffffff; line-height: 1.1; margin: 10px 0 4px; }
+  .calc-result .per { color: #a9bcb1; font-size: 15px; margin-bottom: 22px; }
+  .calc-result .fine { font-size: 12.5px; color: #7b9186; margin-top: 16px; }
+
+  /* ---- how it works ---- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  @media (max-width: 840px) { .steps { grid-template-columns: 1fr; } }
+  .step { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 30px 26px; }
+  .step .num { font-family: "Fraunces", serif; font-size: 15px; color: var(--gold); font-weight: 600; letter-spacing: .1em; }
+  .step h3 { font-size: 21px; margin: 10px 0 8px; }
+  .step p { font-size: 15px; color: var(--ink-soft); }
+
+  /* ---- verticals ---- */
+  .verts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  @media (max-width: 840px) { .verts { grid-template-columns: 1fr; } }
+  .vert { border: 1px solid var(--line); border-radius: var(--radius); padding: 30px 26px; background: #fff; display: flex; flex-direction: column; }
+  .vert h3 { font-size: 22px; margin-bottom: 4px; }
+  .vert .worth { font-size: 13.5px; color: var(--green); font-weight: 600; margin-bottom: 14px; }
+  .vert p { font-size: 15px; color: var(--ink-soft); flex: 1; }
+  .vert .pricing-note { font-size: 12.5px; color: var(--ink-soft); border-top: 1px dashed var(--line); margin-top: 18px; padding-top: 12px; }
+
+  /* ---- catalog ---- */
+  #catalog { background: var(--paper-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  @media (max-width: 960px) { .cat-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px) { .cat-grid { grid-template-columns: 1fr; } }
+  .cat {
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 28px 24px; display: flex; flex-direction: column; transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .cat:hover { transform: translateY(-4px); box-shadow: 0 14px 34px rgba(23,42,35,.08); }
+  .cat .tag { font-size: 11.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; }
+  .cat .tag.flag { color: var(--green); }
+  .cat h3 { font-size: 20px; margin-bottom: 8px; }
+  .cat p { font-size: 14.5px; color: var(--ink-soft); flex: 1; }
+  .cat .roi { margin-top: 16px; padding: 12px 14px; background: var(--paper); border-radius: 9px; font-size: 13.5px; border: 1px solid var(--line); }
+  .cat .roi b { color: var(--green); }
+
+  /* ---- proof ---- */
+  .proof-card {
+    display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center;
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 44px;
+  }
+  @media (max-width: 840px) { .proof-card { grid-template-columns: 1fr; padding: 30px; } }
+  .proof-figure { font-family: "Fraunces", serif; font-size: clamp(40px, 5vw, 56px); line-height: 1.05; }
+  .proof-figure em { font-style: italic; color: var(--green); }
+  .proof-shot {
+    border: 1.5px dashed var(--line); border-radius: 10px; min-height: 210px;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    color: var(--ink-soft); font-size: 13.5px; padding: 20px; background: var(--paper);
+  }
+
+  /* ---- pricing ---- */
+  .price-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+  @media (max-width: 720px) { .price-row { grid-template-columns: 1fr; } }
+  .price { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 32px 28px; }
+  .price h3 { font-size: 21px; margin-bottom: 6px; }
+  .price .num { font-family: "Fraunces", serif; font-size: 34px; margin: 8px 0 2px; }
+  .price .num small { font-size: 15px; font-family: "Instrument Sans", sans-serif; color: var(--ink-soft); font-weight: 400; }
+  .price p { font-size: 14.5px; color: var(--ink-soft); }
+  .price ul { margin: 14px 0 0 18px; font-size: 14.5px; color: var(--ink-soft); }
+  .price li { margin-bottom: 6px; }
+
+  /* ---- faq ---- */
+  details { border-bottom: 1px solid var(--line); padding: 20px 0; }
+  details summary { font-family: "Fraunces", serif; font-size: 19px; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  details summary::after { content: "+"; font-size: 24px; color: var(--green); transition: transform .2s; }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { padding-top: 12px; color: var(--ink-soft); font-size: 15.5px; max-width: 720px; }
+
+  /* ---- footer cta ---- */
+  #close { background: var(--ink); color: #eef3ef; text-align: center; }
+  #close h2 { color: #fff; margin: 0 auto 14px; }
+  #close .section-sub { margin: 0 auto 34px; color: #a9bcb1; }
+  footer { padding: 34px 0 44px; text-align: center; font-size: 13px; color: var(--ink-soft); background: var(--ink); border-top: 1px solid #24483a; }
+  footer a { color: #86caa4; }
+
+  /* ---- reveal ---- */
+  .reveal { opacity: 0; transform: translateY(22px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="wordmark">SANA<span>KU</span></div>
+    <div class="nav-links">
+      <a href="#calc">Your leak</a>
+      <a href="#how">How it works</a>
+      <a href="#catalog">Workflows</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <a class="btn small cta-mail" href="#" style="margin-left:16px;">Get your leak number</a>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Lead-capture automation for local service businesses</div>
+    <h1>Every missed call<br>has a <em>price tag.</em></h1>
+    <p class="hero-sub">You already pay for the phone to ring — ads, reviews, referrals. Sanaku installs the systems that catch the calls and inquiries you're currently losing: after hours, at lunch, while your team is with a customer. Under <strong>your</strong> brand, not ours.</p>
+    <div class="hero-ctas">
+      <a class="btn cta-mail" href="#">Get your leak number →</a>
+      <a class="btn ghost" href="#catalog">See the workflows</a>
+    </div>
+    <p class="hero-note">Built for personal injury firms, medical &amp; dental practices, and home-service companies.</p>
+  </div>
+  <div class="strip">
+    <div class="strip-inner">
+      <div class="cell"><b>~25%</b><span>of inbound leads at a typical local business get no timely response</span></div>
+      <div class="cell"><b>78%</b><span>of customers buy from whoever responds first</span></div>
+      <div class="cell"><b>$3,000+</b><span>what one lost case is worth to a personal injury firm — one</span></div>
+    </div>
+  </div>
+</header>
+
+<section id="calc">
+  <div class="wrap">
+    <div class="kicker">The arithmetic</div>
+    <h2>What is your leak costing you?</h2>
+    <p class="section-sub">Two numbers you already know. No email required to see the answer.</p>
+    <div class="calc-grid reveal">
+      <div>
+        <div class="calc-field">
+          <label>Leads per month (calls + forms + messages)</label>
+          <input type="range" id="volume" min="10" max="300" step="5" value="60">
+          <div class="val" id="volumeVal">60 leads</div>
+        </div>
+        <div class="calc-field">
+          <label>What one closed customer is worth to you, on average</label>
+          <input type="range" id="value" min="100" max="10000" step="100" value="1500">
+          <div class="val" id="valueVal">$1,500</div>
+        </div>
+      </div>
+      <div class="calc-result">
+        <div class="label">Walking out the door, roughly</div>
+        <div class="figure" id="lossFigure">$22,500</div>
+        <div class="per">per month, at a typical 25% miss rate</div>
+        <a class="btn cta-mail-calc" href="#">Email me — I'll show you where it's going</a>
+        <div class="fine">Estimate only. On a call we compute it with your real numbers — takes 15 minutes.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="kicker">How it works</div>
+    <h2>Find the leak. Install the catch.<br>Watch the meter.</h2>
+    <div class="steps reveal">
+      <div class="step">
+        <div class="num">01 — FIND</div>
+        <h3>We audit your intake</h3>
+        <p>We look at what happens when someone calls after 6pm, submits your contact form, or hangs up on voicemail. Most owners have never seen this number. It's usually worse than they think.</p>
+      </div>
+      <div class="step">
+        <div class="num">02 — INSTALL</div>
+        <h3>We deploy your workflows</h3>
+        <p>Missed-call text-back, after-hours intake, follow-up sequences — installed in days, not months, and carrying <em>your</em> name, logo, and phone number. Your customers never see us.</p>
+      </div>
+      <div class="step">
+        <div class="num">03 — METER</div>
+        <h3>You see every captured lead</h3>
+        <p>Each lead the system catches is logged with a timestamp — including how many came in while you were closed. Your monthly report is a list of customers you would not otherwise have.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="verticals">
+  <div class="wrap">
+    <div class="kicker">Who it's for</div>
+    <h2>Three businesses where a missed lead is real money</h2>
+    <div class="verts reveal">
+      <div class="vert">
+        <h3>Personal injury law</h3>
+        <div class="worth">One signed case: $3,000–$5,000+ in fees</div>
+        <p>Accident victims call three or four firms in the first hour. The firm that responds first — human or not — usually signs the case. If your after-6pm calls go to a form or voicemail, you are funding your competitors' caseload.</p>
+        <div class="pricing-note">Engagements are flat-fee or per-lead-delivered — structured to be ethics-compliant. Never a percentage of your fees.</div>
+      </div>
+      <div class="vert">
+        <h3>Medical, dental &amp; med spa</h3>
+        <div class="worth">One booking: $75–$300 · aesthetics far higher</div>
+        <p>Booking calls hit voicemail at lunch and after close — and most of those patients never call back, they just book with the next practice on Google. We catch the request, confirm the appointment, and cut your no-shows.</p>
+        <div class="pricing-note">Flat monthly fee only for healthcare — clean, simple, compliant.</div>
+      </div>
+      <div class="vert">
+        <h3>Plumbing, HVAC &amp; electrical</h3>
+        <div class="worth">One job: $200–$2,000+ · emergencies higher</div>
+        <p>Your techs are on jobs; the phone rings anyway. Emergency work goes to whoever answers. A missed-call text-back that fires in seconds — from your number, in your name — recovers jobs you're currently donating to the next shop.</p>
+        <div class="pricing-note">Flexible terms — including per-lead and performance-based structures.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="catalog">
+  <div class="wrap">
+    <div class="kicker">The workflow catalog</div>
+    <h2>Pick the leak you want plugged first</h2>
+    <p class="section-sub">Every workflow is white-labeled: your name, your number, your branding on every message your customers see. Sanaku is the machinery underneath.</p>
+    <div class="cat-grid reveal">
+      <div class="cat">
+        <div class="tag flag">Flagship · fastest ROI</div>
+        <h3>Missed-Call Text-Back</h3>
+        <p>A call goes unanswered → within seconds, the caller gets a text from your business number: "Sorry we missed you — what do you need help with?" The reply is captured, qualified, and the owner is alerted.</p>
+        <div class="roi">A plumber missing 6 calls a week who recovers just <b>2 jobs</b> has paid for the entire service.</div>
+      </div>
+      <div class="cat">
+        <div class="tag">Capture</div>
+        <h3>After-Hours Intake</h3>
+        <p>Form or chat that doesn't just collect a name — it asks the three questions that qualify the lead, then books the appointment or escalates urgent work to your on-call phone.</p>
+        <div class="roi">Typically <b>30–45%</b> of captured leads arrive when the office is closed.</div>
+      </div>
+      <div class="cat">
+        <div class="tag">Convert</div>
+        <h3>Lead Nurture</h3>
+        <p>Five-touch follow-up for everyone who inquired and went quiet. Most businesses follow up once, then give up — the sale usually happens on touch three or four.</p>
+        <div class="roi">Re-engages the <b>60%+</b> of inquiries that never got a second touch.</div>
+      </div>
+      <div class="cat">
+        <div class="tag">Retain</div>
+        <h3>Appointment Reminders &amp; No-Show Recovery</h3>
+        <p>Confirmations at booking, reminders at 24h and 1h, and an automatic "life happens — want to rebook?" message the morning after a no-show.</p>
+        <div class="roi">Cutting no-shows from 20% to 10% at a dental practice ≈ <b>thousands/month</b> recovered.</div>
+      </div>
+      <div class="cat">
+        <div class="tag">Grow</div>
+        <h3>Review Engine</h3>
+        <p>After the job's done, the happy customer gets a perfectly-timed review request from your name. Reviews compound: more reviews → more calls → more work for the other workflows to catch.</p>
+        <div class="roi">Review count is the <b>#1 local ranking lever</b> most businesses under-work.</div>
+      </div>
+      <div class="cat">
+        <div class="tag">Custom</div>
+        <h3>Custom Builds</h3>
+        <p>CRM handoffs, quote follow-ups, dispatch alerts, referral loops — if it's a repeatable process that leaks money, it can be automated. Scoped and quoted as a defined change request.</p>
+        <div class="roi">Starts with the audit — <b>we don't build what won't pay for itself.</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="proof">
+  <div class="wrap">
+    <div class="kicker">Proof, not promises</div>
+    <div class="proof-card reveal">
+      <div>
+        <div class="proof-figure">8 appointments<br>booked in <em>6 days.</em></div>
+        <p style="margin-top:18px; color:var(--ink-soft);">That's this same machinery running outbound for another business — real conversations, real bookings, on the calendar within the first week. We don't sell software. We sell the result, and we happen to use software to get it.</p>
+      </div>
+      <div class="proof-shot">Redacted screenshot of the actual booking thread goes here — outbound message → reply → confirmed appointment.</div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="kicker">Pricing posture</div>
+    <h2>Small next to the leak. Simple enough to say yes to.</h2>
+    <p class="section-sub">Exact pricing depends on vertical and volume — but the structure is always one of these two, and we'll tell you which on the first call.</p>
+    <div class="price-row reveal">
+      <div class="price">
+        <h3>Flat monthly</h3>
+        <div class="num">$500–$1,500<small> /month</small></div>
+        <p>One number, everything included: your workflows, hosting, monitoring, and a monthly captured-leads report. The only option we offer healthcare — and the cleanest for law firms.</p>
+        <ul>
+          <li>No setup fee for the first workflow</li>
+          <li>Cancel monthly — your data stays yours</li>
+        </ul>
+      </div>
+      <div class="price">
+        <h3>Retainer + per lead captured</h3>
+        <div class="num">Base +<small> $50–$100 per qualified lead</small></div>
+        <p>Lower base, and we get paid when the system actually catches something. Every billable lead is logged with a timestamp you can audit. Popular with home-service companies.</p>
+        <ul>
+          <li>You define "qualified" with us up front</li>
+          <li>Cap the monthly total if you want cost certainty</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="kicker">Questions owners actually ask</div>
+    <h2 style="margin-bottom:34px;">Fair questions, straight answers</h2>
+    <div class="reveal">
+      <details>
+        <summary>Will my customers know it's automated?</summary>
+        <p>The texts and emails come from your number and your name, written in plain language — most customers just think you're impressively fast. And the moment a conversation needs a human, it's routed to one: you or your staff, immediately.</p>
+      </details>
+      <details>
+        <summary>How long does setup take?</summary>
+        <p>The flagship missed-call text-back is typically live within a week of our call. We install, test with your own phone, and show you the first captured leads before you pay a second invoice.</p>
+      </details>
+      <details>
+        <summary>Do I have to rip out my current phone system or website?</summary>
+        <p>No. The workflows sit alongside what you already have — your existing number, your existing site. We add the catching layer; we don't rebuild your stack.</p>
+      </details>
+      <details>
+        <summary>Is the texting legal and compliant?</summary>
+        <p>Yes — that's load-bearing in how we build. Messages go to people who called or contacted <em>you</em> first, from properly registered business numbers, with opt-outs honored instantly and permanently. For law and healthcare clients, our fee structures are built to respect fee-splitting and anti-kickback rules from day one.</p>
+      </details>
+      <details>
+        <summary>What if it doesn't work for my business?</summary>
+        <p>Every captured lead is logged — so within a month you'll see exactly what the system caught, including what came in after hours. If the meter doesn't justify the fee, cancel. The arithmetic either works or it doesn't; we're comfortable letting it decide.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section id="close">
+  <div class="wrap">
+    <div class="kicker" style="color:#86caa4;">15 minutes, your real numbers</div>
+    <h2>Find out what you're losing.<br>Then decide if it's worth fixing.</h2>
+    <p class="section-sub">Email your two numbers — leads per month and average job value — and you'll get back your leak estimate plus the one workflow we'd install first, before any call.</p>
+    <a class="btn cta-mail" href="#" style="font-size:17px; padding:15px 32px;">Get your leak number →</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="wordmark" style="color:#fff; margin-bottom:8px;">SANA<span style="color:#86caa4;">KU</span></div>
+    <p>Lead-capture automation for local service businesses · Los Angeles County, CA</p>
+    <p style="margin-top:6px;"><a href="mailto:ismailwright@gmail.com">ismailwright@gmail.com</a><span id="phoneFooter"></span></p>
+    <p style="margin-top:14px; font-size:12px; color:#7b9186;">© <span id="year"></span> Sanaku. Your brand on everything. Our machinery underneath.</p>
+  </div>
+</footer>
+
+<script>
+  // ---- config: set PHONE to a public number (e.g. "+16265551234") to surface call links ----
+  const EMAIL = "ismailwright@gmail.com";
+  const PHONE = "";
+
+  // ---- calculator ----
+  const volume = document.getElementById("volume");
+  const value = document.getElementById("value");
+  const fmt = (n) => "$" + Math.round(n).toLocaleString("en-US");
+  let currentLoss = 0;
+  function recalc() {
+    const v = Number(volume.value), val = Number(value.value);
+    currentLoss = v * 0.25 * val;
+    document.getElementById("volumeVal").textContent = v + " leads";
+    document.getElementById("valueVal").textContent = fmt(val);
+    document.getElementById("lossFigure").textContent = fmt(currentLoss);
+    wireMailLinks();
+  }
+  volume.addEventListener("input", recalc);
+  value.addEventListener("input", recalc);
+
+  // ---- mailto wiring (calculator CTA embeds the visitor's own numbers) ----
+  function mailHref(withCalc) {
+    const subject = encodeURIComponent("My leak number");
+    let body = "Hi Ismail,%0D%0A%0D%0AHere are my two numbers:%0D%0A- Leads per month: " +
+      (withCalc ? volume.value : "___") +
+      "%0D%0A- Average value of one closed customer: " +
+      (withCalc ? "$" + Number(value.value).toLocaleString("en-US") : "___");
+    if (withCalc) body += "%0D%0A%0D%0AYour calculator says I might be losing about " + fmt(currentLoss) + "/month.";
+    body += "%0D%0A%0D%0AMy business: ___ (name + what you do)%0D%0A%0D%0AShow me where it's going.";
+    return "mailto:" + EMAIL + "?subject=" + subject + "&body=" + body;
+  }
+  function wireMailLinks() {
+    document.querySelectorAll(".cta-mail").forEach((a) => { a.href = mailHref(false); });
+    document.querySelectorAll(".cta-mail-calc").forEach((a) => { a.href = mailHref(true); });
+  }
+  recalc();
+
+  // ---- optional phone link ----
+  if (PHONE) {
+    document.getElementById("phoneFooter").innerHTML = ' · <a href="tel:' + PHONE + '">' + PHONE + "</a>";
+  }
+
+  document.getElementById("year").textContent = new Date().getFullYear();
+
+  // ---- scroll reveals ----
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+</script>
+</body>
+</html>

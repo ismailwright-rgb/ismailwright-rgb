@@ -7,6 +7,8 @@ exist for all of it.
 
 ```
 sanaku/
+├── site/index.html              Public landing page + workflow catalog
+│                                (deploy: bash scripts/deploy-site.sh — static, no build)
 ├── supabase/schema.sql          Phase 0 — run this first
 ├── n8n/workflows/
 │   ├── w1-prospect-scraper.json     Phase 1 — scrape, score, tier, digest
