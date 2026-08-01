@@ -3,6 +3,7 @@ import { supabase } from './supabase.js';
 import Login from './Login.jsx';
 import Pipeline from './Pipeline.jsx';
 import Clients from './Clients.jsx';
+import Earnings from './Earnings.jsx';
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = loading
@@ -28,12 +29,15 @@ export default function App() {
           <button className={page === 'clients' ? 'active' : ''} onClick={() => setPage('clients')}>
             Clients
           </button>
+          <button className={page === 'earnings' ? 'active' : ''} onClick={() => setPage('earnings')}>
+            Earnings
+          </button>
         </nav>
         <span className="spacer" />
         <button className="signout" onClick={() => supabase.auth.signOut()}>Sign out</button>
       </div>
       <div className="page">
-        {page === 'pipeline' ? <Pipeline /> : <Clients />}
+        {page === 'pipeline' ? <Pipeline /> : page === 'clients' ? <Clients /> : <Earnings />}
       </div>
     </>
   );

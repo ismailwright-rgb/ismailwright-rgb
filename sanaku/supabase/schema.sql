@@ -198,6 +198,16 @@ order by intent_score desc;
 -- ----------------------------------------------------------------------------
 -- Service role (n8n) bypasses RLS automatically. The dashboard logs in through
 -- Supabase Auth and gets the "authenticated" role. One owner -> full access.
+-- Enable RLS on every table. Policies are NOT created here on purpose.
+--
+-- This file used to create a permissive `owner_all` policy per table
+-- (`using (true)` for any authenticated user). Because this file is meant to
+-- be re-runnable, re-running it would silently re-open every table to every
+-- logged-in user - including client-portal users - undoing the security model.
+--
+-- All policies now live in migration-004-security.sql. Run that immediately
+-- after this file. Until you do, RLS is on with no policies, which denies
+-- everything except the service_role key used by n8n.
 do $$
 declare
   t text;
@@ -208,12 +218,13 @@ begin
   ]
   loop
     execute format('alter table %I enable row level security', t);
-    execute format('drop policy if exists owner_all on %I', t);
-    execute format(
-      'create policy owner_all on %I for all to authenticated using (true) with check (true)', t
-    );
+    execute format('alter table %I force  row level security', t);
   end loop;
 end $$;
+
+-- Views run with their OWNER's rights unless told otherwise, which bypasses
+-- RLS entirely. Every view in this project must set security_invoker.
+alter view v_top_prospects set (security_invoker = on);
 
 -- Anonymous (not logged in) gets nothing: no policies for the anon role.
 -- To create your dashboard login: Supabase Studio > Authentication > Users >

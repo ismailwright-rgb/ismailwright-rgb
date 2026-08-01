@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { WORKFLOWS, recommendWorkflow, buildScript, scriptToText } from './playbook.js';
+import ProspectDrawer from './ProspectDrawer.jsx';
 
 const VERTICALS = { law_firm: 'Law firm', medical: 'Medical', home_services: 'Home services' };
 const fmtMoney = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US'));
@@ -17,18 +18,21 @@ export default function Pipeline() {
   const [sort, setSort] = useState({ key: 'intent_score', dir: 'desc' });
   const [expanded, setExpanded] = useState(null);
   const [selected, setSelected] = useState(new Set());
-  const [thread, setThread] = useState(null); // { prospect, messages }
+  const [openProspect, setOpenProspect] = useState(null);  // row open in the CRM drawer
+  const [followups, setFollowups] = useState([]);
 
   async function load() {
     setLoading(true);
-    const [p, d] = await Promise.all([
+    const [p, d, f] = await Promise.all([
       supabase.from('sanaku_prospects').select('*').order('intent_score', { ascending: false }).limit(1000),
       supabase
         .from('sanaku_demos')
         .select('*, sanaku_prospects(company_name, vertical, contact_name, contact_phone)')
         .gte('scheduled_for', new Date(Date.now() - 86400000).toISOString())
         .order('scheduled_for', { ascending: true }),
+      supabase.from('v_followups_due').select('*').limit(25),
     ]);
+    setFollowups(f.data || []);
     setProspects(p.data || []);
     setDemos(d.data || []);
     setLoading(false);
@@ -86,14 +90,6 @@ export default function Pipeline() {
     load();
   }
 
-  async function openThread(p) {
-    const { data } = await supabase
-      .from('sanaku_conversations')
-      .select('*')
-      .eq('prospect_id', p.id)
-      .order('sent_at', { ascending: true });
-    setThread({ prospect: p, messages: data || [] });
-  }
 
   const approvable = rows.filter((p) => p.status === 'new' && p.contact_email);
   const selectedApprovable = [...selected].filter((id) => approvable.some((p) => p.id === id));
@@ -125,6 +121,34 @@ export default function Pipeline() {
                   </td>
                   <td className="hide-m">{d.stated_pain || '—'}</td>
                   <td><span className="loss-big">{fmtMoney(d.est_monthly_loss)}</span><div className="muted">{d.monthly_lead_volume} leads × 25% × {fmtMoney(d.est_lead_value)}</div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {followups.length > 0 && (
+        <div className="card followups">
+          <h3>Follow-ups due ({followups.length})</h3>
+          <table>
+            <tbody>
+              {followups.map((f) => (
+                <tr key={f.id}>
+                  <td>
+                    <b>{f.company_name}</b>
+                    <div className="muted">{f.next_action || 'follow up'}</div>
+                  </td>
+                  <td className="hide-m">
+                    {f.contact_phone && <a href={`tel:${f.contact_phone.replace(/[^\d+]/g, '')}`}>{f.contact_phone}</a>}
+                  </td>
+                  <td className="num muted">{new Date(f.next_action_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      className="rowbtn primary"
+                      onClick={() => setOpenProspect(prospects.find((p) => p.id === f.id) || f)}
+                    >Open</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -187,7 +211,7 @@ export default function Pipeline() {
                     setSelected(next);
                   }}
                   onApprove={() => approve([p.id])}
-                  onThread={() => openThread(p)}
+                  onThread={() => setOpenProspect(p)}
                 />
               ))}
             </tbody>
@@ -195,29 +219,12 @@ export default function Pipeline() {
         )}
       </div>
 
-      {thread && (
-        <div className="drawer">
-          <header>
-            <div>
-              <b>{thread.prospect.company_name}</b>
-              <div className="muted">{thread.prospect.contact_name} · {thread.prospect.contact_email}</div>
-            </div>
-            <button className="rowbtn" onClick={() => setThread(null)}>Close</button>
-          </header>
-          <div className="thread">
-            {thread.messages.length === 0 && <div className="empty">No messages yet.</div>}
-            {thread.messages.map((m) => (
-              <div key={m.id} className={'bubble ' + m.direction}>
-                {m.body}
-                <div className="meta">
-                  {m.direction} · {m.channel} · {new Date(m.sent_at).toLocaleString()}
-                  {m.sequence_step ? ` · step ${m.sequence_step}` : ''}
-                  {m.sentiment ? ` · ${m.sentiment}` : ''}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {openProspect && (
+        <ProspectDrawer
+          prospect={openProspect}
+          onClose={() => setOpenProspect(null)}
+          onChanged={load}
+        />
       )}
     </>
   );
@@ -273,7 +280,7 @@ function Row({ p, expanded, onExpand, checked, onCheck, onApprove, onThread }) {
         <td><span className={'pill status-' + p.status}>{p.status}</span></td>
         <td style={{ whiteSpace: 'nowrap' }}>
           <button className="rowbtn" onClick={onExpand}>{expanded ? 'Hide' : 'Signals'}</button>
-          <button className="rowbtn" onClick={onThread}>Thread</button>
+          <button className="rowbtn" onClick={onThread}>Open</button>
           {p.status === 'new' && p.contact_email && (
             <button className="rowbtn primary" onClick={onApprove}>Approve</button>
           )}
