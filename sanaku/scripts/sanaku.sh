@@ -361,6 +361,34 @@ cmd_config() { # [KEY ...] - with names, re-ask only those; otherwise all
   say "Done. Try:  sh ~/sanaku.sh status"
 }
 
+# Set one value passed as an argument. Pasting at the shell prompt is clean in
+# terminals that mangle `read` prompts, so this is the most reliable path.
+cmd_set() { # cmd_set KEYNAME VALUE
+  _target="${1:-}"; _value="${2:-}"
+  case " $KEYS " in
+    *" $_target "*) ;;
+    *) say "Usage: sh ~/sanaku.sh set KEYNAME VALUE"; say "Valid: $KEYS"; exit 1 ;;
+  esac
+  [ -n "$_value" ] || { say "No value given. Usage: sh ~/sanaku.sh set $_target <value>"; exit 1; }
+
+  case "$_target" in
+    *URL)        _kind=url ;;
+    *EMAIL)      _kind=email ;;
+    SERPAPI_KEY) _kind=key ;;
+    *KEY)        _kind=jwt ;;
+    *)           _kind=key ;;
+  esac
+  _err=$(validate "$_kind" "$_value")
+  if [ -n "$_err" ]; then warn "rejected: $_err"; exit 1; fi
+
+  eval "$_target=\$_value"
+  # shellcheck disable=SC2086
+  ensure_config $KEYS
+  save_config
+  ok "$_target set: $(preview "$_value")"
+  say "Check it with:  sh ~/sanaku.sh doctor"
+}
+
 # Read a value straight from the system clipboard - bypasses the terminal's
 # paste handling entirely, which some terminals use to mask (and destroy) secrets.
 cmd_paste() { # cmd_paste KEYNAME
@@ -410,6 +438,7 @@ sanaku - control script
   sh ~/sanaku.sh site        deploy the public landing page
   sh ~/sanaku.sh config      re-enter stored keys (add names to redo just those)
   sh ~/sanaku.sh paste KEY   read one value straight from the system clipboard
+  sh ~/sanaku.sh set KEY VAL set one value directly (paste the value on the line)
 
 If your terminal mangles pasted secrets into bullets, copy the key in the
 dashboard and use:  sh ~/sanaku.sh paste N8N_KEY
@@ -431,5 +460,6 @@ case "${1:-}" in
   site)      cmd_site ;;
   config)    shift; cmd_config "$@" ;;
   paste)     shift; cmd_paste "$@" ;;
+  set)       shift; cmd_set "$@" ;;
   *)         usage ;;
 esac
