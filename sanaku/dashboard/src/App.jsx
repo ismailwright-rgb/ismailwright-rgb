@@ -6,6 +6,31 @@ import Clients from './Clients.jsx';
 import Earnings from './Earnings.jsx';
 import Portal from './Portal.jsx';
 
+function ThemeToggle() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('sanaku-theme') || 'auto');
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'auto') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', theme);
+    localStorage.setItem('sanaku-theme', theme);
+  }, [theme]);
+
+  // auto -> light -> dark -> auto. 'auto' follows the operating system.
+  const next = { auto: 'light', light: 'dark', dark: 'auto' }[theme];
+  const label = { auto: 'Auto', light: 'Light', dark: 'Dark' }[theme];
+  return (
+    <button
+      className="signout"
+      onClick={() => setTheme(next)}
+      title={`Theme: ${label}. Click for ${next}.`}
+      aria-label={`Theme: ${label}`}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = still loading
   const [isStaff, setIsStaff] = useState(null);      // null = not yet resolved
@@ -44,7 +69,7 @@ export default function App() {
   return (
     <>
       <div className="topbar">
-        <span className="brand">SANAKU</span>
+        <span className="brand">SANAKU<span className="dot">.</span></span>
         <nav>
           <button className={page === 'pipeline' ? 'active' : ''} onClick={() => setPage('pipeline')}>
             Pipeline
@@ -57,6 +82,7 @@ export default function App() {
           </button>
         </nav>
         <span className="spacer" />
+        <ThemeToggle />
         <button className="signout" onClick={signOut}>Sign out</button>
       </div>
       <div className="page">

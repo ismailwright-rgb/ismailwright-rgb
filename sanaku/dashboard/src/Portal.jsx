@@ -69,10 +69,15 @@ export default function Portal({ onSignOut }) {
     );
   }
 
+  // The portal wears the client's colour, not ours. Falls back to Sanaku green.
+  const brandColor = client.brand_primary_color || '#0d6b42';
+
   return (
-    <>
+    <div className="portal" style={{ '--brand': brandColor }}>
       <div className="topbar">
-        <span className="brand">{brand}</span>
+        {client.brand_logo_url
+          ? <img className="brandlogo" src={client.brand_logo_url} alt={brand} />
+          : <span className="brand">{brand}</span>}
         <nav>
           {[['overview', 'Overview'], ['leads', 'Leads'], ['requests', 'Requests'], ['billing', 'Billing']].map(([k, l]) => (
             <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{l}</button>
@@ -148,7 +153,7 @@ export default function Portal({ onSignOut }) {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 

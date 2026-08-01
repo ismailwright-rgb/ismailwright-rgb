@@ -18,8 +18,8 @@ export default function Login() {
 
   return (
     <form className="login" onSubmit={submit}>
-      <h1>Sanaku</h1>
-      <p>Command center. Sign in with the account you created in Supabase Auth.</p>
+      <h1>SANAKU<span className="dot">.</span></h1>
+      <p>Command center. Sign in to work the pipeline.</p>
       <label>Email</label>
       <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
       <label>Password</label>

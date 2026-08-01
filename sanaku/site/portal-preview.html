@@ -4,58 +4,71 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Client portal — sample</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* Mirrors the real portal's tokens. --brand is the CLIENT's colour; the live
+     portal reads it from their record, so each client's portal looks like theirs. */
   :root {
-    --ink: #14181d; --sub: #5f6873; --line: #e4e7eb; --bg: #f6f7f9;
-    --card: #fff; --accent: #0f62fe; --green: #17843b; --amber: #a15c00; --red: #b4231a;
+    --brand: #1b5e8c;
+    --ink: #11161b; --ink-2: #2a3239; --sub: #67736d;
+    --line: #e3e2db; --line-soft: #eeede7; --bg: #f6f5f0; --card: #fff;
+    --accent: var(--brand);
+    --accent-wash: color-mix(in srgb, var(--brand) 11%, transparent);
+    --signal: #8f6409; --signal-wash: #fdf6e3;
+    --alert: #c0453a; --alert-wash: #fdeeec;
+    --calm: #4a6572; --calm-wash: #eef2f4;
+    --r: 10px; --r-s: 7px;
+    --raise: 0 1px 2px rgba(17,22,27,.04), 0 8px 24px rgba(17,22,27,.05);
   }
-  * { box-sizing: border-box; margin: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); font-size: 14px; }
-  button { font: inherit; cursor: pointer; }
-  .banner { background: var(--ink); color: #cfe0d5; padding: 9px 20px; font-size: 12.5px; text-align: center; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; }
+  body { font-family: "Instrument Sans", -apple-system, sans-serif; background: var(--bg); color: var(--ink); font-size: 14.5px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .num { font-variant-numeric: tabular-nums; }
+  .banner { background: var(--ink); color: #b9c4bd; padding: 10px 20px; font-size: 12.5px; text-align: center; }
   .banner b { color: #fff; }
-  .topbar { display: flex; align-items: center; gap: 18px; padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
-  .topbar .brand { font-weight: 700; letter-spacing: .02em; }
-  .topbar nav { display: flex; gap: 4px; }
-  .topbar nav button { border: 0; background: none; padding: 8px 14px; border-radius: 8px; color: var(--sub); font-weight: 600; }
-  .topbar nav button.active { background: #eef1ff; color: var(--accent); }
+  .topbar { display: flex; align-items: center; gap: 20px; padding: 0 22px; height: 62px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
+  .topbar .brand { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 20px; color: var(--ink); }
+  .topbar nav { display: flex; gap: 2px; }
+  .topbar nav button { border: 0; background: none; padding: 7px 13px; border-radius: var(--r-s); color: var(--sub); font-weight: 600; font-size: 13.5px; transition: background .12s, color .12s; }
+  .topbar nav button:hover { color: var(--ink); background: var(--line-soft); }
+  .topbar nav button.active { background: var(--accent-wash); color: var(--accent); }
   .topbar .spacer { flex: 1; }
-  .topbar .signout { border: 1px solid var(--line); background: none; padding: 6px 12px; border-radius: 8px; color: var(--sub); }
-  .page { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .metric { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-  .metric .v { font-size: 24px; font-weight: 700; }
-  .metric .l { color: var(--sub); font-size: 12px; margin-top: 2px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
-  .card h3 { padding: 14px 16px 0; font-size: 15px; }
-  .card.highlight { border-color: #aceebb; background: #f2fdf5; }
-  .card.highlight p { padding: 16px; font-size: 15px; }
+  .topbar .signout { border: 1px solid var(--line); background: none; padding: 6px 13px; border-radius: 999px; color: var(--sub); font-size: 13px; font-weight: 600; }
+  .page { max-width: 1080px; margin: 0 auto; padding: 30px 22px 60px; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  .metric { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 18px 16px; }
+  .metric .v { font-family: "Fraunces", Georgia, serif; font-size: 38px; font-weight: 500; line-height: 1.05; letter-spacing: -.015em; font-variant-numeric: tabular-nums; }
+  .metric .l { color: var(--sub); font-size: 11.5px; margin-top: 5px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; margin-bottom: 22px; box-shadow: var(--raise); }
+  .card h3 { font-family: "Fraunces", Georgia, serif; font-weight: 600; padding: 17px 20px 3px; font-size: 17px; }
+  .card.highlight { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-wash); box-shadow: none; }
+  .card.highlight p { padding: 20px; font-size: 16px; line-height: 1.55; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; }
-  thead th { border-top: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--sub); white-space: nowrap; }
-  tbody tr:hover { background: #fafbfc; }
-  td.num { font-variant-numeric: tabular-nums; }
-  .muted { color: var(--sub); font-size: 12px; }
-  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-  .pill.yes { background: #e6f4ea; color: var(--green); }
-  .pill.no { background: #f0f1f3; color: var(--sub); }
-  .pill.open { background: #eef1ff; color: var(--accent); }
-  .pill.done { background: #17843b; color: #fff; }
-  .pill.prog { background: #fff4e0; color: var(--amber); }
-  .pill.paid { background: #17843b; color: #fff; }
-  .tabpane { display: none; }
-  .tabpane.on { display: block; }
-  label { display: block; font-size: 12px; font-weight: 700; margin: 14px 0 5px; }
-  textarea, select { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: #fff; }
-  .form { padding: 4px 18px 20px; }
-  .btn { background: var(--accent); color: #fff; border: 0; padding: 9px 16px; border-radius: 8px; font-weight: 600; margin-top: 14px; }
-  @media (max-width: 700px) { .hide-m { display: none; } }
+  th, td { text-align: left; padding: 13px 16px; border-top: 1px solid var(--line-soft); vertical-align: top; }
+  thead th { border-top: 0; border-bottom: 1px solid var(--line); font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--sub); font-weight: 700; white-space: nowrap; padding-top: 13px; padding-bottom: 9px; }
+  tbody tr:hover { background: var(--line-soft); }
+  .muted { color: var(--sub); font-size: 12.5px; }
+  .pill { display: inline-block; padding: 2.5px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+  .pill.yes { background: var(--accent-wash); color: var(--accent); }
+  .pill.no { background: var(--line-soft); color: var(--sub); }
+  .pill.open { background: var(--calm-wash); color: var(--calm); }
+  .pill.prog { background: var(--signal-wash); color: var(--signal); }
+  .pill.done, .pill.paid { background: var(--accent); color: #fff; }
+  .tabpane { display: none; } .tabpane.on { display: block; }
+  label { display: block; font-size: 10.5px; font-weight: 700; margin: 15px 0 5px; text-transform: uppercase; letter-spacing: .08em; color: var(--sub); }
+  textarea, select { width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--r-s); font: inherit; background: var(--card); color: var(--ink); }
+  .form { padding: 4px 20px 22px; }
+  .btn { background: var(--accent); color: #fff; border: 0; padding: 10px 18px; border-radius: var(--r-s); font-weight: 650; margin-top: 16px; }
+  @media (max-width: 760px) { .hide-m { display: none; } .metric .v { font-size: 28px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 
 <div class="banner">
-  <b>Sample portal.</b> This is what a Sanaku client sees when they log in — their own numbers, their own branding, nothing else.
+  <b>Sample portal.</b> Each client's portal carries their own name and brand colour — this one belongs to a plumbing company.
 </div>
 
 <div class="topbar">
