@@ -89,7 +89,7 @@ chmod 600 ~/.sanaku.env
 ### 1. n8n env vars
 ```
 SUPABASE_URL=https://<ref>.supabase.co
-SANAKU_OWNER_EMAIL=you@gmail.com
+SANAKU_OWNER_EMAIL=sanakuuai@gmail.com
 SANAKU_MAILING_ADDRESS=Your Name, 123 Street, Azusa CA 91702   # CAN-SPAM footer
 SANAKU_BOOKING_URL=https://<your-booking-site>.netlify.app
 GOOGLE_PLACES_API_KEY=            # optional; blank = Places skipped gracefully
