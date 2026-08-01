@@ -43,6 +43,32 @@ The first run asks for your keys **once** and stores them in `~/.sanaku.env`
 | `sh ~/sanaku.sh site` | Deploys the public landing page to Netlify |
 | `sh ~/sanaku.sh config` | Re-enter stored keys (after rotating a key, say) |
 
+Prompts show what you paste, on purpose — masked prompts silently swallow
+pastes in Docker Desktop and other embedded terminals. Every value is
+shape-checked as you enter it, so a truncated or mangled paste is caught
+immediately instead of surfacing later as a confusing 401.
+
+**Skip the prompts entirely.** Either pass values in the environment:
+
+```bash
+N8N_URL=http://... N8N_KEY=eyJ... sh ~/sanaku.sh config    # only asks for the rest
+```
+
+…or write the config file directly in one paste (works in any terminal):
+
+```bash
+cat > ~/.sanaku.env <<'EOF'
+N8N_URL='http://YOUR-N8N-HOST:5678'
+N8N_KEY='eyJ...'
+SUPABASE_URL='https://YOUR-REF.supabase.co'
+SUPABASE_SERVICE_KEY='eyJ...'
+SUPABASE_ANON_KEY='eyJ...'
+SERPAPI_KEY='...'
+OWNER_EMAIL='you@example.com'
+EOF
+chmod 600 ~/.sanaku.env
+```
+
 **Running in Docker?** Two gotchas:
 - Mount a volume so the config and the Netlify login survive container restarts:
   `docker run -it -v sanaku-home:/root <image> sh`

@@ -36,19 +36,74 @@ need_cmd() {
   }
 }
 
-# Prompt for one value. Works in every shell (no zsh 'read VAR?prompt' syntax).
-ask() { # ask VARNAME "Human label" [hidden]
-  _var="$1"; _label="$2"; _hidden="${3:-}"
-  printf '%s\n> ' "$_label"
-  if [ -n "$_hidden" ] && [ -t 0 ]; then
-    stty -echo 2>/dev/null || true
-    read -r _val
-    stty echo 2>/dev/null || true
-    printf '\n'
+# Show a short preview of a secret so it can be eyeballed without full exposure.
+preview() {
+  _p="$1"; _len=$(printf '%s' "$_p" | wc -c | tr -d ' ')
+  if [ "$_len" -gt 20 ]; then
+    printf '%s...%s (%s chars)' "$(printf '%s' "$_p" | cut -c1-10)" \
+      "$(printf '%s' "$_p" | rev | cut -c1-4 | rev)" "$_len"
   else
-    read -r _val
+    printf '%s' "$_p"
   fi
-  eval "$_var=\$_val"
+}
+
+# Validate a value by kind. Echoes an error string on failure, nothing on success.
+validate() { # validate KIND VALUE
+  _kind="$1"; _v="$2"
+  [ -z "$_v" ] && { printf 'nothing entered'; return; }
+  case "$_kind" in
+    url)
+      case "$_v" in
+        http://*|https://*) ;;
+        *) printf 'must start with http:// or https://' ;;
+      esac
+      ;;
+    jwt)
+      case "$_v" in
+        eyJ*) ;;
+        *) printf 'should start with "eyJ" - if it looks like bullets or is cut short, your terminal mangled the paste; copy it again with the COPY BUTTON rather than selecting the text'; return ;;
+      esac
+      _n=$(printf '%s' "$_v" | wc -c | tr -d ' ')
+      [ "$_n" -lt 100 ] && printf 'looks truncated (%s chars, expected 200+) - copy it again with the copy button' "$_n"
+      ;;
+    key)
+      _n=$(printf '%s' "$_v" | wc -c | tr -d ' ')
+      [ "$_n" -lt 20 ] && printf 'looks too short (%s chars)' "$_n"
+      case "$_v" in *' '*) printf 'contains a space' ;; esac
+      ;;
+    email)
+      case "$_v" in
+        *@*.*) ;;
+        *) printf 'does not look like an email address' ;;
+      esac
+      ;;
+  esac
+  return 0   # a passing test (e.g. [ n -lt 100 ] = false) must not abort set -e
+}
+
+# Prompt for one value. Visible by design: masked prompts silently swallow
+# pastes in Docker Desktop and other embedded terminals. Validates at entry.
+ask() { # ask VARNAME "Human label" KIND
+  _var="$1"; _label="$2"; _kind="${3:-key}"
+  _try=0
+  while [ "$_try" -lt 3 ]; do
+    _try=$((_try + 1))
+    printf '\n%s\n> ' "$_label"
+    read -r _val || _val=""
+    _err=$(validate "$_kind" "$_val")
+    if [ -z "$_err" ]; then
+      case "$_kind" in
+        jwt|key) printf '  accepted: %s\n' "$(preview "$_val")" ;;
+        *)       printf '  accepted: %s\n' "$_val" ;;
+      esac
+      eval "$_var=\$_val"
+      return 0
+    fi
+    printf '  ! %s\n' "$_err"
+    [ -t 0 ] || break   # piped input: do not loop forever
+  done
+  say "Could not read a valid value for $_var. Fix and re-run:  sh ~/sanaku.sh config"
+  exit 1
 }
 
 save_config() {
@@ -66,11 +121,21 @@ EOF
   ok "saved to $CONFIG (readable only by you)"
 }
 
+KEYS="N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY OWNER_EMAIL"
+
 load_config() {
-  N8N_URL=""; N8N_KEY=""; SUPABASE_URL=""; SUPABASE_SERVICE_KEY=""
-  SUPABASE_ANON_KEY=""; SERPAPI_KEY=""; OWNER_EMAIL=""
+  # Values passed in the environment win over the stored file, so a fully
+  # non-interactive setup is possible:  N8N_KEY=... sh sanaku.sh config
+  for _k in $KEYS; do
+    eval "_env_$_k=\${$_k:-}"
+    eval "$_k=''"
+  done
   # shellcheck disable=SC1090
   if [ -f "$CONFIG" ]; then . "$CONFIG"; fi
+  for _k in $KEYS; do
+    eval "_ev=\$_env_$_k"
+    if [ -n "$_ev" ]; then eval "$_k=\$_ev"; fi
+  done
   return 0   # must not return non-zero on first run - set -e would abort here
 }
 
@@ -85,15 +150,16 @@ ensure_config() { # ensure_config key1 key2 ...
 
   head1 "Setup"
   say "Storing these once in $CONFIG so you never paste them again."
+  say "(Values are shown as you paste them - masked prompts break pasting in Docker.)"
   for _k in $_missing; do
     case "$_k" in
-      N8N_URL)              ask N8N_URL "n8n URL (e.g. http://64.227.100.126:5678)";;
-      N8N_KEY)              ask N8N_KEY "n8n API key (n8n > Settings > n8n API)" hidden;;
-      SUPABASE_URL)         ask SUPABASE_URL "Supabase project URL (https://xxx.supabase.co)";;
-      SUPABASE_SERVICE_KEY) ask SUPABASE_SERVICE_KEY "Supabase service_role key" hidden;;
-      SUPABASE_ANON_KEY)    ask SUPABASE_ANON_KEY "Supabase anon public key" hidden;;
-      SERPAPI_KEY)          ask SERPAPI_KEY "SerpAPI key (serpapi.com)" hidden;;
-      OWNER_EMAIL)          ask OWNER_EMAIL "Your email (for digests/alerts)";;
+      N8N_URL)              ask N8N_URL "n8n URL (e.g. http://64.227.100.126:5678)" url;;
+      N8N_KEY)              ask N8N_KEY "n8n API key (n8n > Settings > n8n API)" jwt;;
+      SUPABASE_URL)         ask SUPABASE_URL "Supabase project URL (https://xxx.supabase.co)" url;;
+      SUPABASE_SERVICE_KEY) ask SUPABASE_SERVICE_KEY "Supabase service_role key (Project Settings > API)" jwt;;
+      SUPABASE_ANON_KEY)    ask SUPABASE_ANON_KEY "Supabase anon public key (Project Settings > API)" jwt;;
+      SERPAPI_KEY)          ask SERPAPI_KEY "SerpAPI key (serpapi.com/manage-api-key)" key;;
+      OWNER_EMAIL)          ask OWNER_EMAIL "Your email (for digests/alerts)" email;;
     esac
   done
   N8N_URL="${N8N_URL%/}"
@@ -201,9 +267,15 @@ cmd_site() {
 }
 
 cmd_config() {
+  # Anything supplied via the environment is kept; the rest is re-asked.
+  for _k in $KEYS; do
+    eval "_ev=\${$_k:-}"
+    if [ -z "$_ev" ]; then eval "$_k=''"; fi
+  done
   rm -f "$CONFIG"
-  load_config
-  ensure_config N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY OWNER_EMAIL
+  # shellcheck disable=SC2086
+  ensure_config $KEYS
+  say ""
   say "Done. Try:  sh ~/sanaku.sh status"
 }
 
