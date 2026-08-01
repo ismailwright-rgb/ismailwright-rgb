@@ -130,12 +130,13 @@ SUPABASE_SERVICE_KEY='$SUPABASE_SERVICE_KEY'
 SUPABASE_ANON_KEY='$SUPABASE_ANON_KEY'
 SERPAPI_KEY='$SERPAPI_KEY'
 OWNER_EMAIL='$OWNER_EMAIL'
+DASHBOARD_URL='$DASHBOARD_URL'
 EOF
   chmod 600 "$CONFIG"
   ok "saved to $CONFIG (readable only by you)"
 }
 
-KEYS="N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY OWNER_EMAIL"
+KEYS="N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY OWNER_EMAIL DASHBOARD_URL"
 
 load_config() {
   # Values passed in the environment win over the stored file, so a fully
@@ -174,6 +175,7 @@ ensure_config() { # ensure_config key1 key2 ...
       SUPABASE_ANON_KEY)    ask SUPABASE_ANON_KEY "Supabase anon public key (Project Settings > API)" jwt;;
       SERPAPI_KEY)          ask SERPAPI_KEY "SerpAPI key (serpapi.com/manage-api-key)" key;;
       OWNER_EMAIL)          ask OWNER_EMAIL "Your email (for digests/alerts)" email;;
+      DASHBOARD_URL)        ask DASHBOARD_URL "Command center URL (where client invite links land)" url;;
     esac
   done
   N8N_URL="${N8N_URL%/}"
@@ -262,6 +264,25 @@ cmd_scrape() {
   SUPABASE_URL="$SUPABASE_URL" SUPABASE_SERVICE_KEY="$SUPABASE_SERVICE_KEY" \
   SERPAPI_KEY="$SERPAPI_KEY" OWNER_EMAIL="$OWNER_EMAIL" \
   MAX_NEW="${MAX_NEW:-20}" \
+    sh "$_engine"
+}
+
+cmd_import() { # cmd_import WORKFLOW-NAME
+  _wf="${1:-}"
+  if [ -z "$_wf" ]; then
+    say "Usage: sh ~/sanaku.sh import <workflow-name>"
+    say "e.g.   sh ~/sanaku.sh import invite-client-user"
+    exit 1
+  fi
+  case "$_wf" in *.json) ;; *) _wf="$_wf.json" ;; esac
+  ensure_config N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY
+  need_cmd python3
+  _engine=$(fetch_engine import-workflow.sh)
+  N8N_URL="$N8N_URL" N8N_KEY="$N8N_KEY" \
+  SUPABASE_URL="$SUPABASE_URL" SUPABASE_SERVICE_KEY="$SUPABASE_SERVICE_KEY" \
+  OWNER_EMAIL="${OWNER_EMAIL:-}" SERPAPI_KEY="${SERPAPI_KEY:-}" \
+  DASHBOARD_URL="${DASHBOARD_URL:-https://sanaku-command-center.netlify.app}" \
+  WF_FILE="$_wf" \
     sh "$_engine"
 }
 
@@ -462,7 +483,7 @@ cmd_next() {
   ok "$_c client(s) onboarded"
   say ""
   say "  Check what they owe you:  the Earnings tab"
-  say "  Deploy their workflow:    import n8n/workflows/t1-missed-call-textback.json"
+  say "  Deploy their workflow:    sh ~/sanaku.sh import t1-missed-call-textback"
   printf '\n'
 }
 
@@ -564,11 +585,24 @@ sanaku - control script
   sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
   sh ~/sanaku.sh logs        show what the last scraper run did, node by node
   sh ~/sanaku.sh scrape      run the prospect scraper now
+  sh ~/sanaku.sh import NAME  install a workflow into n8n (see list below)
   sh ~/sanaku.sh dashboard   deploy the internal command center
   sh ~/sanaku.sh site        deploy the public landing page
   sh ~/sanaku.sh config      re-enter stored keys (add names to redo just those)
   sh ~/sanaku.sh paste KEY   read one value straight from the system clipboard
   sh ~/sanaku.sh set KEY VAL set one value directly (paste the value on the line)
+
+Workflow names for 'import' (the .json suffix is optional):
+  invite-client-user     let a client sign in to their portal
+  t1-missed-call-textback  the missed-call product
+  t1-reply-handler       replies to those texts
+  w2-outreach-sequencer  cold outreach
+  w2b-reply-handler      classifies prospect replies
+  w3-demo-booking        booking page + calendar
+
+Import through this script, NOT the n8n UI: the files reference environment
+variables and credentials a stock n8n does not have, so a UI import saves
+cleanly and then fails at run time.
 
 If your terminal mangles pasted secrets into bullets, copy the key in the
 dashboard and use:  sh ~/sanaku.sh paste N8N_KEY
@@ -588,6 +622,7 @@ case "${1:-}" in
   logs)      cmd_logs ;;
   next)      cmd_next ;;
   scrape)    cmd_scrape ;;
+  import)    shift; cmd_import "$@" ;;
   dashboard) cmd_dashboard ;;
   site)      cmd_site ;;
   config)    shift; cmd_config "$@" ;;
