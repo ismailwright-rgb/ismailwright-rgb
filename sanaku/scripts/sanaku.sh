@@ -191,8 +191,27 @@ sb() { # sb <path-and-query>  -> GET against Supabase REST
 }
 
 fetch_engine() { # fetch_engine <script-name>
-  curl -fsSL "$RAW/$1" -o "$HOME/.sanaku-$1"
+  # raw.githubusercontent.com sits behind a CDN that caches for several
+  # minutes. Without a cache-buster a fix pushed moments ago is invisible and
+  # the same failure repeats, which reads as "the fix didn't work".
+  curl -fsSL -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+    "$RAW/$1?cb=$(date +%s)" -o "$HOME/.sanaku-$1"
   printf '%s\n' "$HOME/.sanaku-$1"
+}
+
+# Replace this script with the current published copy, bypassing the CDN cache.
+cmd_update() {
+  _self="$HOME/sanaku.sh"
+  curl -fsSL -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+    "$RAW/sanaku.sh?cb=$(date +%s)" -o "$_self.new"
+  if ! sh -n "$_self.new" 2>/dev/null; then
+    rm -f "$_self.new"
+    say "Downloaded copy is not valid shell - keeping the current one."
+    exit 1
+  fi
+  mv "$_self.new" "$_self"
+  ok "updated $_self"
+  rm -f "$HOME"/.sanaku-*.sh   # force engines to be re-fetched too
 }
 
 # ---------------------------------------------------------------- commands
@@ -580,6 +599,7 @@ usage() {
   cat <<'EOF'
 sanaku - control script
 
+  sh ~/sanaku.sh update      pull the latest version of this script
   sh ~/sanaku.sh next        what should I do right now? (start here)
   sh ~/sanaku.sh status      health check + prospect counts
   sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
@@ -618,6 +638,7 @@ need_cmd curl
 load_config
 case "${1:-}" in
   status)    cmd_status ;;
+  update)    cmd_update ;;
   doctor)    cmd_doctor ;;
   logs)      cmd_logs ;;
   next)      cmd_next ;;
