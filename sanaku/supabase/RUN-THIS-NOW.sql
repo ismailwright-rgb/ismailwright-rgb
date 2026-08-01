@@ -502,12 +502,32 @@ commit;
 
 
 -- ============================================================================
--- VERIFY - run these two after the above finishes.
+-- VERIFY - run these AFTER the above finishes.
+--
+-- The SQL Editor shows only the LAST statement's result, so run them one at
+-- a time: select the query text, then Run.
+--
+-- Do NOT verify with `select public.sanaku_is_staff()` here. That function
+-- answers "is the CURRENT LOGGED-IN USER staff?" - and the SQL Editor runs
+-- as the database owner, with no logged-in user, so auth.uid() is null and
+-- the answer is always false. It proves nothing. Query the table instead.
 -- ============================================================================
--- (a) Every table must have row level security. This must return ZERO rows:
+
+-- (a) Every account, and whether it is seeded as staff.
+--     YOUR email must show seeded_as_staff = true.
+select u.email,
+       (s.user_id is not null) as seeded_as_staff
+from auth.users u
+left join public.sanaku_staff s on s.user_id = u.id
+order by u.created_at;
+
+-- (b) Every table must have row level security. This must return ZERO rows:
 select relname as table_without_rls
 from pg_class c join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
 
--- (b) You must still be staff. This must return TRUE:
-select public.sanaku_is_staff() as i_am_staff;
+-- (c) Nothing may be readable by an anonymous visitor.
+--     This must also return ZERO rows:
+select tablename, policyname
+from pg_policies
+where schemaname = 'public' and 'anon' = any (roles);
