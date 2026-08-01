@@ -107,6 +107,27 @@ td.num { font-variant-numeric: tabular-nums; }
 .bubble.inbound { align-self: flex-start; background: #f0f1f3; }
 .bubble .meta { font-size: 11px; color: var(--sub); margin-top: 5px; }
 
+.onboard { padding: 20px 22px; }
+.onboard h3 { font-size: 17px; margin-bottom: 14px; }
+.onboard label { display: block; font-size: 12px; font-weight: 700; margin: 14px 0 5px; letter-spacing: .02em; }
+.onboard input, .onboard select, .onboard textarea {
+  width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: #fff;
+}
+.onboard .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .onboard .row2 { grid-template-columns: 1fr; } }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button {
+  border: 1px solid var(--line); background: #fff; padding: 8px 14px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; color: var(--sub);
+}
+.seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.legalnote {
+  margin-top: 10px; padding: 9px 12px; background: #fffbe8; border: 1px solid #f1e4a6;
+  border-radius: 8px; font-size: 12.5px; color: #6b5a12;
+}
+.formerr { color: var(--red); font-size: 13px; margin-top: 12px; }
+.formactions { margin-top: 18px; display: flex; gap: 8px; }
+
 .login { max-width: 360px; margin: 12vh auto; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 28px; }
 .login h1 { font-size: 20px; margin-bottom: 4px; }
 .login p { color: var(--sub); margin-bottom: 18px; font-size: 13px; }

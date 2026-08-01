@@ -164,6 +164,14 @@
   .price ul { margin: 14px 0 0 18px; font-size: 14.5px; color: var(--ink-soft); }
   .price li { margin-bottom: 6px; }
 
+  .pilot {
+    margin-top: 22px; background: var(--ink); color: #eef3ef; border-radius: var(--radius);
+    padding: 26px 30px; display: flex; gap: 26px; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; font-size: 15.5px;
+  }
+  .pilot b { color: #86caa4; }
+  .pilot > div { max-width: 620px; }
+
   /* ---- faq ---- */
   details { border-bottom: 1px solid var(--line); padding: 20px 0; }
   details summary { font-family: "Fraunces", serif; font-size: 19px; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
@@ -369,19 +377,27 @@
         <div class="num">$500–$1,500<small> /month</small></div>
         <p>One number, everything included: your workflows, hosting, monitoring, and a monthly captured-leads report. The only option we offer healthcare — and the cleanest for law firms.</p>
         <ul>
-          <li>No setup fee for the first workflow</li>
+          <li>$500 one-time setup</li>
           <li>Cancel monthly — your data stays yours</li>
         </ul>
       </div>
       <div class="price">
         <h3>Retainer + per lead captured</h3>
         <div class="num">Base +<small> $50–$100 per qualified lead</small></div>
-        <p>Lower base, and we get paid when the system actually catches something. Every billable lead is logged with a timestamp you can audit. Popular with home-service companies.</p>
+        <p>Lower base, and we get paid when the system actually catches something. Every billable lead is logged with a timestamp you can audit — we bill from our meter, never from what you report.</p>
         <ul>
           <li>You define "qualified" with us up front</li>
-          <li>Cap the monthly total if you want cost certainty</li>
+          <li>Monthly cap available, so your bill is predictable</li>
         </ul>
       </div>
+    </div>
+    <div class="pilot reveal">
+      <div>
+        <b>First 30 days of service are free.</b> You pay the $500 setup, we build it, and you
+        watch what it catches before a single monthly invoice. If the meter doesn't justify the
+        fee, walk away — you'll still have the leads it caught.
+      </div>
+      <a class="btn cta-mail" href="#">Start with the leak number →</a>
     </div>
   </div>
 </section>

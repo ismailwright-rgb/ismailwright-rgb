@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
+import OnboardClient from './OnboardClient.jsx';
 
 const fmtMoney = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US'));
 
@@ -10,6 +11,7 @@ export default function Clients() {
   const [clients, setClients] = useState([]);
   const [leadStats, setLeadStats] = useState({});
   const [loading, setLoading] = useState(true);
+  const [onboarding, setOnboarding] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -65,11 +67,26 @@ export default function Clients() {
         <div className="metric"><div className="v">{totals.leads}</div><div className="l">Leads captured this month</div></div>
       </div>
 
+      {onboarding && (
+        <div className="card" style={{ padding: 0 }}>
+          <OnboardClient
+            onDone={() => { setOnboarding(false); load(); }}
+            onCancel={() => setOnboarding(false)}
+          />
+        </div>
+      )}
+
       <div className="card">
-        <h3>Client roster</h3>
+        <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 16 }}>
+          <span>Client roster</span>
+          {!onboarding && (
+            <button className="rowbtn primary" onClick={() => setOnboarding(true)}>+ Onboard client</button>
+          )}
+        </h3>
         {loading ? <div className="empty">Loading…</div> : clients.length === 0 ? (
           <div className="empty">
-            No clients yet. Close the first demo, insert a row in <code>sanaku_clients</code>, and this page comes alive.
+            No clients yet — close the first demo, then hit <b>Onboard client</b>.
+            Pricing rules for each vertical are enforced for you.
           </div>
         ) : (
           <table>
