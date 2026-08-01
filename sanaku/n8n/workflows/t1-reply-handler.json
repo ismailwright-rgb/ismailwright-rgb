@@ -1,0 +1,362 @@
+{
+  "name": "Sanaku - T1 Reply Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## T1 - Reply Handler\n\nThe customer texts back after the missed-call auto-reply. This decides whether they are a real lead and gets the owner involved fast.\n\n1. **STOP first, always.** Any opt-out wording -> permanent per-client suppression, a courtesy confirmation, and nothing else ever again. This runs before any qualification.\n2. Match the inbound number to the open lead for that client.\n3. Qualify against the client's OWN `qualified_definition` (the wording that is in their signed agreement) via OpenRouter, with a keyword fallback so a model outage never drops a lead.\n4. Update the lead: `qualified`, `lead_score`, `outcome`, and the conversation transcript. **`qualified` is what gets billed**, so this is the meter.\n5. Alert the client's escalation contact immediately on a qualified or urgent lead - speed is the entire product.\n\nSet your provider's inbound-SMS webhook to POST here.\n\nCredentials: \"Supabase Service Role (Custom Auth)\", \"Twilio account\", \"OpenRouter (Header Auth)\".\nEnv: SUPABASE_URL, optional OPENROUTER_MODEL.",
+        "height": 480,
+        "width": 540
+      },
+      "id": "b2000000-0000-4000-8000-000000000099",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [40, 0]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "t1-reply",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000001",
+      "name": "Inbound SMS Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [140, 560],
+      "webhookId": "b2000000-0000-4000-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalize the inbound message and detect an opt-out before anything else.\nconst b = ($input.first().json || {}).body || {};\nconst e164 = (v) => {\n  const d = String(v || '').replace(/[^\\d+]/g, '');\n  if (/^\\+\\d{10,15}$/.test(d)) return d;\n  if (/^1\\d{10}$/.test(d)) return '+' + d;\n  if (/^\\d{10}$/.test(d)) return '+1' + d;\n  return null;\n};\nconst from = e164(b.From || b.from || b.caller);\nconst to   = e164(b.To || b.to || b.called);\nconst text = String(b.Body || b.body || b.text || b.message || '').trim();\nconst isStop = /^\\s*(stop|stopall|unsubscribe|cancel|end|quit|remove me|opt ?out)\\b/i.test(text);\nif (!from || !to) {\n  return [{ json: { invalid: true } }];\n}\nreturn [{ json: { invalid: false, from, to, text, isStop } }];"
+      },
+      "id": "b2000000-0000-4000-8000-000000000002",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 560]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_clients?or=(inbound_number.eq.{{ encodeURIComponent($json.to) }},sending_number.eq.{{ encodeURIComponent($json.to) }})&select=*&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000003",
+      "name": "Find Client",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [580, 560],
+      "credentials": {
+        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "is-stop",
+              "leftValue": "={{ $('Normalize Reply').first().json.isStop === true }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000004",
+      "name": "Opt-Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [800, 560]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_client_suppression?on_conflict=client_id,phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $json.id, phone: $('Normalize Reply').first().json.from, reason: 'customer replied STOP' }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000005",
+      "name": "Suppress Permanently",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 400],
+      "credentials": {
+        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Find Client').first().json.sending_number || $('Normalize Reply').first().json.to }}",
+        "to": "={{ $('Normalize Reply').first().json.from }}",
+        "message": "=You're unsubscribed and won't get any more texts from {{ $('Find Client').first().json.brand_name || $('Find Client').first().json.company_name }}.",
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000006",
+      "name": "Confirm Opt-Out",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [1240, 400],
+      "credentials": {
+        "twilioApi": { "id": "twilio-account", "name": "Twilio account" }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_client_leads?client_id=eq.{{ $json.id }}&phone=eq.{{ encodeURIComponent($('Normalize Reply').first().json.from) }}&order=captured_at.desc&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000007",
+      "name": "Find Open Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 700],
+      "credentials": {
+        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free', messages: [ { role: 'system', content: 'You grade inbound text replies to a local service business. The business defines a QUALIFIED lead as: ' + ($('Find Client').first().json.qualified_definition || 'someone with a real need for the service who left a way to reach them, not spam, not a vendor, not a wrong number') + '. Reply with STRICT JSON only: {\"qualified\": true|false, \"score\": 0-100, \"urgent\": true|false, \"summary\": \"under 15 words\"}. urgent = they need help today (leak, outage, pain, emergency).' }, { role: 'user', content: $('Normalize Reply').first().json.text } ], max_tokens: 120, temperature: 0 }) }}",
+        "options": { "timeout": 45000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000008",
+      "name": "Qualify Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1240, 700],
+      "credentials": {
+        "httpHeaderAuth": { "id": "openrouter-header-auth", "name": "OpenRouter (Header Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 4000,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse the grade; fall back to keywords so a model outage never drops a lead.\nconst reply = $('Normalize Reply').first().json;\nconst client = $('Find Client').first().json;\nlet lead = null;\ntry { lead = $('Find Open Lead').first().json; } catch (e) { lead = null; }\nif (lead && !lead.id) lead = null;\n\nlet g = null;\ntry {\n  const raw = $input.first().json.choices[0].message.content;\n  g = JSON.parse(String(raw).replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, ''));\n} catch (e) { g = null; }\n\nconst text = reply.text.toLowerCase();\nif (!g || typeof g.qualified !== 'boolean') {\n  // Conservative fallback: a substantive reply from someone who just called is\n  // almost always a real lead. Better to over-alert than to miss a customer.\n  const junk = /^(ok|k|thanks|thank you|no|nope|yes|y|👍|\\.|wrong number)\\.?$/i.test(reply.text.trim());\n  g = {\n    qualified: !junk && reply.text.trim().length > 3,\n    score: junk ? 10 : 60,\n    urgent: /emergency|urgent|asap|today|right now|leak|flood|no (heat|power|water|ac)|burst/.test(text),\n    summary: reply.text.slice(0, 60),\n  };\n}\nif (/emergency|urgent|asap|leak|flood|burst|no (heat|power|water)/.test(text)) g.urgent = true;\n\nconst convo = Array.isArray(lead?.conversation) ? lead.conversation : [];\nconvo.push({ dir: 'in', at: new Date().toISOString(), body: reply.text });\n\nreturn [{ json: {\n  lead_id: lead?.id || null,\n  client_id: client.id,\n  brand: client.brand_name || client.company_name,\n  from: reply.from,\n  qualified: !!g.qualified,\n  score: Math.max(0, Math.min(100, Number(g.score) || 0)),\n  urgent: !!g.urgent,\n  summary: String(g.summary || '').slice(0, 200),\n  conversation: convo,\n  escalation_phone: client.escalation_phone,\n  text: reply.text,\n} }];"
+      },
+      "id": "b2000000-0000-4000-8000-000000000009",
+      "name": "Grade Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1460, 700]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "has-lead",
+              "leftValue": "={{ !!$json.lead_id }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000010",
+      "name": "Known Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1680, 700]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_client_leads?id=eq.{{ $json.lead_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ qualified: $json.qualified, lead_score: $json.score, outcome: $json.qualified ? 'booked' : 'no_response', conversation: $json.conversation, last_message_at: new Date().toISOString() }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000011",
+      "name": "Update Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1900, 620],
+      "credentials": {
+        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_client_leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, phone: $json.from, channel: 'sms', qualified: $json.qualified, lead_score: $json.score, outcome: $json.qualified ? 'booked' : 'no_response', after_hours: false, billable: true, conversation: $json.conversation, last_message_at: new Date().toISOString() }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000012",
+      "name": "Create Lead (inbound-first)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1900, 800],
+      "credentials": {
+        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "worth-alerting",
+              "leftValue": "={{ ($('Grade Lead').first().json.qualified || $('Grade Lead').first().json.urgent) && !!$('Grade Lead').first().json.escalation_phone }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000013",
+      "name": "Worth Waking Them?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2120, 700]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Normalize Reply').first().json.to }}",
+        "to": "={{ $('Grade Lead').first().json.escalation_phone }}",
+        "message": "={{ ($('Grade Lead').first().json.urgent ? 'URGENT LEAD' : 'NEW LEAD') + ' - ' + $('Grade Lead').first().json.from + ': \"' + $('Grade Lead').first().json.text.slice(0, 120) + '\"' }}",
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000014",
+      "name": "Alert The Owner",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [2340, 620],
+      "credentials": {
+        "twilioApi": { "id": "twilio-account", "name": "Twilio account" }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000015",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2560, 700]
+    }
+  ],
+  "connections": {
+    "Inbound SMS Webhook": { "main": [ [ { "node": "Normalize Reply", "type": "main", "index": 0 } ] ] },
+    "Normalize Reply": { "main": [ [ { "node": "Find Client", "type": "main", "index": 0 } ] ] },
+    "Find Client": { "main": [ [ { "node": "Opt-Out?", "type": "main", "index": 0 } ] ] },
+    "Opt-Out?": {
+      "main": [
+        [ { "node": "Suppress Permanently", "type": "main", "index": 0 } ],
+        [ { "node": "Find Open Lead", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Suppress Permanently": { "main": [ [ { "node": "Confirm Opt-Out", "type": "main", "index": 0 } ] ] },
+    "Confirm Opt-Out": { "main": [ [ { "node": "Respond OK", "type": "main", "index": 0 } ] ] },
+    "Find Open Lead": { "main": [ [ { "node": "Qualify Reply", "type": "main", "index": 0 } ] ] },
+    "Qualify Reply": { "main": [ [ { "node": "Grade Lead", "type": "main", "index": 0 } ] ] },
+    "Grade Lead": { "main": [ [ { "node": "Known Lead?", "type": "main", "index": 0 } ] ] },
+    "Known Lead?": {
+      "main": [
+        [ { "node": "Update Lead", "type": "main", "index": 0 } ],
+        [ { "node": "Create Lead (inbound-first)", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Update Lead": { "main": [ [ { "node": "Worth Waking Them?", "type": "main", "index": 0 } ] ] },
+    "Create Lead (inbound-first)": { "main": [ [ { "node": "Worth Waking Them?", "type": "main", "index": 0 } ] ] },
+    "Worth Waking Them?": {
+      "main": [
+        [ { "node": "Alert The Owner", "type": "main", "index": 0 } ],
+        [ { "node": "Respond OK", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Alert The Owner": { "main": [ [ { "node": "Respond OK", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1", "timezone": "America/Los_Angeles" },
+  "pinData": {},
+  "meta": {}
+}

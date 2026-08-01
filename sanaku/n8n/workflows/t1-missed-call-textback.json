@@ -1,0 +1,364 @@
+{
+  "name": "Sanaku - T1 Missed-Call Text-Back",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## T1 - Missed-Call Text-Back (the flagship product)\n\nA call to the client's business number goes unanswered -> within seconds the caller gets a text FROM THAT NUMBER in the client's name. The reply is handled by `T1 Reply Handler`.\n\n**Every execution checks, in order:**\n1. `workflow_enabled` on the client - the kill switch. False = halt immediately, nothing sent, no data deleted.\n2. Per-client suppression list - a STOP is permanent and never bleeds across clients.\n3. TCPA window - 8am-9pm in the CLIENT's timezone. Outside it, the lead is captured but the text waits.\n\nThen: send the text -> log to `sanaku_client_leads` (the billing meter) with `after_hours` computed from that client's own business hours -> alert their escalation contact.\n\n**Nothing here says Sanaku.** Brand, number, and wording are the client's.\n\n**Webhook payload** (POST /webhook/t1-missed-call), provider-agnostic:\n```\n{ \"called\": \"+16265551234\",   // the client's business number\n  \"caller\": \"+16265559876\",   // who rang\n  \"caller_name\": \"optional\" }\n```\nPoint your telephony provider's missed-call / no-answer event at it (Twilio: a Studio flow or the `no-answer` status callback; RingCentral: a telephony session notification).\n\nCredentials: \"Supabase Service Role (Custom Auth)\", \"Twilio account\" (or swap the send node for your provider).\nEnv: SUPABASE_URL, SANAKU_OWNER_EMAIL.",
+        "height": 620,
+        "width": 560
+      },
+      "id": "b1000000-0000-4000-8000-000000000099",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [40, 0]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "t1-missed-call",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "name": "Missed Call Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [140, 720],
+      "webhookId": "b1000000-0000-4000-8000-000000000101"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalize whatever the telephony provider sent into { called, caller }.\nconst b = ($input.first().json || {}).body || {};\nconst e164 = (v) => {\n  const d = String(v || '').replace(/[^\\d+]/g, '');\n  if (/^\\+\\d{10,15}$/.test(d)) return d;\n  if (/^1\\d{10}$/.test(d)) return '+' + d;\n  if (/^\\d{10}$/.test(d)) return '+1' + d;\n  return null;\n};\n// Common provider field names, in preference order.\nconst called = e164(b.called || b.To || b.to || b.calledNumber || b.destination);\nconst caller = e164(b.caller || b.From || b.from || b.callerNumber || b.origin);\nif (!called || !caller) {\n  return [{ json: { invalid: true, error: 'could not read called/caller from payload', raw: JSON.stringify(b).slice(0, 400) } }];\n}\nreturn [{ json: { invalid: false, called, caller, caller_name: b.caller_name || b.CallerName || null } }];"
+      },
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "Normalize Call",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 720]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.invalid === false }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000003",
+      "name": "Readable Payload?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [580, 720]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_clients?inbound_number=eq.{{ encodeURIComponent($json.called) }}&select=*&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b1000000-0000-4000-8000-000000000004",
+      "name": "Find Client",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 640],
+      "credentials": {
+        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "enabled",
+              "leftValue": "={{ !!$json.id && $json.workflow_enabled === true && $json.status === 'active' }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000005",
+      "name": "Client Active? (kill switch)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1020, 640]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_client_suppression?client_id=eq.{{ $json.id }}&phone=eq.{{ encodeURIComponent($('Normalize Call').first().json.caller) }}&select=id&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b1000000-0000-4000-8000-000000000006",
+      "name": "Check Suppression",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1240, 640],
+      "credentials": {
+        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Decide whether we may text right now, and compose the message.\n// TCPA: artificial/prerecorded and automated texts stay inside 8am-9pm in the\n// RECIPIENT's local time; we use the client's timezone as the proxy since the\n// caller just dialed their local business.\nconst client = $('Client Active? (kill switch)').first().json;\nconst call = $('Normalize Call').first().json;\nconst suppressed = ($input.all() || []).some((i) => i.json && i.json.id);\n\nconst tz = client.timezone || 'America/Los_Angeles';\nconst now = new Date();\nconst parts = new Intl.DateTimeFormat('en-US', {\n  timeZone: tz, hour12: false, weekday: 'short', hour: '2-digit', minute: '2-digit',\n}).formatToParts(now);\nconst get = (t) => parts.find((p) => p.type === t).value;\nconst hour = Number(get('hour'));\nconst minute = Number(get('minute'));\nconst dow = get('weekday').toLowerCase();\nconst insideTcpa = hour >= 8 && hour < 21;\n\n// after_hours = outside the CLIENT's own business hours (a billing/renewal\n// signal, separate from the legal sending window).\nconst hours = client.business_hours || {};\nconst span = hours[dow];\nlet afterHours = true;\nif (Array.isArray(span) && span.length === 2) {\n  const mins = hour * 60 + minute;\n  const toMin = (s) => Number(String(s).split(':')[0]) * 60 + Number(String(s).split(':')[1] || 0);\n  afterHours = !(mins >= toMin(span[0]) && mins < toMin(span[1]));\n}\n\nconst brand = client.brand_name || client.company_name;\nconst template = client.textback_message ||\n  'Sorry we missed your call - this is {brand}. What do you need help with? Reply here and we will get right back to you.';\nconst message = template.replace(/\\{brand\\}/g, brand) + '\\n\\nReply STOP to opt out.';\n\nreturn [{ json: {\n  client_id: client.id,\n  brand,\n  from_number: client.sending_number || client.inbound_number,\n  to_number: call.caller,\n  caller_name: call.caller_name,\n  message,\n  after_hours: afterHours,\n  suppressed,\n  inside_tcpa: insideTcpa,\n  may_send: !suppressed && insideTcpa,\n  escalation_phone: client.escalation_phone,\n  escalation_email: client.escalation_email,\n  local_time: hour + ':' + String(minute).padStart(2, '0') + ' ' + tz,\n} }];"
+      },
+      "id": "b1000000-0000-4000-8000-000000000007",
+      "name": "Compose + Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1460, 640]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_client_leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, name: $json.caller_name, phone: $json.to_number, channel: 'missed_call', after_hours: $json.after_hours, qualified: false, outcome: 'no_response', billable: true, last_message_at: new Date().toISOString(), conversation: [{ dir: 'out', at: new Date().toISOString(), body: $json.may_send ? $json.message : '(queued - outside 8am-9pm calling window)' }] }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b1000000-0000-4000-8000-000000000008",
+      "name": "Log Lead (billing meter)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 640],
+      "credentials": {
+        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "may-send",
+              "leftValue": "={{ $('Compose + Gate').first().json.may_send === true }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000009",
+      "name": "May We Text?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1900, 640]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Compose + Gate').first().json.from_number }}",
+        "to": "={{ $('Compose + Gate').first().json.to_number }}",
+        "message": "={{ $('Compose + Gate').first().json.message }}",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000010",
+      "name": "Send Text (client's number)",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [2120, 540],
+      "credentials": {
+        "twilioApi": { "id": "twilio-account", "name": "Twilio account" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'text-back send failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 800), payload: { client_id: $('Compose + Gate').first().json.client_id, to: $('Compose + Gate').first().json.to_number } }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "b1000000-0000-4000-8000-000000000011",
+      "name": "Log Send Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2120, 760],
+      "credentials": {
+        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Tell the owner a call was missed and caught, so they can jump in if they want.\nconst g = $('Compose + Gate').first().json;\nconst when = g.after_hours ? 'while they were closed' : 'during business hours';\nreturn [{ json: {\n  to: g.escalation_phone,\n  email: g.escalation_email,\n  brand: g.brand,\n  body: 'Missed call from ' + g.to_number + ' ' + when + '. We texted them automatically' +\n        (g.may_send ? '.' : ' - queued until 8am (outside legal texting hours).'),\n  sendAlert: !!g.escalation_phone,\n} }];"
+      },
+      "id": "b1000000-0000-4000-8000-000000000012",
+      "name": "Build Owner Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2340, 640]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "has-alert",
+              "leftValue": "={{ $json.sendAlert === true }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000013",
+      "name": "Alert Configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2560, 640]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Compose + Gate').first().json.from_number }}",
+        "to": "={{ $json.to }}",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000014",
+      "name": "Alert The Owner",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [2780, 540],
+      "credentials": {
+        "twilioApi": { "id": "twilio-account", "name": "Twilio account" }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "b1000000-0000-4000-8000-000000000015",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3000, 640]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, reason: 'inactive, unknown number, or unreadable payload' }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "b1000000-0000-4000-8000-000000000016",
+      "name": "Respond Skipped",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1240, 900]
+    }
+  ],
+  "connections": {
+    "Missed Call Webhook": { "main": [ [ { "node": "Normalize Call", "type": "main", "index": 0 } ] ] },
+    "Normalize Call": { "main": [ [ { "node": "Readable Payload?", "type": "main", "index": 0 } ] ] },
+    "Readable Payload?": {
+      "main": [
+        [ { "node": "Find Client", "type": "main", "index": 0 } ],
+        [ { "node": "Respond Skipped", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Find Client": { "main": [ [ { "node": "Client Active? (kill switch)", "type": "main", "index": 0 } ] ] },
+    "Client Active? (kill switch)": {
+      "main": [
+        [ { "node": "Check Suppression", "type": "main", "index": 0 } ],
+        [ { "node": "Respond Skipped", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Check Suppression": { "main": [ [ { "node": "Compose + Gate", "type": "main", "index": 0 } ] ] },
+    "Compose + Gate": { "main": [ [ { "node": "Log Lead (billing meter)", "type": "main", "index": 0 } ] ] },
+    "Log Lead (billing meter)": { "main": [ [ { "node": "May We Text?", "type": "main", "index": 0 } ] ] },
+    "May We Text?": {
+      "main": [
+        [ { "node": "Send Text (client's number)", "type": "main", "index": 0 } ],
+        [ { "node": "Build Owner Alert", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Send Text (client's number)": {
+      "main": [
+        [ { "node": "Build Owner Alert", "type": "main", "index": 0 } ],
+        [ { "node": "Log Send Failure", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Log Send Failure": { "main": [ [ { "node": "Build Owner Alert", "type": "main", "index": 0 } ] ] },
+    "Build Owner Alert": { "main": [ [ { "node": "Alert Configured?", "type": "main", "index": 0 } ] ] },
+    "Alert Configured?": {
+      "main": [
+        [ { "node": "Alert The Owner", "type": "main", "index": 0 } ],
+        [ { "node": "Respond OK", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Alert The Owner": { "main": [ [ { "node": "Respond OK", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1", "timezone": "America/Los_Angeles" },
+  "pinData": {},
+  "meta": {}
+}
