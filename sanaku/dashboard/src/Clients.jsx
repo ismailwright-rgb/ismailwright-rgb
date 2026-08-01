@@ -1,6 +1,49 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import OnboardClient from './OnboardClient.jsx';
+import Branding from './Branding.jsx';
+
+// Branding is set at onboarding, but onboarding happens once and logos change.
+// This is the same component, saving straight back to the row.
+function EditBranding({ client, onDone, onCancel }) {
+  const [f, setF] = useState({
+    brand_name: client.brand_name || '',
+    brand_primary_color: client.brand_primary_color || '',
+    brand_logo_url: client.brand_logo_url || '',
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function save() {
+    setBusy(true);
+    setErr('');
+    const { error } = await supabase
+      .from('sanaku_clients')
+      .update({
+        brand_name: f.brand_name.trim() || client.company_name,
+        brand_primary_color: f.brand_primary_color.trim() || null,
+        brand_logo_url: f.brand_logo_url.trim() || null,
+      })
+      .eq('id', client.id);
+    setBusy(false);
+    if (error) return setErr(error.message);
+    onDone();
+  }
+
+  return (
+    <div className="onboard">
+      <h3>Branding — {client.company_name}</h3>
+      <Branding value={f} onChange={setF} clientId={client.id} />
+      {err && <p className="formerr">{err}</p>}
+      <div className="formactions">
+        <button className="rowbtn primary" disabled={busy} onClick={save}>
+          {busy ? 'Saving…' : 'Save branding'}
+        </button>
+        <button className="rowbtn" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 
 const fmtMoney = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US'));
 
@@ -12,6 +55,7 @@ export default function Clients() {
   const [leadStats, setLeadStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [onboarding, setOnboarding] = useState(false);
+  const [branding, setBranding] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -98,6 +142,16 @@ export default function Clients() {
         </div>
       )}
 
+      {branding && (
+        <div className="card" style={{ padding: 0 }}>
+          <EditBranding
+            client={branding}
+            onDone={() => { setBranding(null); load(); }}
+            onCancel={() => setBranding(null)}
+          />
+        </div>
+      )}
+
       <div className="card">
         <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 16 }}>
           <span>Client roster</span>
@@ -125,7 +179,14 @@ export default function Clients() {
                 return (
                   <tr key={c.id}>
                     <td>
-                      <b>{c.company_name}</b>
+                      <b>
+                        <i
+                          className="brandchip"
+                          style={{ background: c.brand_primary_color || 'var(--accent)' }}
+                          title={c.brand_primary_color ? `Portal colour ${c.brand_primary_color}` : 'No brand colour set — portal uses Sanaku green'}
+                        />
+                        {c.company_name}
+                      </b>
                       <div className="muted">{c.vertical} · since {c.onboarded_at || '—'}</div>
                     </td>
                     <td className="hide-m">
@@ -148,6 +209,7 @@ export default function Clients() {
                         {c.workflow_enabled ? 'Pause' : 'Enable'}
                       </button>
                       <button className="rowbtn" onClick={() => invitePortalUser(c)}>Invite</button>
+                      <button className="rowbtn" onClick={() => setBranding(c)}>Branding</button>
                     </td>
                   </tr>
                 );

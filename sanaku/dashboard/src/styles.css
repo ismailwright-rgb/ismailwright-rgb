@@ -278,6 +278,76 @@ tbody tr:hover { background: var(--line-soft); }
 }
 .formerr { color: var(--alert); font-size: 13px; margin-top: 12px; }
 .formactions { margin-top: 18px; display: flex; gap: 8px; }
+
+/* ------------------------------------------------------------- branding --
+   Everything that decides what a client's portal looks like, grouped into one
+   inset panel so it reads as a single decision rather than four loose fields.
+   ------------------------------------------------------------------------- */
+.branding {
+  margin-top: 16px; padding: 4px 16px 18px; border-radius: var(--r);
+  background: var(--line-soft); border: 1px solid var(--line);
+}
+.branding > .muted { font-size: 12px; margin-top: 5px; }
+.branding .legalnote { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.colorrow { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.colorrow input[type="text"], .colorrow > input:not(.swatch):not([type="file"]) {
+  width: 118px; font-variant-numeric: tabular-nums; text-transform: lowercase;
+}
+.colorrow .num { font-variant-numeric: tabular-nums; font-size: 12px; }
+
+/* A native colour input, stripped of its OS chrome so it reads as a swatch. */
+.swatch {
+  width: 40px; height: 38px; flex: none; padding: 3px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--r-s); background: var(--card);
+}
+.swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.swatch::-webkit-color-swatch { border: 0; border-radius: 3px; }
+.swatch::-moz-color-swatch { border: 0; border-radius: 3px; }
+
+/* A small colour dot beside a client's name in the roster. */
+.brandchip {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 7px; vertical-align: 1px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+/* --- live mock of the client's portal header, driven by --brand ---------- */
+.brandpreview {
+  border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+  background: var(--card); box-shadow: var(--raise);
+}
+.bp-bar {
+  display: flex; align-items: center; gap: 16px; padding: 0 16px; height: 52px;
+  border-bottom: 1px solid var(--line);
+}
+.bp-bar img { max-height: 26px; max-width: 150px; object-fit: contain; }
+.bp-name {
+  font-family: "Fraunces", Georgia, serif; font-size: 17px; font-weight: 600;
+  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px;
+}
+.bp-tab { font-size: 12.5px; font-weight: 600; color: var(--sub); }
+.bp-tab.on {
+  color: var(--brand); box-shadow: inset 0 -2px 0 var(--brand); padding-bottom: 3px;
+}
+.bp-body { display: flex; align-items: center; gap: 22px; padding: 16px; }
+.bp-metric { line-height: 1.2; }
+.bp-metric b {
+  display: block; font-family: "Fraunces", Georgia, serif; font-size: 26px;
+  font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.bp-metric span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--sub); }
+.bp-btn {
+  margin-left: auto; background: var(--brand); color: #fff; border: 0;
+  padding: 9px 16px; border-radius: var(--r-s); font-size: 13px; font-weight: 650;
+}
+@media (max-width: 560px) {
+  .bp-bar { gap: 11px; padding: 0 12px; }
+  .bp-tab { display: none; }
+  .bp-tab.on { display: inline; }
+  .bp-body { flex-wrap: wrap; gap: 16px; }
+  .bp-btn { margin-left: 0; }
+}
 .form { padding: 4px 20px 20px; }
 .btn { background: var(--accent); color: #fff; border: 0; padding: 9px 18px; border-radius: var(--r-s); font-weight: 650; margin-top: 14px; }
 

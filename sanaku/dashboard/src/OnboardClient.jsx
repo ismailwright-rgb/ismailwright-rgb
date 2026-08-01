@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
+import Branding from './Branding.jsx';
 
 // Pricing structures that survive review, by vertical. The database enforces
 // this too (migration-002) - this is the friendly half of the same rule.
@@ -36,6 +37,8 @@ export default function OnboardClient({ onDone, onCancel }) {
   const [f, setF] = useState({
     company_name: '',
     brand_name: '',
+    brand_primary_color: '',
+    brand_logo_url: '',
     sending_number: '',
     pricing_model: 'retainer_plus_per_lead',
     setup_fee: DEFAULTS.home_services.setup,
@@ -82,6 +85,8 @@ export default function OnboardClient({ onDone, onCancel }) {
       status: 'active',
       onboarded_at: today(),
       brand_name: f.brand_name.trim() || f.company_name.trim(),
+      brand_primary_color: f.brand_primary_color.trim() || null,
+      brand_logo_url: f.brand_logo_url.trim() || null,
       sending_number: f.sending_number.trim() || null,
       pricing_model: f.pricing_model,
       setup_fee: num(f.setup_fee),
@@ -118,20 +123,10 @@ export default function OnboardClient({ onDone, onCancel }) {
       </div>
       <p className="legalnote">{NOTE[vertical]}</p>
 
-      <div className="row2">
-        <div>
-          <label>Business name</label>
-          <input value={f.company_name} onChange={(e) => set('company_name', e.target.value)} required />
-        </div>
-        <div>
-          <label>Brand name on messages</label>
-          <input
-            value={f.brand_name}
-            placeholder="defaults to business name"
-            onChange={(e) => set('brand_name', e.target.value)}
-          />
-        </div>
-      </div>
+      <label>Business name</label>
+      <input value={f.company_name} onChange={(e) => set('company_name', e.target.value)} required />
+
+      <Branding value={f} onChange={(next) => setF(next)} />
 
       <label>Sending number (their number, E.164)</label>
       <input value={f.sending_number} placeholder="+16265551234" onChange={(e) => set('sending_number', e.target.value)} />
