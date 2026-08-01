@@ -51,6 +51,12 @@ preview() {
 validate() { # validate KIND VALUE
   _kind="$1"; _v="$2"
   [ -z "$_v" ] && { printf 'nothing entered'; return; }
+  # Catch template placeholders left unreplaced - they look like valid input.
+  case "$_v" in
+    *PASTE_*|*YOUR_*|*_HERE*|*xxxxx*|*XXXXX*|'<'*'>')
+      printf 'that is the placeholder text, not a real value'
+      return 0 ;;
+  esac
   case "$_kind" in
     url)
       case "$_v" in
