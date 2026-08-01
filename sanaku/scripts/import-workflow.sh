@@ -168,7 +168,11 @@ PY
 WF_NAME=$(head -1 "$TMP/meta")
 
 echo "==> Replacing any previous copy of \"$WF_NAME\"..."
-WF_NAME="$WF_NAME" api GET "/workflows?limit=250" | python3 -c '
+# Must be exported, not prefixed: a `VAR=x cmd | other` prefix applies only to
+# `cmd`, and it is `other` - the python3 on the far side of the pipe - that
+# reads it.
+export WF_NAME
+api GET "/workflows?limit=250" | python3 -c '
 import sys, json, os
 for w in json.load(sys.stdin).get("data", []):
     if w.get("name") == os.environ["WF_NAME"]:
