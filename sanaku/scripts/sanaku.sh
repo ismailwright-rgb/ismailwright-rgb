@@ -407,6 +407,65 @@ print()
 '
 }
 
+
+# Inspect the live system and print the ONE next thing to do.
+cmd_next() {
+  ensure_config N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY
+  head1 "Next step"
+
+  # 1. migrations applied?
+  if ! sb "sanaku_notes?select=id&limit=1" >/dev/null 2>&1; then
+    say "  Run the database update."
+    say ""
+    say "  Supabase -> SQL Editor -> New query, paste this file, Run:"
+    say "  https://github.com/ismailwright-rgb/ismailwright-rgb/blob/${BRANCH}/sanaku/supabase/RUN-THIS-NOW.sql"
+    say ""
+    say "  (Until you do, your prospect list is readable by anyone with a login.)"
+    return 0
+  fi
+  ok "database is up to date"
+
+  # 2. real SerpAPI key?
+  case "$SERPAPI_KEY" in
+    ''|*PASTE_*|*YOUR_*)
+      say ""
+      say "  Set your real SerpAPI key (serpapi.com/manage-api-key):"
+      say "    sh ~/sanaku.sh set SERPAPI_KEY <your-key>"
+      return 0 ;;
+  esac
+  ok "scraper key is set"
+
+  # 3. any prospects?
+  _n=$(sb "sanaku_prospects?select=id" 2>/dev/null | tr -cd '{' | wc -c | tr -d ' ')
+  if [ "${_n:-0}" -lt 1 ]; then
+    say ""
+    say "  Find some prospects:"
+    say "    sh ~/sanaku.sh scrape"
+    return 0
+  fi
+  ok "$_n prospects in the database"
+
+  # 4. any clients?
+  _c=$(sb "sanaku_clients?select=id" 2>/dev/null | tr -cd '{' | wc -c | tr -d ' ')
+  if [ "${_c:-0}" -lt 1 ]; then
+    say ""
+    say "  Everything is built. The next move is not technical:"
+    say ""
+    say "    1. Open sanaku-command-center.netlify.app"
+    say "    2. Filter to Tier 1 + Home services"
+    say "    3. Open the top prospect, Copy call script, and dial"
+    say "    4. Log the call in the drawer, set a follow-up, next one"
+    say ""
+    say "  When someone says yes: Clients -> Onboard client."
+    return 0
+  fi
+  ok "$_c client(s) onboarded"
+  say ""
+  say "  Check what they owe you:  the Earnings tab"
+  say "  Deploy their workflow:    import n8n/workflows/t1-missed-call-textback.json"
+  printf '\n'
+}
+
 cmd_config() { # [KEY ...] - with names, re-ask only those; otherwise all
   if [ "$#" -gt 0 ]; then
     for _k in "$@"; do
@@ -500,7 +559,8 @@ usage() {
   cat <<'EOF'
 sanaku - control script
 
-  sh ~/sanaku.sh status      health check + prospect counts (start here)
+  sh ~/sanaku.sh next        what should I do right now? (start here)
+  sh ~/sanaku.sh status      health check + prospect counts
   sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
   sh ~/sanaku.sh logs        show what the last scraper run did, node by node
   sh ~/sanaku.sh scrape      run the prospect scraper now
@@ -526,6 +586,7 @@ case "${1:-}" in
   status)    cmd_status ;;
   doctor)    cmd_doctor ;;
   logs)      cmd_logs ;;
+  next)      cmd_next ;;
   scrape)    cmd_scrape ;;
   dashboard) cmd_dashboard ;;
   site)      cmd_site ;;
