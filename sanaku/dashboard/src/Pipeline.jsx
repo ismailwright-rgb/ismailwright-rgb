@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
+import { WORKFLOWS, recommendWorkflow, buildScript, scriptToText } from './playbook.js';
 
 const VERTICALS = { law_firm: 'Law firm', medical: 'Medical', home_services: 'Home services' };
 const fmtMoney = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US'));
@@ -166,7 +167,7 @@ export default function Pipeline() {
                 <th onClick={() => toggleSort('company_name')}>Company</th>
                 <th onClick={() => toggleSort('vertical')} className="hide-m">Vertical</th>
                 <th onClick={() => toggleSort('tier')}>Tier</th>
-                <th onClick={() => toggleSort('ai_maturity_score')} className="hide-m">Maturity</th>
+                <th className="hide-m">Best fit</th>
                 <th onClick={() => toggleSort('intent_score')}>Intent</th>
                 <th onClick={() => toggleSort('status')}>Status</th>
                 <th>Actions</th>
@@ -224,6 +225,20 @@ export default function Pipeline() {
 
 function Row({ p, expanded, onExpand, checked, onCheck, onApprove, onThread }) {
   const sig = p.signals || {};
+  const rec = useMemo(() => recommendWorkflow(p), [p]);
+  const script = useMemo(() => buildScript(p, rec), [p, rec]);
+  const [copied, setCopied] = useState(false);
+
+  async function copyScript() {
+    try {
+      await navigator.clipboard.writeText(scriptToText(p, rec, script));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
     <>
       <tr>
@@ -238,15 +253,23 @@ function Row({ p, expanded, onExpand, checked, onCheck, onApprove, onThread }) {
         <td>
           <b>{p.company_name}</b>
           <div className="muted">
-            {p.domain} · {p.contact_name || 'no contact'}{p.contact_title ? ` (${p.contact_title})` : ''}
-            {p.contact_phone ? ` · ${p.contact_phone}` : ''}
-            {p.contact_email ? ` · ${p.contact_email}` : ' · no email yet'}
+            <a href={p.website_url || `https://${p.domain}`} target="_blank" rel="noreferrer">{p.domain}</a>
+            {p.contact_name ? ` · ${p.contact_name}` : ''}{p.contact_title ? ` (${p.contact_title})` : ''}
+            {p.contact_phone ? <> · <a href={`tel:${p.contact_phone.replace(/[^\d+]/g, '')}`}>{p.contact_phone}</a></> : ''}
+            {p.contact_email
+              ? <> · <a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></>
+              : ' · no email yet'}
           </div>
         </td>
         <td className="hide-m">{VERTICALS[p.vertical] || p.vertical}</td>
-        <td><span className={'pill t' + p.tier}>T{p.tier}</span></td>
-        <td className="hide-m num">{p.ai_maturity_score}</td>
-        <td className="num"><b>{p.intent_score}</b></td>
+        <td>
+          {p.tier ? <span className={'pill t' + p.tier}>T{p.tier}</span> : <span className="pill t3" title="Site blocked our scan">?</span>}
+        </td>
+        <td className="hide-m">
+          <span className="fit" title={rec.why}>{WORKFLOWS[rec.key].name}</span>
+          <div className="muted">{rec.confidence} confidence</div>
+        </td>
+        <td className="num"><b>{p.intent_score ?? '—'}</b></td>
         <td><span className={'pill status-' + p.status}>{p.status}</span></td>
         <td style={{ whiteSpace: 'nowrap' }}>
           <button className="rowbtn" onClick={onExpand}>{expanded ? 'Hide' : 'Signals'}</button>
@@ -259,6 +282,38 @@ function Row({ p, expanded, onExpand, checked, onCheck, onApprove, onThread }) {
       {expanded && (
         <tr className="expand">
           <td colSpan={8}>
+            <div className="fitbox">
+              <div className="fitbox-head">
+                <div>
+                  <span className="k">Best fit</span>
+                  <div className="fitname">{WORKFLOWS[rec.key].name} <span className="fittag">{WORKFLOWS[rec.key].tag}</span></div>
+                </div>
+                <button className="rowbtn primary" onClick={copyScript}>
+                  {copied ? 'Copied ✓' : 'Copy call script'}
+                </button>
+              </div>
+              <p className="fitwhy">{rec.why}</p>
+              <p className="muted">{WORKFLOWS[rec.key].blurb}</p>
+              {rec.secondary && (
+                <p className="muted">Second option: <b>{WORKFLOWS[rec.secondary].name}</b></p>
+              )}
+
+              <div className="script">
+                <div className="sline"><span>OPEN</span><p>{script.opener}</p></div>
+                <div className="sline"><span>ASK</span><p><b>{script.question}</b></p></div>
+                <div className="sline"><span>STAKES</span><p>{script.stakes}</p></div>
+                <div className="sline"><span>MATH</span><p>{script.math}</p></div>
+                <div className="sline"><span>OFFER</span><p>{script.solution}</p></div>
+                <div className="sline"><span>CLOSE</span><p>{script.close}</p></div>
+                <details className="objections">
+                  <summary>Objection handling</summary>
+                  {script.objections.map((o, i) => (
+                    <p key={i}><b>{o.q}</b><br />{o.a}</p>
+                  ))}
+                </details>
+              </div>
+            </div>
+
             <div className="signal-grid">
               <div><div className="k">Detected tools</div>{p.tech_stack?.length ? p.tech_stack.join(', ') : 'None — that is the pitch'}</div>
               <div><div className="k">Running ads</div>{sig.detected?.ads ? sig.detected.ads.join(', ') : 'No'}</div>

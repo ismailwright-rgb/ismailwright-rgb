@@ -73,6 +73,22 @@ td.num { font-variant-numeric: tabular-nums; }
 .rowbtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .rowbtn + .rowbtn { margin-left: 6px; }
 
+.fit { font-weight: 600; font-size: 13px; }
+.fitbox { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+.fitbox-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.fitbox .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--sub); }
+.fitname { font-size: 17px; font-weight: 700; margin-top: 2px; }
+.fittag { font-size: 11px; font-weight: 600; color: var(--accent); background: #eef1ff; padding: 2px 8px; border-radius: 999px; vertical-align: 2px; }
+.fitwhy { margin: 10px 0 4px; font-size: 14px; }
+.script { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.sline { display: grid; grid-template-columns: 66px 1fr; gap: 10px; margin-bottom: 9px; align-items: start; }
+.sline span { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; color: var(--sub); padding-top: 3px; }
+.sline p { font-size: 14px; }
+.objections { margin-top: 8px; }
+.objections summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent); }
+.objections p { font-size: 13.5px; color: var(--sub); margin: 10px 0 0 4px; }
+.objections b { color: var(--ink); }
+
 .expand { background: #fafbfc; }
 .expand td { padding: 14px 16px; }
 .signal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; font-size: 13px; }
