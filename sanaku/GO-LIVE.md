@@ -7,7 +7,7 @@ Four steps. Do them in order. ~15 minutes total.
 ## ☐ 1. Update the database (5 min)
 
 1. Open your Supabase project → **SQL Editor** → **New query**
-2. Open [`supabase/RUN-THIS-NOW.sql`](supabase/RUN-THIS-NOW.sql) on GitHub → click the **copy** icon
+2. Open [`supabase/RUN-THIS-NOW.sql`](https://github.com/ismailwright-rgb/ismailwright-rgb/blob/claude/n8n-prospect-tiering-hgkjb0/sanaku/supabase/RUN-THIS-NOW.sql) on GitHub → click the **copy** icon
 3. Paste into the SQL editor → **Run**
 4. At the bottom of the output you'll see two check queries. You want:
    - `table_without_rls` → **zero rows**
@@ -85,7 +85,7 @@ lowest-priced yes.
 
 1. **Clients → Onboard client** — pricing rules for their vertical are enforced
    for you, defaults pre-filled ($500 setup / $750 monthly / $50 per lead)
-2. Send them [`docs/pilot-agreement.md`](docs/pilot-agreement.md) with the
+2. Send them [`docs/pilot-agreement.md`](https://github.com/ismailwright-rgb/ismailwright-rgb/blob/claude/n8n-prospect-tiering-hgkjb0/sanaku/docs/pilot-agreement.md) with the
    brackets filled in
 3. Deploying their missed-call text-back needs a Twilio account and a number for
    them (~$1/mo, plus A2P 10DLC registration — **start that the day they sign,
