@@ -1,119 +1,103 @@
-# Moving Sanaku onto its own email
+# Sanaku correspondence → the Sanaku account
 
-`sanakuuai@gmail.com` — not your personal address.
+Business mail about Sanaku lands in `sanakuuai@gmail.com`. Demos booked land on
+that account's calendar. Nothing here costs money.
 
-There are five places your address is wired in. Two of them are one command
-each; three need a few clicks. Do them in this order.
+It comes down to **which Google account n8n is connected to**, plus one stored
+setting. Three things, in order.
 
 ---
 
-## 1. Alerts and digests → the Sanaku inbox
+## 1. Alerts → the Sanaku inbox
 
-Every workflow that notifies you (new Tier 1 prospects, a prospect replying, a
-demo booked, a missed call handled) sends to one address, stored once.
+Every workflow that notifies you — a new Tier 1 prospect, a prospect replying,
+a demo booked, a missed call handled — sends to one stored address.
 
 ```sh
 sh ~/sanaku.sh set OWNER_EMAIL sanakuuai@gmail.com
 sh ~/sanaku.sh scrape
 ```
 
-The second command matters. The address is baked into the workflow when it is
-imported into n8n, so changing the stored value alone changes nothing until
-the workflow is re-imported — which `scrape` does (it replaces the existing
-workflow, it does not create a duplicate).
+Both lines. The address is substituted into the workflow when it is imported
+into n8n, so the first command changes nothing until the workflow is
+re-imported — which `scrape` does. It replaces the existing workflow rather
+than creating a duplicate.
 
-Verify with `sh ~/sanaku.sh doctor` — `OWNER_EMAIL` should read the new address.
+Confirm with `sh ~/sanaku.sh doctor`.
 
 ---
 
-## 2. Outbound mail → sent *from* Sanaku
+## 2. Mail sent and received → the Sanaku inbox
 
-Cold outreach, follow-ups and demo confirmations go out through a Gmail
-credential in n8n. Right now that credential is whichever Google account you
-authorised during setup. If it is your personal one, every prospect sees your
-personal address.
+One Gmail credential in n8n decides both directions:
 
-1. Sign in to Gmail as **sanakuuai@gmail.com** in your browser
+- **Sent from** — cold outreach (W2), follow-ups, demo confirmations
+- **Read from** — W2b watches an inbox and classifies prospect replies
+
+If that credential is your personal account, prospects see your personal
+address and their replies get classified out of your personal mail.
+
+1. In your browser, sign in to Gmail as **sanakuuai@gmail.com** first. This is
+   the step people skip. n8n's consent screen uses whichever Google account
+   the browser is already signed into, and it is easy to click straight past.
 2. n8n → **Credentials** → **Add credential** → **Gmail OAuth2**
-3. Name it exactly `Sanaku Gmail` and complete the Google consent screen —
-   confirm the account shown is the Sanaku one, not your personal one
-4. Open each workflow with a Gmail node (W2 Outreach, W2b Reply Handler,
-   W3 Demo Booking) → click the node → switch **Credential to connect with**
-   to `Sanaku Gmail` → **Save**
+3. Name it `Sanaku Gmail`
+4. Complete the Google consent screen — **read the account shown on the
+   consent page and confirm it says sanakuuai@gmail.com** before approving
+5. Open each workflow with a Gmail node — **W2 Outreach**, **W2b Reply
+   Handler**, **W3 Demo Booking** — click the node, switch **Credential to
+   connect with** to `Sanaku Gmail`, **Save**
 
-W2b watches the inbox for replies, so this also decides *which inbox* replies
-are read from. Point it at the personal account and prospect replies will be
-classified out of your personal mail.
-
----
-
-## 3. Command center login
-
-Your dashboard login is a Supabase account, separate from anything above.
-
-1. Supabase → **Authentication** → **Users** → **Add user**
-2. Email `sanakuuai@gmail.com`, set a password, tick **Auto Confirm User**
-3. Supabase → **SQL Editor** → **New query** → paste
-   [`add-staff.sql`](../supabase/add-staff.sql) → **Run**
-
-This *adds* an operator login; it does not remove the existing one. Sign in as
-the Sanaku account, confirm the pipeline loads, and only then remove the
-personal account (Authentication → Users → ⋯ → Delete user) if you want to.
-
-Do not use this file to give a client access. Clients get a portal login from
-the **Invite** button on the client roster, which scopes them to their own
-data. Staff see everything.
+If you already made a Gmail credential under the personal account, leave it;
+just stop pointing nodes at it. Deleting it can break a workflow mid-run.
 
 ---
 
-## 4. Portal invites and password resets
+## 3. Booked demos → the Sanaku calendar
 
-When you invite a client contact, the email currently arrives from
-`noreply@mail.app.supabase.io`. For a business charging $500+/month that reads
-as a phishing attempt, and Supabase's built-in sender is rate-limited to a
-handful of messages an hour.
+W3 writes to `calendars/primary` — the primary calendar of whichever account
+holds the Google Calendar credential. There is no calendar ID to configure;
+connecting the right account *is* the configuration.
 
-Supabase → **Project Settings** → **Authentication** → **SMTP Settings** →
-**Enable Custom SMTP**:
+1. Still signed in as sanakuuai@gmail.com
+2. n8n → **Credentials** → **Add credential** → **Google Calendar OAuth2**
+3. Name it `Sanaku Calendar`, complete consent, confirm the account again
+4. Open **W3 Demo Booking** → set that credential on both **Get Busy Times**
+   and **Create GCal Event** → **Save**
 
-| Field | Value |
-|---|---|
-| Host | `smtp.gmail.com` |
-| Port | `465` |
-| Username | `sanakuuai@gmail.com` |
-| Password | a Google **App Password**, not the account password |
-| Sender email | `sanakuuai@gmail.com` |
-| Sender name | `Sanaku` |
+Both nodes, not one. `Get Busy Times` is what stops the booking page offering
+slots you are not free for — if it reads a different calendar from the one
+events are written to, the page will happily double-book you.
 
-App Password: Google Account → Security → 2-Step Verification (must be on
-first) → App passwords. Gmail rejects plain-password SMTP.
-
-Gmail caps sending at roughly 500/day, which is fine for invites and outreach
-at this volume. It is not fine for bulk sending, and it is not what you should
-be on once you have a domain — see below.
+Events are created with `sendUpdates=all`, so Google emails the invite to the
+prospect from the calendar owner. Connect as Sanaku and that invite comes from
+Sanaku too.
 
 ---
 
-## 5. Public-facing addresses
+## What you do *not* need
 
-Already set to `sanakuuai@gmail.com`:
-
-- the landing page footer and contact link (`site/index.html`)
-- the pilot agreement template (`docs/pilot-agreement.md`)
+- **A domain.** Everything above works on the free Gmail account. Revisit when
+  there is revenue — see below.
+- **Custom SMTP in Supabase.** Only affects client *portal* invite emails, and
+  you have no portal clients yet.
+- **Changing your dashboard login.** The command center login is a Supabase
+  account, unrelated to where mail arrives. Yours works. Leave it.
+  (If you ever do want a second operator login, `supabase/add-staff.sql` does
+  it — but it is not part of this.)
 
 ---
 
-## The thing worth doing next
+## Later, once there is revenue
 
-Every item above still ends in `@gmail.com`. A cold email from a Gmail address
-asking a law firm for a $2,000/month retainer gets deleted, and Gmail's own
-spam filtering treats gmail.com senders reaching cold inboxes far more harshly
-than a domain with SPF, DKIM and DMARC set up.
+Cold email from an `@gmail.com` address asking a law firm for a $2,000/month
+retainer is a real conversion problem, and Gmail filters gmail.com senders
+reaching cold inboxes harder than a domain with SPF, DKIM and DMARC.
 
-Buy `sanaku.ai` or `sanaku.co` (~$12–40/year), point Google Workspace at it
-(~$7/month), and this becomes `hello@sanaku.ai`. Then redo steps 1–4 with the
-new address — the same five places, the same commands. Nothing else changes.
+That argues for `sanaku.ai` + Google Workspace (~$12–40/yr + ~$7/mo) **before
+W2 starts sending cold outreach at volume** — domain reputation is built from
+the first message and a burned domain is not fixed by switching addresses.
 
-Do it before W2 starts sending cold outreach, not after. Domain reputation is
-built from the first message you send, and a burned domain cannot be fixed by
-switching addresses later.
+Until then: warm outreach, replies, and demo bookings on the Gmail account are
+completely fine. This is a real constraint to plan around, not a reason to
+stall. Gmail sends ~500/day, well past what you need to book the first client.
