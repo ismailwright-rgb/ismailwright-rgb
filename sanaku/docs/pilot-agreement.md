@@ -13,7 +13,7 @@ Replace everything in `[BRACKETS]`. Delete the sections that don't apply.
 
 ## SERVICE AGREEMENT
 
-**Between:** Sanaku ("we", "us") — [YOUR LEGAL NAME / ENTITY], [YOUR ADDRESS]
+**Between:** Sanaku ("we", "us") — [YOUR LEGAL NAME / ENTITY], [YOUR ADDRESS], sanakuuai@gmail.com
 **And:** [CLIENT BUSINESS NAME] ("you") — [CLIENT ADDRESS]
 **Date:** [DATE]
 
