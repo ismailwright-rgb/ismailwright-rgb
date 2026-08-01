@@ -39,7 +39,8 @@ echo "==> Installing dependencies (first time takes ~1 min)..."
 npm install --no-audit --no-fund --loglevel=error
 
 echo "==> Building with your Supabase config baked in..."
-VITE_SUPABASE_URL="$SUPABASE_URL" VITE_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" npm run build
+VITE_SUPABASE_URL="$SUPABASE_URL" VITE_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+  VITE_N8N_WEBHOOK_BASE="${N8N_URL:+$N8N_URL/webhook}" npm run build
 
 echo "==> Netlify login (a browser tab may open ONCE - click 'Authorize')..."
 npx -y netlify-cli@17 status >/dev/null 2>&1 || npx -y netlify-cli@17 login

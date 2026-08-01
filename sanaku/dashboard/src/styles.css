@@ -166,3 +166,8 @@ td.num { font-variant-numeric: tabular-nums; }
 .tl-meta { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--sub); margin-bottom: 3px; }
 .followups { border-left: 3px solid var(--amber); }
 .followups h3 { color: var(--amber); }
+
+/* ---- client portal ---- */
+.card.highlight { border-color: #aceebb; background: #f2fdf5; }
+.card.highlight p, .card.warn p { padding: 16px; font-size: 15px; }
+.card.warn { border-color: #f1e4a6; background: #fffbe8; }

@@ -266,11 +266,11 @@ cmd_scrape() {
 }
 
 cmd_dashboard() {
-  ensure_config SUPABASE_URL SUPABASE_ANON_KEY
+  ensure_config SUPABASE_URL SUPABASE_ANON_KEY N8N_URL
   need_cmd npm
   say "(If prompted by Netlify: 'Link to an existing project' -> sanaku-command-center)"
   _engine=$(fetch_engine deploy-dashboard.sh)
-  SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" sh "$_engine"
+  SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" N8N_URL="$N8N_URL" sh "$_engine"
 }
 
 cmd_site() {

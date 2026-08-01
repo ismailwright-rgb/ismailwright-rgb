@@ -38,6 +38,28 @@ export default function Clients() {
   }
   useEffect(() => { load(); }, []);
 
+  async function invitePortalUser(client) {
+    const email = window.prompt(
+      `Invite someone at ${client.company_name} to their portal.\n\nThey'll get an email with a link to set a password, and will see only their own leads, requests and statements.`,
+      ''
+    );
+    if (!email) return;
+    const base = import.meta.env.VITE_N8N_WEBHOOK_BASE;
+    if (!base) return alert('Set VITE_N8N_WEBHOOK_BASE (e.g. http://your-n8n:5678/webhook) and redeploy.');
+    const { data: { session } } = await supabase.auth.getSession();
+    try {
+      const r = await fetch(`${base}/invite-client-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email: email.trim(), client_id: client.id }),
+      });
+      const j = await r.json();
+      alert(j.ok ? `Invite sent to ${email}.` : `Failed: ${j.error || r.status}`);
+    } catch (e) {
+      alert('Could not reach the invite endpoint: ' + e.message);
+    }
+  }
+
   async function toggleKillSwitch(client) {
     const turningOff = client.workflow_enabled;
     const msg = turningOff
@@ -125,6 +147,7 @@ export default function Clients() {
                       >
                         {c.workflow_enabled ? 'Pause' : 'Enable'}
                       </button>
+                      <button className="rowbtn" onClick={() => invitePortalUser(c)}>Invite</button>
                     </td>
                   </tr>
                 );
