@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # ============================================================================
 # Import any Sanaku workflow into n8n, patched for THIS instance.
 #
@@ -21,7 +21,9 @@
 #
 # Called by:  sh ~/sanaku.sh import <name>
 # ============================================================================
-set -euo pipefail
+# POSIX sh, not bash: sanaku.sh invokes this with `sh`, which is dash on most
+# Linux images. `set -o pipefail` and `local` are bash-only and abort there.
+set -eu
 
 : "${N8N_URL:?Set N8N_URL}"
 : "${N8N_KEY:?Set N8N_KEY}"
@@ -40,16 +42,21 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 api() { # method path [json-body]
-  local method="$1" path="$2" body="${3:-}"
-  if [ -n "$body" ]; then
-    curl -fsS -X "$method" "$N8N_URL/api/v1$path" \
+  _method="$1"; _path="$2"; _body="${3:-}"
+  if [ -n "$_body" ]; then
+    curl -fsS -X "$_method" "$N8N_URL/api/v1$_path" \
       -H "X-N8N-API-KEY: $N8N_KEY" -H "Content-Type: application/json" \
-      --data-binary "$body"
+      --data-binary "$_body"
   else
-    curl -fsS -X "$method" "$N8N_URL/api/v1$path" -H "X-N8N-API-KEY: $N8N_KEY"
+    curl -fsS -X "$_method" "$N8N_URL/api/v1$_path" -H "X-N8N-API-KEY: $N8N_KEY"
   fi
 }
 jsonget() { python3 -c "import sys,json;d=json.load(sys.stdin);print(eval(sys.argv[1]))" "$1"; }
+
+# Printed so a stale cached copy is visible immediately, rather than being
+# diagnosed from an identical-looking traceback.
+BUILD="6"
+echo "import-workflow.sh build $BUILD"
 
 echo "==> Checking n8n API access..."
 api GET "/workflows?limit=1" > /dev/null
@@ -161,23 +168,32 @@ json.dump({
     "connections": wf["connections"],
     "settings": {"executionOrder": "v1", "timezone": "America/Los_Angeles"},
 }, open(f"{tmp}/patched.json", "w"))
-open(f"{tmp}/meta", "w").write(wf["name"] + "\n" + "\n".join(h for h in hooks if h))
+# Trailing newline matters: `while read` discards a final line without one,
+# which silently swallowed the webhook URL this script exists to tell you.
+open(f"{tmp}/meta", "w").write(
+    "".join(line + "\n" for line in [wf["name"]] + [h for h in hooks if h]))
 print("    patched")
 PY
 
 WF_NAME=$(head -1 "$TMP/meta")
 
-echo "==> Replacing any previous copy of \"$WF_NAME\"..."
-# Must be exported, not prefixed: a `VAR=x cmd | other` prefix applies only to
-# `cmd`, and it is `other` - the python3 on the far side of the pipe - that
-# reads it.
-export WF_NAME
-api GET "/workflows?limit=250" | python3 -c '
-import sys, json, os
-for w in json.load(sys.stdin).get("data", []):
-    if w.get("name") == os.environ["WF_NAME"]:
+cat > "$TMP/find.py" <<'PY'
+import json, sys
+listing, want = sys.argv[1], sys.argv[2]
+for w in json.load(open(listing)).get("data", []):
+    if w.get("name") == want:
         print(w["id"])
-' | while read -r wid; do
+PY
+
+echo "==> Replacing any previous copy of \"$WF_NAME\"..."
+# The name is passed as an ARGUMENT, not through the environment. An earlier
+# version piped n8n's response into `python3 -c` and read the name from an
+# env var, which is fragile in two ways at once: a `VAR=x cmd | other` prefix
+# applies to `cmd` and not to the `other` that reads it, and an env var that
+# is set-but-unexported vanishes at the process boundary. Argv has neither
+# failure mode. Writing the response to a file also drops the pipe entirely.
+api GET "/workflows?limit=250" > "$TMP/list.json"
+python3 "$TMP/find.py" "$TMP/list.json" "$WF_NAME" | while read -r wid; do
   [ -n "$wid" ] && api DELETE "/workflows/$wid" > /dev/null && echo "    deleted old copy $wid"
 done
 
