@@ -338,6 +338,69 @@ cmd_doctor() {
   printf '\n'
 }
 
+# Show what the last scraper run actually did, node by node.
+cmd_logs() {
+  ensure_config N8N_URL N8N_KEY
+  need_cmd python3
+  _wf=$(curl -fsS -m 20 -H "X-N8N-API-KEY: $N8N_KEY" "$N8N_URL/api/v1/workflows?limit=250" \
+    | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+for w in d.get("data", []):
+    if w.get("name") == "Sanaku - W1 Prospect Scraper & Scorer":
+        print(w["id"]); break
+')
+  if [ -z "$_wf" ]; then warn "W1 is not installed on this n8n - run: sh ~/sanaku.sh scrape"; return 0; fi
+
+  curl -fsS -m 30 -H "X-N8N-API-KEY: $N8N_KEY" \
+    "$N8N_URL/api/v1/executions?workflowId=$_wf&limit=1&includeData=true" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+runs = d.get("data") or []
+if not runs:
+    print("  no executions yet"); raise SystemExit
+e = runs[0]
+rd = (e.get("data") or {}).get("resultData") or {}
+err = rd.get("error") or {}
+print("\n\033[1mLast run\033[0m")
+print("  status:       %s" % e.get("status"))
+print("  started:      %s" % (e.get("startedAt") or "")[:19].replace("T", " "))
+print("  last node:    %s" % rd.get("lastNodeExecuted"))
+if err:
+    print("  ERROR at %s: %s" % ((err.get("node") or {}).get("name"), str(err.get("message"))[:160]))
+print("\n\033[1mWhat each step produced\033[0m")
+run = rd.get("runData") or {}
+order = ["Run Config", "Get Existing Prospects", "Build Vertical Queries", "Maps Search (SerpAPI)",
+         "Filter & Dedupe", "Collect Candidates", "Per Company", "Fetch Robots", "Check Robots",
+         "Robots OK?", "Fetch Website", "Detect & Score", "Keep Unfetchable Lead", "Collect Scored",
+         "Cap Reveals", "Build Upsert Rows", "Upsert Prospects"]
+seen = set()
+for name in order + [n for n in run if n not in order]:
+    if name not in run or name in seen:
+        continue
+    seen.add(name)
+    entries = run[name]
+    total = 0
+    errs = []
+    for r in entries:
+        for out in ((r.get("data") or {}).get("main") or []):
+            total += len(out or [])
+        if r.get("error"):
+            errs.append(str(r["error"].get("message"))[:90])
+    flag = ("  ERR: " + errs[0]) if errs else ""
+    print("  %-24s runs:%-4d items out:%-5d%s" % (name[:24], len(entries), total, flag))
+rows = run.get("Build Upsert Rows")
+if rows:
+    try:
+        payload = rows[0]["data"]["main"][0][0]["json"]
+        print("\n\033[1mRows the run tried to save\033[0m")
+        print("  %d rows | counts: %s" % (len(payload.get("rows") or []), json.dumps(payload.get("counts") or {})))
+    except Exception:
+        pass
+print()
+'
+}
+
 cmd_config() { # [KEY ...] - with names, re-ask only those; otherwise all
   if [ "$#" -gt 0 ]; then
     for _k in "$@"; do
@@ -433,6 +496,7 @@ sanaku - control script
 
   sh ~/sanaku.sh status      health check + prospect counts (start here)
   sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
+  sh ~/sanaku.sh logs        show what the last scraper run did, node by node
   sh ~/sanaku.sh scrape      run the prospect scraper now
   sh ~/sanaku.sh dashboard   deploy the internal command center
   sh ~/sanaku.sh site        deploy the public landing page
@@ -455,6 +519,7 @@ load_config
 case "${1:-}" in
   status)    cmd_status ;;
   doctor)    cmd_doctor ;;
+  logs)      cmd_logs ;;
   scrape)    cmd_scrape ;;
   dashboard) cmd_dashboard ;;
   site)      cmd_site ;;
