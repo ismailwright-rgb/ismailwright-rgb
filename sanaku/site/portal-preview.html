@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Client portal — sample</title>
+<style>
+  :root {
+    --ink: #14181d; --sub: #5f6873; --line: #e4e7eb; --bg: #f6f7f9;
+    --card: #fff; --accent: #0f62fe; --green: #17843b; --amber: #a15c00; --red: #b4231a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); font-size: 14px; }
+  button { font: inherit; cursor: pointer; }
+  .banner { background: var(--ink); color: #cfe0d5; padding: 9px 20px; font-size: 12.5px; text-align: center; }
+  .banner b { color: #fff; }
+  .topbar { display: flex; align-items: center; gap: 18px; padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
+  .topbar .brand { font-weight: 700; letter-spacing: .02em; }
+  .topbar nav { display: flex; gap: 4px; }
+  .topbar nav button { border: 0; background: none; padding: 8px 14px; border-radius: 8px; color: var(--sub); font-weight: 600; }
+  .topbar nav button.active { background: #eef1ff; color: var(--accent); }
+  .topbar .spacer { flex: 1; }
+  .topbar .signout { border: 1px solid var(--line); background: none; padding: 6px 12px; border-radius: 8px; color: var(--sub); }
+  .page { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .metric { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .metric .v { font-size: 24px; font-weight: 700; }
+  .metric .l { color: var(--sub); font-size: 12px; margin-top: 2px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
+  .card h3 { padding: 14px 16px 0; font-size: 15px; }
+  .card.highlight { border-color: #aceebb; background: #f2fdf5; }
+  .card.highlight p { padding: 16px; font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+  thead th { border-top: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--sub); white-space: nowrap; }
+  tbody tr:hover { background: #fafbfc; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .muted { color: var(--sub); font-size: 12px; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.yes { background: #e6f4ea; color: var(--green); }
+  .pill.no { background: #f0f1f3; color: var(--sub); }
+  .pill.open { background: #eef1ff; color: var(--accent); }
+  .pill.done { background: #17843b; color: #fff; }
+  .pill.prog { background: #fff4e0; color: var(--amber); }
+  .pill.paid { background: #17843b; color: #fff; }
+  .tabpane { display: none; }
+  .tabpane.on { display: block; }
+  label { display: block; font-size: 12px; font-weight: 700; margin: 14px 0 5px; }
+  textarea, select { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: #fff; }
+  .form { padding: 4px 18px 20px; }
+  .btn { background: var(--accent); color: #fff; border: 0; padding: 9px 16px; border-radius: 8px; font-weight: 600; margin-top: 14px; }
+  @media (max-width: 700px) { .hide-m { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <b>Sample portal.</b> This is what a Sanaku client sees when they log in — their own numbers, their own branding, nothing else.
+</div>
+
+<div class="topbar">
+  <span class="brand">Valley Plumbing &amp; Rooter</span>
+  <nav>
+    <button class="active" data-tab="overview">Overview</button>
+    <button data-tab="leads">Leads</button>
+    <button data-tab="requests">Requests</button>
+    <button data-tab="billing">Billing</button>
+  </nav>
+  <span class="spacer"></span>
+  <button class="signout">Sign out</button>
+</div>
+
+<div class="page">
+
+  <!-- OVERVIEW -->
+  <div class="tabpane on" id="overview">
+    <div class="metrics">
+      <div class="metric"><div class="v">31</div><div class="l">Leads captured this month</div></div>
+      <div class="metric"><div class="v">12</div><div class="l">…while you were closed</div></div>
+      <div class="metric"><div class="v">23</div><div class="l">Qualified</div></div>
+      <div class="metric"><div class="v">74%</div><div class="l">Qualified rate</div></div>
+      <div class="metric"><div class="v">+41%</div><div class="l">vs last month (22)</div></div>
+    </div>
+
+    <div class="card highlight">
+      <p><b>12 of your 31 leads this month came in while your office was closed.</b> Those are the ones that used to go to voicemail.</p>
+    </div>
+
+    <div class="card">
+      <h3>Latest leads</h3>
+      <table>
+        <thead><tr><th>When</th><th>Contact</th><th class="hide-m">How</th><th>Qualified</th></tr></thead>
+        <tbody>
+          <tr><td>Aug 1, 7:42 PM<div class="muted">after hours</div></td><td>Maria Delgado<div class="muted">(626) 555-0142</div></td><td class="hide-m">missed call</td><td><span class="pill yes">yes</span></td></tr>
+          <tr><td>Aug 1, 2:15 PM</td><td>Unknown<div class="muted">(626) 555-0198</div></td><td class="hide-m">missed call</td><td><span class="pill yes">yes</span></td></tr>
+          <tr><td>Jul 31, 9:03 PM<div class="muted">after hours</div></td><td>Ray Whitfield<div class="muted">(626) 555-0177</div></td><td class="hide-m">missed call</td><td><span class="pill yes">yes</span></td></tr>
+          <tr><td>Jul 31, 11:20 AM</td><td>Unknown<div class="muted">(626) 555-0110</div></td><td class="hide-m">missed call</td><td><span class="pill no">—</span></td></tr>
+          <tr><td>Jul 30, 6:58 AM<div class="muted">after hours</div></td><td>Tanya Brooks<div class="muted">(626) 555-0163</div></td><td class="hide-m">web form</td><td><span class="pill yes">yes</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LEADS -->
+  <div class="tabpane" id="leads">
+    <div class="card">
+      <h3>Every lead we've captured for you</h3>
+      <table>
+        <thead><tr><th>When</th><th>Contact</th><th class="hide-m">How</th><th>Qualified</th><th class="hide-m">Outcome</th></tr></thead>
+        <tbody>
+          <tr><td>Aug 1, 7:42 PM<div class="muted">after hours</div></td><td>Maria Delgado<div class="muted">(626) 555-0142</div></td><td class="hide-m">missed call</td><td><span class="pill yes">yes</span></td><td class="hide-m muted">booked</td></tr>
+          <tr><td>Aug 1, 2:15 PM</td><td>Unknown<div class="muted">(626) 555-0198</div></td><td class="hide-m">missed call</td><td><span class="pill yes">yes</span></td><td class="hide-m muted">booked</td></tr>
+          <tr><td>Jul 31, 9:03 PM<div class="muted">after hours</div></td><td>Ray Whitfield<div class="muted">(626) 555-0177</div></td><td class="hide-m">missed call</td><td><span class="pill yes">yes</span></td><td class="hide-m muted">converted</td></tr>
+          <tr><td>Jul 31, 11:20 AM</td><td>Unknown<div class="muted">(626) 555-0110</div></td><td class="hide-m">missed call</td><td><span class="pill no">—</span></td><td class="hide-m muted">no response</td></tr>
+          <tr><td>Jul 30, 6:58 AM<div class="muted">after hours</div></td><td>Tanya Brooks<div class="muted">(626) 555-0163</div></td><td class="hide-m">web form</td><td><span class="pill yes">yes</span></td><td class="hide-m muted">booked</td></tr>
+          <tr><td>Jul 29, 8:31 PM<div class="muted">after hours</div></td><td>Unknown<div class="muted">(626) 555-0155</div></td><td class="hide-m">missed call</td><td><span class="pill yes">yes</span></td><td class="hide-m muted">converted</td></tr>
+          <tr><td>Jul 29, 1:07 PM</td><td>Devon Marsh<div class="muted">(626) 555-0129</div></td><td class="hide-m">missed call</td><td><span class="pill yes">yes</span></td><td class="hide-m muted">booked</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- REQUESTS -->
+  <div class="tabpane" id="requests">
+    <div class="card">
+      <div class="form">
+        <h3 style="padding:14px 0 0;">Ask us for something</h3>
+        <label>What do you need?</label>
+        <textarea rows="3" placeholder="Change the wording of the text customers get, add a second number, send me a weekly summary…"></textarea>
+        <label>How urgent?</label>
+        <select><option>Whenever</option><option selected>Normal</option><option>Urgent — something is broken</option></select>
+        <button class="btn">Send request</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Your requests</h3>
+      <table>
+        <thead><tr><th>Request</th><th class="hide-m">Priority</th><th>Status</th><th class="hide-m">Sent</th></tr></thead>
+        <tbody>
+          <tr><td>Add my cell as a second escalation number for emergencies</td><td class="hide-m">urgent</td><td><span class="pill done">done</span></td><td class="hide-m muted">Jul 24</td></tr>
+          <tr><td>Change the text to say "Valley Plumbing" not "Valley Plumbing &amp; Rooter"</td><td class="hide-m">normal</td><td><span class="pill prog">in progress</span></td><td class="hide-m muted">Jul 30</td></tr>
+          <tr><td>Can we send a follow-up if they don't reply within an hour?</td><td class="hide-m">low</td><td><span class="pill open">open</span></td><td class="hide-m muted">Aug 1</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- BILLING -->
+  <div class="tabpane" id="billing">
+    <div class="card">
+      <h3>Statements</h3>
+      <table>
+        <thead><tr><th>Period</th><th>Leads</th><th>Total</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Jul 1 – Jul 31</td><td class="num">22</td><td class="num"><b>$1,350</b></td><td><span class="pill paid">paid</span></td></tr>
+          <tr><td>Jun 1 – Jun 30</td><td class="num">18</td><td class="num"><b>$1,200</b></td><td><span class="pill paid">paid</span></td></tr>
+          <tr><td>May 1 – May 31</td><td class="num">9</td><td class="num"><b>$750</b></td><td><span class="pill paid">paid</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  document.querySelectorAll('.topbar nav button').forEach((b) => {
+    b.onclick = () => {
+      document.querySelectorAll('.topbar nav button').forEach((x) => x.classList.remove('active'));
+      document.querySelectorAll('.tabpane').forEach((p) => p.classList.remove('on'));
+      b.classList.add('active');
+      document.getElementById(b.dataset.tab).classList.add('on');
+    };
+  });
+</script>
+</body>
+</html>
