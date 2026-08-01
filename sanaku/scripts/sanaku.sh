@@ -61,15 +61,23 @@ validate() { # validate KIND VALUE
     jwt)
       case "$_v" in
         eyJ*) ;;
-        *) printf 'should start with "eyJ" - if it looks like bullets or is cut short, your terminal mangled the paste; copy it again with the COPY BUTTON rather than selecting the text'; return ;;
+        *) printf 'should start with "eyJ" - copy it again with the COPY BUTTON rather than selecting the text'; return 0 ;;
       esac
+      # A JWT is base64url + dots ONLY. Some terminals silently replace pasted
+      # secrets with bullet characters - that passes a length check but is junk.
+      _bad=$(printf '%s' "$_v" | tr -d 'A-Za-z0-9_.-')
+      if [ -n "$_bad" ]; then
+        printf 'contains characters a JWT cannot have (your terminal replaced the paste with bullets or similar) - open the key in the dashboard and use its COPY BUTTON, or see the TextEdit method in the README'
+        return 0
+      fi
       _n=$(printf '%s' "$_v" | wc -c | tr -d ' ')
       [ "$_n" -lt 100 ] && printf 'looks truncated (%s chars, expected 200+) - copy it again with the copy button' "$_n"
       ;;
     key)
       _n=$(printf '%s' "$_v" | wc -c | tr -d ' ')
-      [ "$_n" -lt 20 ] && printf 'looks too short (%s chars)' "$_n"
-      case "$_v" in *' '*) printf 'contains a space' ;; esac
+      if [ "$_n" -lt 20 ]; then printf 'looks too short (%s chars)' "$_n"; return 0; fi
+      _bad=$(printf '%s' "$_v" | tr -d 'A-Za-z0-9_.:/-')
+      [ -n "$_bad" ] && printf 'contains unexpected characters - the paste may have been mangled by your terminal'
       ;;
     email)
       case "$_v" in
@@ -266,6 +274,70 @@ cmd_site() {
   sh "$_engine"
 }
 
+cmd_doctor() {
+  head1 "1. Stored values"
+  if [ ! -f "$CONFIG" ]; then
+    warn "no config yet - run: sh ~/sanaku.sh config"
+    return 0
+  fi
+  for _k in $KEYS; do
+    eval "_v=\${$_k:-}"
+    _n=$(printf '%s' "$_v" | wc -c | tr -d ' ')
+    if [ -z "$_v" ]; then
+      printf '  - %-22s (not set)\n' "$_k"
+      continue
+    fi
+    case "$_k" in
+      *KEY)
+        _bad=$(printf '%s' "$_v" | tr -d 'A-Za-z0-9_.:/-')
+        if [ -n "$_bad" ]; then
+          printf '  ! %-22s %s chars - MANGLED (terminal replaced the paste)\n' "$_k" "$_n"
+        else
+          printf '  . %-22s %s chars - characters look valid\n' "$_k" "$_n"
+        fi
+        ;;
+      *) printf '  . %-22s %s\n' "$_k" "$_v" ;;
+    esac
+  done
+
+  head1 "2. Can this machine reach the servers at all? (no keys used)"
+  _code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$N8N_URL/" 2>/dev/null) || true
+  [ -n "$_code" ] || _code=000
+  if [ "$_code" = "000" ]; then
+    warn "n8n: no response at all - the droplet or its n8n container is DOWN (or blocked by a firewall)"
+  else
+    ok "n8n: responded HTTP $_code - the server is up"
+  fi
+  _code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$SUPABASE_URL/rest/v1/" 2>/dev/null) || true
+  [ -n "$_code" ] || _code=000
+  if [ "$_code" = "000" ]; then
+    warn "supabase: no response - check your internet connection or the project URL"
+  else
+    ok "supabase: responded HTTP $_code (401 here is normal - no key was sent)"
+  fi
+
+  head1 "3. Do the keys work?"
+  _code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' -H "X-N8N-API-KEY: $N8N_KEY" "$N8N_URL/api/v1/workflows?limit=1" 2>/dev/null) || true
+  [ -n "$_code" ] || _code=000
+  case "$_code" in
+    200) ok  "n8n key: valid" ;;
+    401) warn "n8n key: REJECTED - mint a new one in n8n > Settings > n8n API, then: sh ~/sanaku.sh config" ;;
+    000) warn "n8n key: untestable while the server is unreachable (see step 2)" ;;
+    *)   warn "n8n key: unexpected HTTP $_code" ;;
+  esac
+  _code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' -H "apikey: $SUPABASE_SERVICE_KEY" \
+    -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" "$SUPABASE_URL/rest/v1/sanaku_prospects?select=id&limit=1" 2>/dev/null) || true
+  [ -n "$_code" ] || _code=000
+  case "$_code" in
+    200) ok  "supabase key: valid" ;;
+    401) warn "supabase key: REJECTED - re-copy the service_role key (Project Settings > API)" ;;
+    404) warn "supabase key: works, but table sanaku_prospects is missing - run supabase/schema.sql" ;;
+    000) warn "supabase key: untestable (see step 2)" ;;
+    *)   warn "supabase: unexpected HTTP $_code" ;;
+  esac
+  printf '\n'
+}
+
 cmd_config() {
   # Anything supplied via the environment is kept; the rest is re-asked.
   for _k in $KEYS; do
@@ -284,6 +356,7 @@ usage() {
 sanaku - control script
 
   sh ~/sanaku.sh status      health check + prospect counts (start here)
+  sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
   sh ~/sanaku.sh scrape      run the prospect scraper now
   sh ~/sanaku.sh dashboard   deploy the internal command center
   sh ~/sanaku.sh site        deploy the public landing page
@@ -300,6 +373,7 @@ need_cmd curl
 load_config
 case "${1:-}" in
   status)    cmd_status ;;
+  doctor)    cmd_doctor ;;
   scrape)    cmd_scrape ;;
   dashboard) cmd_dashboard ;;
   site)      cmd_site ;;
