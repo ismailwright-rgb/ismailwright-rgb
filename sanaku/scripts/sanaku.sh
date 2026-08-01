@@ -338,17 +338,65 @@ cmd_doctor() {
   printf '\n'
 }
 
-cmd_config() {
-  # Anything supplied via the environment is kept; the rest is re-asked.
-  for _k in $KEYS; do
-    eval "_ev=\${$_k:-}"
-    if [ -z "$_ev" ]; then eval "$_k=''"; fi
-  done
-  rm -f "$CONFIG"
-  # shellcheck disable=SC2086
-  ensure_config $KEYS
+cmd_config() { # [KEY ...] - with names, re-ask only those; otherwise all
+  if [ "$#" -gt 0 ]; then
+    for _k in "$@"; do
+      case " $KEYS " in
+        *" $_k "*) eval "$_k=''" ;;
+        *) say "Unknown key: $_k"; say "Valid: $KEYS"; exit 1 ;;
+      esac
+    done
+    # shellcheck disable=SC2086
+    ensure_config $KEYS
+  else
+    for _k in $KEYS; do
+      eval "_ev=\${$_k:-}"
+      if [ -z "$_ev" ]; then eval "$_k=''"; fi
+    done
+    rm -f "$CONFIG"
+    # shellcheck disable=SC2086
+    ensure_config $KEYS
+  fi
   say ""
   say "Done. Try:  sh ~/sanaku.sh status"
+}
+
+# Read a value straight from the system clipboard - bypasses the terminal's
+# paste handling entirely, which some terminals use to mask (and destroy) secrets.
+cmd_paste() { # cmd_paste KEYNAME
+  _target="${1:-}"
+  case " $KEYS " in
+    *" $_target "*) ;;
+    *) say "Usage: sh ~/sanaku.sh paste KEYNAME"; say "Valid: $KEYS"; exit 1 ;;
+  esac
+
+  if command -v pbpaste >/dev/null 2>&1; then _clip=$(pbpaste)
+  elif command -v xclip >/dev/null 2>&1; then _clip=$(xclip -o -selection clipboard)
+  elif command -v powershell.exe >/dev/null 2>&1; then _clip=$(powershell.exe -c Get-Clipboard | tr -d '\r')
+  else
+    say "No clipboard tool found (pbpaste/xclip). Use: sh ~/sanaku.sh config $_target"
+    exit 1
+  fi
+  _clip=$(printf '%s' "$_clip" | tr -d '\n\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+
+  case "$_target" in
+    *URL)   _kind=url ;;
+    *EMAIL) _kind=email ;;
+    SERPAPI_KEY) _kind=key ;;
+    *KEY)   _kind=jwt ;;
+    *)      _kind=key ;;
+  esac
+  _err=$(validate "$_kind" "$_clip")
+  if [ -n "$_err" ]; then
+    warn "clipboard content rejected: $_err"
+    exit 1
+  fi
+  eval "$_target=\$_clip"
+  # shellcheck disable=SC2086
+  ensure_config $KEYS   # fills anything else still missing
+  save_config
+  ok "$_target set from clipboard: $(preview "$_clip")"
+  say "Check it with:  sh ~/sanaku.sh doctor"
 }
 
 usage() {
@@ -360,7 +408,11 @@ sanaku - control script
   sh ~/sanaku.sh scrape      run the prospect scraper now
   sh ~/sanaku.sh dashboard   deploy the internal command center
   sh ~/sanaku.sh site        deploy the public landing page
-  sh ~/sanaku.sh config      re-enter stored keys
+  sh ~/sanaku.sh config      re-enter stored keys (add names to redo just those)
+  sh ~/sanaku.sh paste KEY   read one value straight from the system clipboard
+
+If your terminal mangles pasted secrets into bullets, copy the key in the
+dashboard and use:  sh ~/sanaku.sh paste N8N_KEY
 
 Keys are stored once in ~/.sanaku.env - no command needs secrets pasted in.
 In Docker: mount a volume (-v sanaku-home:/root) so that file and the
@@ -377,6 +429,7 @@ case "${1:-}" in
   scrape)    cmd_scrape ;;
   dashboard) cmd_dashboard ;;
   site)      cmd_site ;;
-  config)    cmd_config ;;
+  config)    shift; cmd_config "$@" ;;
+  paste)     shift; cmd_paste "$@" ;;
   *)         usage ;;
 esac
