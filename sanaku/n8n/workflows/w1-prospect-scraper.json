@@ -11,13 +11,19 @@
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [40, 0]
+      "position": [
+        40,
+        0
+      ]
     },
     {
       "parameters": {
         "rule": {
           "interval": [
-            { "field": "cronExpression", "expression": "0 8 * * 1" }
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
           ]
         }
       },
@@ -25,7 +31,10 @@
       "name": "Weekly Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [120, 620]
+      "position": [
+        120,
+        620
+      ]
     },
     {
       "parameters": {},
@@ -33,7 +42,10 @@
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [120, 780]
+      "position": [
+        120,
+        780
+      ]
     },
     {
       "parameters": {
@@ -44,7 +56,10 @@
       "name": "Run Config",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [340, 700]
+      "position": [
+        340,
+        700
+      ]
     },
     {
       "parameters": {
@@ -55,18 +70,29 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Range", "value": "0-9999" }
+            {
+              "name": "Range",
+              "value": "0-9999"
+            }
           ]
         },
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f1000000-0000-4000-8000-000000000004",
       "name": "Get Existing Prospects",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [560, 700],
+      "position": [
+        560,
+        700
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -82,7 +108,10 @@
       "name": "Build Vertical Queries",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [780, 700]
+      "position": [
+        780,
+        700
+      ]
     },
     {
       "parameters": {
@@ -92,18 +121,30 @@
       "name": "Per Vertical",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [1000, 700]
+      "position": [
+        1000,
+        700
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "apollo-enabled",
               "leftValue": "={{ $json.useApollo === true }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -114,7 +155,10 @@
       "name": "Apollo Enabled?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1110, 800]
+      "position": [
+        1110,
+        800
+      ]
     },
     {
       "parameters": {
@@ -125,15 +169,23 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($('Per Vertical').first().json.apolloBody) }}",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f1000000-0000-4000-8000-000000000007",
       "name": "Apollo People Search",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1220, 800],
+      "position": [
+        1220,
+        800
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "apollo-header-auth", "name": "Apollo API Key (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "apollo-header-auth",
+          "name": "Apollo API Key (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -144,13 +196,18 @@
       "parameters": {
         "method": "GET",
         "url": "=https://serpapi.com/search.json?engine=google_maps&type=search&q={{ encodeURIComponent($('Per Vertical').first().json.serpQuery) }}&ll=%4034.1336,-117.9075,11z&api_key={{ $env.SERPAPI_KEY }}",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f1000000-0000-4000-8000-000000000008",
       "name": "Maps Search (SerpAPI)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 800],
+      "position": [
+        1440,
+        800
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
@@ -166,7 +223,10 @@
       "name": "Filter & Dedupe",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1660, 800]
+      "position": [
+        1660,
+        800
+      ]
     },
     {
       "parameters": {
@@ -177,21 +237,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'Apollo people search failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000), payload: { vertical: $('Per Vertical').first().json.vertical } }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f1000000-0000-4000-8000-000000000010",
       "name": "Log Apollo Error",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1220, 980],
+      "position": [
+        1220,
+        980
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -207,7 +278,10 @@
       "name": "Collect Candidates",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1220, 480]
+      "position": [
+        1220,
+        480
+      ]
     },
     {
       "parameters": {
@@ -217,7 +291,10 @@
       "name": "Per Company",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [1440, 480]
+      "position": [
+        1440,
+        480
+      ]
     },
     {
       "parameters": {
@@ -225,19 +302,29 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "User-Agent", "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" }
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            }
           ]
         },
         "options": {
           "timeout": 5000,
-          "response": { "response": { "responseFormat": "text" } }
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
         }
       },
       "id": "f1000000-0000-4000-8000-000000000013",
       "name": "Fetch Robots",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1660, 480],
+      "position": [
+        1660,
+        480
+      ],
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
     },
@@ -250,18 +337,30 @@
       "name": "Check Robots",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1880, 480]
+      "position": [
+        1880,
+        480
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "robots-ok",
               "leftValue": "={{ $json.robots_allowed === true }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -272,7 +371,10 @@
       "name": "Robots OK?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [2100, 480]
+      "position": [
+        2100,
+        480
+      ]
     },
     {
       "parameters": {
@@ -280,19 +382,30 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "User-Agent", "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" }
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            }
           ]
         },
         "options": {
           "timeout": 10000,
-          "response": { "response": { "fullResponse": true, "responseFormat": "text" } }
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "text"
+            }
+          }
         }
       },
       "id": "f1000000-0000-4000-8000-000000000016",
       "name": "Fetch Website",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2320, 400],
+      "position": [
+        2320,
+        400
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
@@ -307,21 +420,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'robots.txt disallows fetch', payload: { domain: $('Per Company').first().json.domain } }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f1000000-0000-4000-8000-000000000017",
       "name": "Log Robots Skip",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2320, 620],
+      "position": [
+        2320,
+        620
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -337,21 +461,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'website fetch failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000), payload: { domain: $('Per Company').first().json.domain } }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f1000000-0000-4000-8000-000000000018",
       "name": "Log Fetch Error",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2320, 220],
+      "position": [
+        2320,
+        220
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -367,7 +502,10 @@
       "name": "Detect & Score",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2540, 400]
+      "position": [
+        2540,
+        400
+      ]
     },
     {
       "parameters": {
@@ -378,7 +516,10 @@
       "name": "Politeness Wait",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [2760, 400],
+      "position": [
+        2760,
+        400
+      ],
       "webhookId": "f1000000-0000-4000-8000-000000000301"
     },
     {
@@ -390,7 +531,10 @@
       "name": "Collect Scored",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1660, 260]
+      "position": [
+        1660,
+        260
+      ]
     },
     {
       "parameters": {
@@ -401,7 +545,10 @@
       "name": "Cap Reveals",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1880, 260]
+      "position": [
+        1880,
+        260
+      ]
     },
     {
       "parameters": {
@@ -411,18 +558,30 @@
       "name": "Per Reveal",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [2100, 260]
+      "position": [
+        2100,
+        260
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "needs-reveal",
               "leftValue": "={{ $json.needsReveal === true }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -433,7 +592,10 @@
       "name": "Needs Reveal?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [2320, 40]
+      "position": [
+        2320,
+        40
+      ]
     },
     {
       "parameters": {
@@ -444,15 +606,23 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ id: $json.apollo_person_id, reveal_personal_emails: false }) }}",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f1000000-0000-4000-8000-000000000025",
       "name": "Apollo Enrich Person",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2540, 40],
+      "position": [
+        2540,
+        40
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "apollo-header-auth", "name": "Apollo API Key (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "apollo-header-auth",
+          "name": "Apollo API Key (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -469,7 +639,10 @@
       "name": "Attach Contact",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2760, 40]
+      "position": [
+        2760,
+        40
+      ]
     },
     {
       "parameters": {
@@ -480,7 +653,10 @@
       "name": "Build Upsert Rows",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2320, 260]
+      "position": [
+        2320,
+        260
+      ]
     },
     {
       "parameters": {
@@ -491,21 +667,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($('Build Upsert Rows').first().json.rows) }}",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f1000000-0000-4000-8000-000000000028",
       "name": "Upsert Prospects",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2540, 260],
+      "position": [
+        2540,
+        260
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -524,126 +711,421 @@
       "name": "Send Digest",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [2760, 260],
+      "position": [
+        2760,
+        260
+      ],
       "credentials": {
-        "gmailOAuth2": { "id": "gmail-oauth2", "name": "Gmail Account" }
+        "gmailOAuth2": {
+          "id": "gmail-oauth2",
+          "name": "Gmail Account"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The site refused our fetch (403 Cloudflare challenge, 404, timeout...).\n// Keep the lead anyway using the Google Maps data - unscored, flagged for\n// manual review. Losing a callable business because its site blocks bots\n// would be the wrong trade.\nconst company = $('Per Company').first().json;\nreturn [{ json: {\n  ...company,\n  scored: true,\n  qualified: false,\n  fetch_failed: true,\n  ai_maturity_score: null,\n  intent_score: null,\n  tier: null,\n  tech_stack: [],\n  signals: {\n    fetch_failed: true,\n    rating: company.rating ?? null,\n    review_count: company.review_count ?? null,\n    reason: 'website blocked automated fetch - Google Maps data only; check the site by hand before calling'\n  },\n} }];"
+      },
+      "id": "f1000000-0000-4000-8000-000000000031",
+      "name": "Keep Unfetchable Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        180
+      ]
     }
   ],
   "connections": {
     "Weekly Trigger": {
-      "main": [ [ { "node": "Run Config", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Run Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Manual Trigger": {
-      "main": [ [ { "node": "Run Config", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Run Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Run Config": {
-      "main": [ [ { "node": "Get Existing Prospects", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Get Existing Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get Existing Prospects": {
-      "main": [ [ { "node": "Build Vertical Queries", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Build Vertical Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Vertical Queries": {
-      "main": [ [ { "node": "Per Vertical", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Vertical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Per Vertical": {
       "main": [
-        [ { "node": "Collect Candidates", "type": "main", "index": 0 } ],
-        [ { "node": "Apollo Enabled?", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Collect Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Apollo Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Apollo Enabled?": {
       "main": [
-        [ { "node": "Apollo People Search", "type": "main", "index": 0 } ],
-        [ { "node": "Maps Search (SerpAPI)", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Apollo People Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Maps Search (SerpAPI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Apollo People Search": {
       "main": [
-        [ { "node": "Maps Search (SerpAPI)", "type": "main", "index": 0 } ],
-        [ { "node": "Log Apollo Error", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Maps Search (SerpAPI)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Apollo Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Maps Search (SerpAPI)": {
-      "main": [ [ { "node": "Filter & Dedupe", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Filter & Dedupe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Filter & Dedupe": {
-      "main": [ [ { "node": "Per Vertical", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Vertical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Log Apollo Error": {
-      "main": [ [ { "node": "Maps Search (SerpAPI)", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Maps Search (SerpAPI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Collect Candidates": {
-      "main": [ [ { "node": "Per Company", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Per Company": {
       "main": [
-        [ { "node": "Collect Scored", "type": "main", "index": 0 } ],
-        [ { "node": "Fetch Robots", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Collect Scored",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Robots",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Fetch Robots": {
-      "main": [ [ { "node": "Check Robots", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Check Robots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Check Robots": {
-      "main": [ [ { "node": "Robots OK?", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Robots OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Robots OK?": {
       "main": [
-        [ { "node": "Fetch Website", "type": "main", "index": 0 } ],
-        [ { "node": "Log Robots Skip", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Fetch Website",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Robots Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Fetch Website": {
       "main": [
-        [ { "node": "Detect & Score", "type": "main", "index": 0 } ],
-        [ { "node": "Log Fetch Error", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Detect & Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Fetch Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Log Robots Skip": {
-      "main": [ [ { "node": "Per Company", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Log Fetch Error": {
-      "main": [ [ { "node": "Per Company", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Keep Unfetchable Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Detect & Score": {
-      "main": [ [ { "node": "Politeness Wait", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Politeness Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Politeness Wait": {
-      "main": [ [ { "node": "Per Company", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Collect Scored": {
-      "main": [ [ { "node": "Cap Reveals", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Cap Reveals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Cap Reveals": {
-      "main": [ [ { "node": "Per Reveal", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Reveal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Per Reveal": {
       "main": [
-        [ { "node": "Build Upsert Rows", "type": "main", "index": 0 } ],
-        [ { "node": "Needs Reveal?", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Build Upsert Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Needs Reveal?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Needs Reveal?": {
       "main": [
-        [ { "node": "Apollo Enrich Person", "type": "main", "index": 0 } ],
-        [ { "node": "Per Reveal", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Apollo Enrich Person",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Per Reveal",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Apollo Enrich Person": {
-      "main": [ [ { "node": "Attach Contact", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Attach Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Attach Contact": {
-      "main": [ [ { "node": "Per Reveal", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Reveal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Upsert Rows": {
-      "main": [ [ { "node": "Upsert Prospects", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Upsert Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Upsert Prospects": {
-      "main": [ [ { "node": "Send Digest", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Send Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Unfetchable Lead": {
+      "main": [
+        [
+          {
+            "node": "Per Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
