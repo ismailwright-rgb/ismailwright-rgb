@@ -81,10 +81,10 @@ export default function AddOns({ client }) {
                 <div><dt>Monthly</dt><dd>{money(a.monthly_fee)}</dd></div>
                 <div><dt>One-off setup</dt><dd>{money(a.setup_fee)}</dd></div>
                 {a.included_minutes != null && (
-                  <div><dt>Included</dt><dd>{a.included_minutes} min</dd></div>
+                  <div><dt>Included</dt><dd>{a.included_minutes} {a.unit_label || 'min'}</dd></div>
                 )}
                 {a.overage_per_minute != null && (
-                  <div><dt>After that</dt><dd>${a.overage_per_minute}/min</dd></div>
+                  <div><dt>After that</dt><dd>${a.overage_per_minute}<span className="per">/{(a.unit_label || 'min').replace(/s$/, '')}</span></dd></div>
                 )}
                 {a.per_lead_fee != null && (
                   <div><dt>Per qualified lead</dt><dd>{money(a.per_lead_fee)}</dd></div>
@@ -125,7 +125,7 @@ export default function AddOns({ client }) {
             <p className="muted">
               {money(open.monthly_fee)}/month
               {open.setup_fee > 0 && `, ${money(open.setup_fee)} one-off setup`}
-              {open.included_minutes != null && `, ${open.included_minutes} minutes included`}
+              {open.included_minutes != null && `, ${open.included_minutes} ${open.unit_label || 'min'} included`}
               {open.per_lead_fee != null && `, ${money(open.per_lead_fee)} per qualified lead`}.
               We'll confirm everything in writing before starting.
             </p>

@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sanaku — Your Lead Leak Audit</title>
+<meta name="description" content="What your missed leads are costing, what it takes to catch them, and what that is worth.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #faf8f3;
+    --paper-2: #f2eee5;
+    --ink: #172a23;
+    --ink-soft: #51625b;
+    --line: #e2ddd1;
+    --green: #0d6b42;
+    --green-deep: #0a5434;
+    --gold: #b98a2f;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Instrument Sans", -apple-system, sans-serif;
+    background: var(--paper); color: var(--ink);
+    font-size: 16px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, .serif { font-family: "Fraunces", Georgia, serif; font-weight: 500; letter-spacing: -0.01em; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 26px; }
+  .rule { height: 1px; background: var(--line); border: 0; }
+
+  /* ---------------------------------------------------------------- head -- */
+  .topline {
+    display: flex; align-items: center; gap: 14px;
+    padding: 22px 0 0;
+  }
+  .wordmark { font-family: "Fraunces", serif; font-weight: 600; font-size: 20px; letter-spacing: 0.22em; }
+  .tagline { font-size: 13px; color: var(--ink-soft); letter-spacing: .01em; }
+  .printbtn {
+    margin-left: auto; border: 1.5px solid var(--ink); background: transparent;
+    color: var(--ink); border-radius: 999px; padding: 7px 16px; font-size: 13.5px;
+    font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  .printbtn:hover { background: var(--ink); color: var(--paper); }
+
+  header.hero { padding: 46px 0 40px; }
+  header.hero h1 { font-size: clamp(38px, 6vw, 60px); line-height: 1.03; }
+  header.hero p { font-size: 19px; color: var(--ink-soft); max-width: 640px; margin-top: 20px; }
+
+  /* -------------------------------------------------------------- labels -- */
+  .eyebrow {
+    font-size: 11.5px; font-weight: 600; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--gold); margin-bottom: 10px;
+  }
+  section { padding: 48px 0; border-top: 1px solid var(--line); }
+  section > .wrap > h2 { font-size: clamp(26px, 3.4vw, 34px); }
+  .sub { color: var(--ink-soft); max-width: 640px; margin-top: 10px; }
+
+  /* --------------------------------------------------------------- table -- */
+  table { width: 100%; border-collapse: collapse; margin-top: 26px; }
+  th, td { text-align: left; padding: 13px 14px; border-bottom: 1px solid var(--line); }
+  th {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--ink-soft); font-weight: 600; border-bottom: 1.5px solid var(--ink);
+  }
+  td { font-size: 15.5px; }
+  td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.loss { font-family: "Fraunces", serif; font-size: 17px; color: var(--green); font-weight: 600; }
+  .footnote { font-size: 14px; color: var(--ink-soft); margin-top: 18px; font-style: italic; }
+
+  /* ---------------------------------------------------------- calculator -- */
+  #calc { background: var(--ink); color: #eef3ef; border-top: 0; }
+  #calc .eyebrow { color: var(--gold); }
+  #calc h2 { color: #fff; }
+  #calc .sub { color: #b8c8c0; }
+  .calcgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; margin-top: 32px; }
+  @media (max-width: 780px) { .calcgrid { grid-template-columns: 1fr; gap: 26px; } }
+
+  .field { margin-bottom: 20px; }
+  .field label {
+    display: block; font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: .12em; color: #9fb3aa; font-weight: 600; margin-bottom: 7px;
+  }
+  .field .val { font-family: "Fraunces", serif; font-size: 23px; color: #fff; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: #3fbf85; height: 22px; }
+  select {
+    width: 100%; padding: 10px 12px; border-radius: 9px; font: inherit;
+    font-size: 15px; background: #223a31; color: #fff; border: 1px solid #2f4d41;
+  }
+
+  .readout { background: #12241d; border: 1px solid #2a463b; border-radius: var(--radius); padding: 26px; }
+  .readout .lead-out { font-size: 13.5px; color: #9fb3aa; letter-spacing: .04em; text-transform: uppercase; font-weight: 600; }
+  .bignum {
+    font-family: "Fraunces", serif; font-size: clamp(40px, 6vw, 58px);
+    line-height: 1.05; color: #fff; margin: 8px 0 2px; font-variant-numeric: tabular-nums;
+  }
+  .bignum.green { color: #4fd39a; }
+  .readout .caption { font-size: 14px; color: #9fb3aa; }
+  .splitline { height: 1px; background: #2a463b; margin: 22px 0; }
+
+  .scenarios { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px; }
+  .scen { background: #1a3129; border: 1px solid #2a463b; border-radius: 10px; padding: 13px 12px; }
+  .scen.mid { border-color: #3fbf85; background: #16352a; }
+  .scen h4 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #9fb3aa; font-family: inherit; font-weight: 600; }
+  .scen .amt { font-family: "Fraunces", serif; font-size: 21px; color: #fff; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .scen.mid .amt { color: #4fd39a; }
+
+  .mathrow { display: flex; justify-content: space-between; gap: 14px; font-size: 15px; padding: 7px 0; }
+  .mathrow span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mathrow.total { border-top: 1px solid #2a463b; margin-top: 8px; padding-top: 13px; font-weight: 600; }
+  .mathrow.total span:last-child { font-family: "Fraunces", serif; font-size: 21px; color: #4fd39a; }
+  .assume { font-size: 12.5px; color: #86998f; margin-top: 20px; line-height: 1.55; }
+
+  /* --------------------------------------------------------------- steps -- */
+  .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 30px; }
+  @media (max-width: 780px) { .steps { grid-template-columns: 1fr; } }
+  .step {
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 24px 24px 22px; break-inside: avoid;
+  }
+  .step .num {
+    font-family: "Fraunces", serif; font-size: 14px; color: var(--gold);
+    font-weight: 600; letter-spacing: .12em;
+  }
+  .step h3 { font-size: 21px; margin: 5px 0 10px; }
+  .step p { font-size: 15px; color: var(--ink-soft); }
+  .step .stat {
+    margin-top: 15px; padding: 12px 14px; background: var(--paper-2);
+    border-radius: 9px; font-size: 14px; border-left: 3px solid var(--green);
+  }
+  .step .price {
+    margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line);
+    font-size: 13.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums;
+  }
+  .step .price b { color: var(--ink); font-family: "Fraunces", serif; font-size: 16px; }
+
+  /* -------------------------------------------------------------- prices -- */
+  .bundle {
+    margin-top: 28px; background: var(--ink); color: #eef3ef;
+    border-radius: var(--radius); padding: 28px 30px; break-inside: avoid;
+  }
+  .bundle h3 { color: #fff; font-size: 24px; }
+  .bundle p { color: #b8c8c0; margin-top: 8px; font-size: 15.5px; }
+  .bundle .figure { font-family: "Fraunces", serif; font-size: 40px; color: #4fd39a; margin-top: 14px; font-variant-numeric: tabular-nums; }
+  .bundle .figure small { font-family: "Instrument Sans", sans-serif; font-size: 15px; color: #9fb3aa; font-weight: 400; }
+  .strike { color: #86998f; text-decoration: line-through; font-size: 15px; }
+
+  /* --------------------------------------------------------------- trust -- */
+  .trust { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 28px; }
+  @media (max-width: 780px) { .trust { grid-template-columns: 1fr; } }
+  .t {
+    border-left: 3px solid var(--line); padding: 4px 0 4px 16px; break-inside: avoid;
+  }
+  .t h4 { font-size: 17px; margin-bottom: 5px; }
+  .t p { font-size: 14.5px; color: var(--ink-soft); }
+
+  /* ----------------------------------------------------------------- cta -- */
+  #close { background: var(--ink); color: #eef3ef; text-align: center; border-top: 0; }
+  #close h2 { color: #fff; font-size: clamp(28px, 4vw, 40px); }
+  #close p { color: #b8c8c0; margin-top: 12px; }
+  .btn {
+    display: inline-block; margin-top: 24px; background: var(--green); color: #fff;
+    padding: 14px 30px; border-radius: 999px; font-weight: 600; text-decoration: none;
+    font-size: 16px;
+  }
+  .btn:hover { background: var(--green-deep); }
+  footer { padding: 26px 0 36px; text-align: center; font-size: 13px; color: var(--ink-soft); }
+  a { color: var(--green); }
+
+  /* --------------------------------------------------------------- print -- */
+  @media print {
+    @page { margin: 14mm; }
+    body { font-size: 11.5pt; background: #fff; }
+    .printbtn, .btn { display: none !important; }
+    section { padding: 22px 0; break-inside: auto; }
+    header.hero { padding: 24px 0 20px; }
+    header.hero h1 { font-size: 32pt; }
+    #calc, .bundle, #close { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .step, .scen, .t, .bundle, table { break-inside: avoid; }
+    h2, h3 { break-after: avoid; }
+    .wrap { max-width: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topline">
+    <span class="wordmark">SANAKU</span>
+    <span class="tagline">Lead-capture automation for local service businesses</span>
+    <button class="printbtn" onclick="window.print()">Save as PDF</button>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Every missed call<br>has a price tag.</h1>
+    <p>
+      You already pay for the phone to ring. Sanaku catches the leads that currently
+      walk away — under your brand, not ours.
+    </p>
+  </div>
+</header>
+
+<!-- ===================================================== THE LEAK (verbatim) -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">The Leak</div>
+    <h2>What one lost lead actually costs</h2>
+    <table>
+      <thead>
+        <tr><th>Industry</th><th>Leads / Mo</th><th>Value / Lead</th><th>Lost at 25%</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Dental / Medical</td><td class="n">45–65</td><td class="n">$800–$1,200</td><td class="n loss">$9,000–$19,500</td></tr>
+        <tr><td>Personal Injury Law</td><td class="n">80–120</td><td class="n">$3,500–$5,000</td><td class="n loss">$70,000–$150,000</td></tr>
+        <tr><td>HVAC / Home Services</td><td class="n">60–90</td><td class="n">$1,200–$2,000</td><td class="n loss">$18,000–$45,000</td></tr>
+      </tbody>
+    </table>
+    <p class="footnote">Even the low end of these numbers is larger than the annual cost of fixing the leak.</p>
+  </div>
+</section>
+
+<!-- ============================================================= CALCULATOR -->
+<section id="calc">
+  <div class="wrap">
+    <div class="eyebrow">Your Number</div>
+    <h2>Not the industry average. Yours.</h2>
+    <p class="sub">Move the four sliders to match your business. Everything below updates as you go.</p>
+
+    <div class="calcgrid">
+      <div>
+        <div class="field">
+          <label for="industry">Your business</label>
+          <select id="industry">
+            <option value="home">HVAC / Home Services</option>
+            <option value="dental">Dental / Medical</option>
+            <option value="law">Personal Injury Law</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="leads">Leads a month — calls, forms, everything</label>
+          <input type="range" id="leads" min="10" max="300" step="5" value="75">
+          <div class="val" id="leadsVal">75 leads</div>
+        </div>
+        <div class="field">
+          <label for="value">What one closed customer is worth to you</label>
+          <input type="range" id="value" min="200" max="20000" step="100" value="1600">
+          <div class="val" id="valueVal">$1,600</div>
+        </div>
+        <div class="field">
+          <label for="miss">Share that never gets a real response</label>
+          <input type="range" id="miss" min="5" max="50" step="1" value="25">
+          <div class="val" id="missVal">25%</div>
+        </div>
+        <div class="field">
+          <label for="close">Your close rate on leads you <em>do</em> reach</label>
+          <input type="range" id="close" min="5" max="80" step="1" value="35">
+          <div class="val" id="closeVal">35%</div>
+        </div>
+        <div class="field">
+          <label for="pkg">What you switch on</label>
+          <select id="pkg">
+            <option value="missed">Missed-Call Text-Back only</option>
+            <option value="complete" selected>Complete Lead Recovery (all four)</option>
+            <option value="voice">Complete Recovery + AI Phone Agent</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <div class="readout">
+          <div class="lead-out">Walking out the door</div>
+          <div class="bignum" id="lossYear">$0</div>
+          <div class="caption"><span id="lossMonth">$0</span> a month · <span id="slipped">0</span> leads slipping past you every month</div>
+
+          <div class="splitline"></div>
+
+          <div class="lead-out">What catching them is worth</div>
+          <div class="scenarios">
+            <div class="scen"><h4>Cautious</h4><div class="amt" id="sc1">$0</div></div>
+            <div class="scen mid"><h4>Likely</h4><div class="amt" id="sc2">$0</div></div>
+            <div class="scen"><h4>Strong</h4><div class="amt" id="sc3">$0</div></div>
+          </div>
+          <div class="caption" style="margin-top:10px">Recovered revenue in year one, if 25% / 40% / 55% of slipped leads get caught.</div>
+
+          <div class="splitline"></div>
+
+          <div class="lead-out" style="margin-bottom:10px">Year one, at the likely case</div>
+          <div class="mathrow"><span>Revenue recovered</span><span id="mRec">$0</span></div>
+          <div class="mathrow"><span>One-off setup</span><span id="mSetup">–$0</span></div>
+          <div class="mathrow"><span id="mMonthlyLabel">12 months of service</span><span id="mMonthly">–$0</span></div>
+          <div class="mathrow total"><span>Net gain, year one</span><span id="mNet">$0</span></div>
+          <div class="caption" style="margin-top:14px">
+            Pays for itself in <b id="payback" style="color:#4fd39a">—</b> · every $1 spent returns <b id="multiple" style="color:#4fd39a">—</b>
+          </div>
+        </div>
+
+        <p class="assume">
+          The maths: leads × the share you miss × your own close rate × what a customer
+          is worth. No industry averages doing the heavy lifting, and recovered leads are
+          assumed to close at the same rate as the ones you already reach — not better.
+          These are your numbers, so they are only as good as the four you entered.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================ HOW THE CATCH WORKS (verbatim) -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">How The Catch Works</div>
+    <h2>Four workflows that stop the bleed</h2>
+    <div class="steps">
+
+      <div class="step">
+        <div class="num">01</div>
+        <h3>Missed-Call Text-Back</h3>
+        <p>
+          A call goes unanswered → within seconds the caller gets a text from your number:
+          “Sorry we missed you — what do you need help with?” The reply is captured,
+          qualified, and you're alerted.
+        </p>
+        <div class="stat">A plumber missing 6 calls a week who recovers just 2 jobs has already paid for the entire service.</div>
+        <div class="price"><b id="p1">$250</b>/mo · <span id="p1s">$500</span> setup</div>
+      </div>
+
+      <div class="step">
+        <div class="num">02</div>
+        <h3>After-Hours Intake</h3>
+        <p>
+          When the office is closed, a smart form or chat asks the three questions that
+          qualify the lead, then books the appointment or escalates urgent work to your
+          on-call phone.
+        </p>
+        <div class="stat">Typically 30–45% of captured leads arrive when the office is closed.</div>
+        <div class="price"><b id="p2">$200</b>/mo · <span id="p2s">$400</span> setup</div>
+      </div>
+
+      <div class="step">
+        <div class="num">03</div>
+        <h3>Lead Nurture Sequences</h3>
+        <p>
+          Five-touch follow-up for everyone who inquired and went quiet. Most businesses
+          follow up once and stop. The sale usually happens on touch three or four.
+        </p>
+        <div class="stat">Re-engages the 60%+ of inquiries that never got a second touch.</div>
+        <div class="price"><b id="p3">$225</b>/mo · <span id="p3s">$500</span> setup</div>
+      </div>
+
+      <div class="step">
+        <div class="num">04</div>
+        <h3>Appointment Reminders &amp; No-Show Recovery</h3>
+        <p>
+          Confirmations at booking, reminders at 24h and 1h, plus an automatic “life
+          happens — want to rebook?” message the morning after a no-show.
+        </p>
+        <div class="stat">Cutting no-shows from 20% to 10% at a dental practice recovers thousands per month.</div>
+        <div class="price"><b id="p4">$175</b>/mo · <span id="p4s">$350</span> setup</div>
+      </div>
+
+    </div>
+
+    <div class="bundle">
+      <h3>Complete Lead Recovery</h3>
+      <p>All four, set up together and working as one system rather than four bolt-ons.</p>
+      <div class="figure"><span id="bMonthly">$650</span><small>/month · <span id="bSetup">$1,200</span> setup</small></div>
+      <p style="margin-top:10px;font-size:14px">
+        Separately: <span class="strike" id="bSep">$850/month, $1,750 setup</span> — the four
+        overlap heavily in setup, so buying them together costs less to build and less to run.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ VOICE AGENTS -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">When Texting Isn't Enough</div>
+    <h2>Add a voice that actually answers</h2>
+    <p class="sub">
+      A text catches the lead. Some callers want a conversation right now — and a caller
+      who has to wait until Monday usually calls the next name on the list instead.
+    </p>
+    <div class="steps">
+
+      <div class="step">
+        <div class="num">05</div>
+        <h3 id="v1title">AI Phone Agent</h3>
+        <p id="v1body">
+          Picks up on the second ring, 24/7. Asks what the job is, where they are, and when
+          they need someone. Books straight into your calendar and texts you a summary.
+        </p>
+        <div class="stat">Answers every call, at 2am, on a bank holiday, while you're under a sink.</div>
+        <div class="price"><b id="v1p">$350</b>/mo · <span id="v1s">$750</span> setup · 400 minutes included</div>
+      </div>
+
+      <div class="step">
+        <div class="num">06</div>
+        <h3>Instant Lead Callback</h3>
+        <p>
+          A web enquiry comes in and the agent rings them back within 60 seconds, while
+          they're still on your site, confirms the work and books it.
+        </p>
+        <div class="stat">The first business to call back usually wins the job. It is rarely the one that calls back tomorrow.</div>
+        <div class="price"><b id="v2p">$250</b>/mo · <span id="v2s">$500</span> setup · 300 minutes included</div>
+      </div>
+
+      <div class="step">
+        <div class="num">07</div>
+        <h3>After-Hours Answering</h3>
+        <p>
+          The same phone agent, running only outside your opening hours — which is when
+          most of the calls you lose actually arrive.
+        </p>
+        <div class="stat">The cheapest way in. Same agent, a third of the price.</div>
+        <div class="price"><b>$175</b>/mo · $350 setup · 150 minutes included</div>
+      </div>
+
+      <div class="step">
+        <div class="num">08</div>
+        <h3>Spanish-Speaking Agent</h3>
+        <p>
+          The agent detects the caller's language and switches. Added to any voice service
+          above.
+        </p>
+        <div class="stat">In this part of California, this is not a nice-to-have.</div>
+        <div class="price"><b>$100</b>/mo · $250 setup</div>
+      </div>
+
+    </div>
+    <p class="footnote" id="voicefoot">
+      Minutes beyond the included allowance run $0.60 each. We do not sell unlimited —
+      it always ends in a renegotiation, and we would rather quote you a number that holds.
+    </p>
+  </div>
+</section>
+
+<!-- =================================================================== TRUST -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">The Fine Print, Up Front</div>
+    <h2>What we won't do</h2>
+    <div class="trust">
+      <div class="t">
+        <h4>No cold robocalls. Ever.</h4>
+        <p>
+          Automated voices only ever call people who just contacted you, about the thing
+          they contacted you about. Cold AI calling carries $500–$1,500 per call in
+          penalties, and it is your number on the caller ID, not ours.
+        </p>
+      </div>
+      <div class="t">
+        <h4>Everyone knows what they're talking to.</h4>
+        <p>
+          The agent says it is automated and that the call is recorded, before it asks
+          anything. California is a two-party consent state and we treat that as the floor,
+          not the ceiling.
+        </p>
+      </div>
+      <div class="t">
+        <h4>Stop means stop.</h4>
+        <p>
+          Every text honours an opt-out immediately and permanently. Anyone who replies to
+          a sequence drops out of it and comes straight to you — a human reply never gets
+          answered by a robot.
+        </p>
+      </div>
+      <div class="t">
+        <h4>It's your brand on everything.</h4>
+        <p>
+          Your number, your business name, your voice, your colours in the reporting portal
+          your team logs into. Nothing your customers see says Sanaku.
+        </p>
+      </div>
+      <div class="t">
+        <h4>Healthcare gets a BAA first.</h4>
+        <p>
+          If patients are involved, every vendor in the chain is covered by a signed
+          business associate agreement before a single call is answered. Messages carry
+          appointment details and nothing clinical.
+        </p>
+      </div>
+      <div class="t">
+        <h4>You can switch it off in one click.</h4>
+        <p>
+          There is a pause button in your portal. No notice period, no phone call to cancel,
+          no data held hostage. If it stops earning its keep, turn it off.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================================================== CLOSE (verbatim CTA) -->
+<section id="close">
+  <div class="wrap">
+    <h2>See your real number</h2>
+    <p>15-minute free leak audit. No pressure. Just clarity on what you're currently losing.</p>
+    <a class="btn" id="ctaMail" href="#">Book the audit</a>
+    <p style="margin-top:20px;font-size:14px"><a href="https://sanaku.netlify.app" style="color:#4fd39a">sanaku.netlify.app</a></p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">SANAKU · Under your brand. Not ours. · <a href="mailto:sanakuuai@gmail.com">sanakuuai@gmail.com</a></div>
+</footer>
+
+<script>
+  const EMAIL = "sanakuuai@gmail.com";
+
+  // Defaults are the midpoints of the ranges in the leak table above, so the
+  // calculator and the table never contradict each other on screen.
+  const INDUSTRY = {
+    home:   { leads: 75,  value: 1600, label: "HVAC / Home Services" },
+    dental: { leads: 55,  value: 1000, label: "Dental / Medical" },
+    law:    { leads: 100, value: 4250, label: "Personal Injury Law" },
+  };
+
+  // Catalog prices, mirroring migration-008 / migration-007.
+  const PRICE = {
+    home: {
+      parts:  { missed:[500,250], afterhours:[400,200], nurture:[500,225], reminders:[350,175] },
+      bundle: [1200, 650],
+      voice:  { agent:[750,350], callback:[500,250], overage: 0.60, title:"AI Phone Agent",
+                body:"Picks up on the second ring, 24/7. Asks what the job is, where they are, and when they need someone. Books straight into your calendar and texts you a summary." },
+    },
+    dental: {
+      parts:  { missed:[650,325], afterhours:[550,275], nurture:[500,250], reminders:[450,225] },
+      bundle: [1600, 850],
+      voice:  { agent:[1500,650], callback:null, overage: 0.75, title:"AI Front-Desk Agent",
+                body:"Handles overflow and after-hours calls: scheduling requests, directions, hours. Anything clinical routes to your staff rather than being answered, and emergencies are directed to call 911." },
+    },
+    law: {
+      parts:  { missed:[900,450], afterhours:[750,350], nurture:[900,400], reminders:[600,300] },
+      bundle: [2200, 1100],
+      voice:  { agent:[1500,650], callback:[1000,450], overage: 0.75, title:"AI Intake Agent",
+                body:"Collects name, contact, incident date and a short description, then flags conflict-of-interest keywords for your review. Never gives legal advice, never quotes fees." },
+    },
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const fmt  = (n) => "$" + Math.round(n).toLocaleString("en-US");
+  const fmtK = (n) => n >= 100000 ? "$" + Math.round(n / 1000) + "k" : fmt(n);
+
+  const els = {
+    industry: $("industry"), leads: $("leads"), value: $("value"),
+    miss: $("miss"), close: $("close"), pkg: $("pkg"),
+  };
+
+  function packageCost(ind) {
+    const p = PRICE[ind];
+    const mode = els.pkg.value;
+    if (mode === "missed")   return { setup: p.parts.missed[0], monthly: p.parts.missed[1] };
+    if (mode === "complete") return { setup: p.bundle[0],       monthly: p.bundle[1] };
+    return { setup: p.bundle[0] + p.voice.agent[0], monthly: p.bundle[1] + p.voice.agent[1] };
+  }
+
+  function paintPrices(ind) {
+    const p = PRICE[ind];
+    const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+    set("p1", fmt(p.parts.missed[1]));     set("p1s", fmt(p.parts.missed[0]));
+    set("p2", fmt(p.parts.afterhours[1])); set("p2s", fmt(p.parts.afterhours[0]));
+    set("p3", fmt(p.parts.nurture[1]));    set("p3s", fmt(p.parts.nurture[0]));
+    set("p4", fmt(p.parts.reminders[1]));  set("p4s", fmt(p.parts.reminders[0]));
+
+    const sepM = Object.values(p.parts).reduce((s, x) => s + x[1], 0);
+    const sepS = Object.values(p.parts).reduce((s, x) => s + x[0], 0);
+    set("bMonthly", fmt(p.bundle[1]));  set("bSetup", fmt(p.bundle[0]));
+    set("bSep", fmt(sepM) + "/month, " + fmt(sepS) + " setup");
+
+    set("v1title", p.voice.title);
+    set("v1body",  p.voice.body);
+    set("v1p", fmt(p.voice.agent[1]));  set("v1s", fmt(p.voice.agent[0]));
+
+    // Personal-injury and medical practices do not get an outbound callback
+    // product on this sheet — the one place the offer genuinely differs.
+    const cb = p.voice.callback;
+    set("v2p", cb ? fmt(cb[1]) : "—");
+    set("v2s", cb ? fmt(cb[0]) : "—");
+    $("voicefoot").textContent =
+      "Minutes beyond the included allowance run $" + p.voice.overage.toFixed(2) +
+      " each. We do not sell unlimited — it always ends in a renegotiation, and we would " +
+      "rather quote you a number that holds.";
+  }
+
+  function recalc() {
+    const ind   = els.industry.value;
+    const leads = +els.leads.value;
+    const value = +els.value.value;
+    const miss  = +els.miss.value  / 100;
+    const close = +els.close.value / 100;
+
+    els.leadsVal = $("leadsVal").textContent = leads + " leads";
+    $("valueVal").textContent = fmt(value);
+    $("missVal").textContent  = els.miss.value + "%";
+    $("closeVal").textContent = els.close.value + "%";
+
+    const slipped   = leads * miss;                 // leads/month never properly answered
+    const lostMonth = slipped * close * value;      // what those would have been worth
+    const lostYear  = lostMonth * 12;
+
+    $("slipped").textContent   = Math.round(slipped);
+    $("lossMonth").textContent = fmt(lostMonth);
+    $("lossYear").textContent  = fmtK(lostYear);
+
+    const rates = [0.25, 0.40, 0.55];
+    const rec   = rates.map((r) => lostYear * r);
+    $("sc1").textContent = fmtK(rec[0]);
+    $("sc2").textContent = fmtK(rec[1]);
+    $("sc3").textContent = fmtK(rec[2]);
+
+    const cost    = packageCost(ind);
+    const yearCost = cost.setup + cost.monthly * 12;
+    const net      = rec[1] - yearCost;
+
+    $("mRec").textContent     = fmt(rec[1]);
+    $("mSetup").textContent   = "–" + fmt(cost.setup);
+    $("mMonthly").textContent = "–" + fmt(cost.monthly * 12);
+    $("mMonthlyLabel").textContent = "12 months at " + fmt(cost.monthly) + "/mo";
+    $("mNet").textContent     = (net >= 0 ? "" : "–") + fmt(Math.abs(net));
+
+    // Payback: days until recovered revenue covers the whole first-year outlay.
+    const perDay = rec[1] / 365;
+    if (perDay > 0 && yearCost > 0) {
+      const days = yearCost / perDay;
+      $("payback").textContent =
+        days < 31 ? Math.max(1, Math.round(days)) + " days"
+        : days < 365 ? Math.round(days / 30.4) + " months"
+        : "longer than a year";
+      $("multiple").textContent = (rec[1] / yearCost).toFixed(1) + "×";
+    } else {
+      $("payback").textContent = "—";
+      $("multiple").textContent = "—";
+    }
+
+    wireMail(leads, value, lostMonth);
+  }
+
+  function wireMail(leads, value, lostMonth) {
+    const subject = encodeURIComponent("My leak number");
+    const body =
+      "Hi Ismail,%0D%0A%0D%0AI went through the audit sheet. My numbers:%0D%0A" +
+      "- Leads per month: " + leads + "%0D%0A" +
+      "- Value of one closed customer: " + fmt(value) + "%0D%0A" +
+      "- The sheet says I'm losing about " + fmt(lostMonth) + "/month%0D%0A%0D%0A" +
+      "My business: ___ (name + what you do)%0D%0A%0D%0ALet's book the 15 minutes.";
+    $("ctaMail").href = "mailto:" + EMAIL + "?subject=" + subject + "&body=" + body;
+  }
+
+  function switchIndustry() {
+    const d = INDUSTRY[els.industry.value];
+    els.leads.value = d.leads;
+    els.value.value = d.value;
+    paintPrices(els.industry.value);
+    recalc();
+  }
+
+  els.industry.addEventListener("change", switchIndustry);
+  ["leads", "value", "miss", "close"].forEach((k) => els[k].addEventListener("input", recalc));
+  els.pkg.addEventListener("change", recalc);
+
+  paintPrices(els.industry.value);
+  recalc();
+</script>
+</body>
+</html>

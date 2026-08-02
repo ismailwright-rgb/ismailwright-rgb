@@ -428,3 +428,4 @@ tbody tr:hover { background: var(--line-soft); }
   padding-left: 11px; border-left: 2px solid var(--line);
 }
 .addon .bp-btn { margin-top: auto; align-self: flex-start; }
+.addon-price dd .per { font-family: "Instrument Sans", sans-serif; font-size: 13px; font-weight: 500; color: var(--sub); }

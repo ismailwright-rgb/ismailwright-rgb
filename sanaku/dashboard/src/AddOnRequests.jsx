@@ -35,7 +35,7 @@ export default function AddOnRequests({ clients, onChanged }) {
         `Approve ${a.name || row.addon_code} for ${nameOf(row.client_id)}?\n\n` +
         `${money(a.monthly_fee)}/month` +
         (a.setup_fee ? ` plus ${money(a.setup_fee)} setup` : '') +
-        (a.included_minutes != null ? `, ${a.included_minutes} min included` : '') +
+        (a.included_minutes != null ? `, ${a.included_minutes} ${a.unit_label || 'min'} included` : '') +
         (a.per_lead_fee != null ? `, ${money(a.per_lead_fee)}/qualified lead` : '') +
         `\n\nThese terms get frozen onto their account. Amend the agreement before you provision anything.`;
       if (!window.confirm(msg)) return;
@@ -106,7 +106,7 @@ export default function AddOnRequests({ clients, onChanged }) {
                   <td>{catalog[r.addon_code]?.name || r.addon_code}</td>
                   <td className="hide-m muted">{day(r.starts_on)}</td>
                   <td className="num"><b>{money(r.monthly_fee)}</b></td>
-                  <td className="hide-m num">{r.included_minutes ?? '—'}</td>
+                  <td className="hide-m num">{r.included_minutes == null ? '—' : `${r.included_minutes} ${catalog[r.addon_code]?.unit_label || 'min'}`}</td>
                   <td>
                     <span className={'pill status-' + (r.status === 'active' ? 'won' : 'new')}>{r.status}</span>
                     {r.status === 'approved' && (
