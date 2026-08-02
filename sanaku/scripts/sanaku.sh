@@ -402,7 +402,8 @@ pw = os.environ["PASS"].replace(" ", "")
 sys.stdout.write(json.dumps({
     "smtp_admin_email": os.environ["SENDER"],
     "smtp_host": "smtp.gmail.com",
-    "smtp_port": 465,
+    # The API validates this as a string; sending 465 as a number is a 400.
+    "smtp_port": "465",
     "smtp_user": os.environ["SENDER"],
     "smtp_pass": pw,
     "smtp_sender_name": "Sanaku",
