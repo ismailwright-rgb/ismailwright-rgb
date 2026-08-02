@@ -296,6 +296,42 @@ cmd_scrape() {
     sh "$_engine"
 }
 
+# Point Supabase Auth at the command center.
+#
+# Supabase ships with Site URL = http://localhost:3000, and it ignores the
+# redirect_to we send unless that address is on its allow list. The result is
+# an invite email whose link lands on localhost - the client sees "this site
+# can't be reached" and there is nothing wrong with the invite at all.
+cmd_authurl() {
+  ensure_config SUPABASE_URL SUPABASE_PAT DASHBOARD_URL
+  need_cmd python3
+  _ref=$(printf '%s' "$SUPABASE_URL" | sed 's|^https\{0,1\}://||; s|\.supabase\.co.*$||')
+  _url="${DASHBOARD_URL%/}"
+
+  printf '  auth redirect -> %s ... ' "$_url"
+  _tmp=$(mktemp -d)
+  SITE="$_url" python3 -c 'import json,os,sys; u=os.environ["SITE"]; sys.stdout.write(json.dumps({"site_url": u, "uri_allow_list": u + "/**," + u}))' > "$_tmp/body.json"
+
+  _code=$(curl -sS -o "$_tmp/resp.txt" -w '%{http_code}' -m 60 -X PATCH \
+    "https://api.supabase.com/v1/projects/$_ref/config/auth" \
+    -H "Authorization: Bearer $SUPABASE_PAT" \
+    -H "Content-Type: application/json" \
+    --data-binary "@$_tmp/body.json" 2>/dev/null) || _code="000"
+
+  case "$_code" in
+    2*) say "set" ;;
+    *)
+      say "could not set it automatically (HTTP $_code)"
+      say "    Do it by hand, once: Supabase > Authentication > URL Configuration"
+      say "      Site URL:      $_url"
+      say "      Redirect URLs: $_url/**"
+      say "    Until then, invite links land on localhost and clients cannot sign in."
+      ;;
+  esac
+  rm -rf "$_tmp"
+  return 0   # never block a deploy on this - it is fixable in the dashboard
+}
+
 # Apply SQL straight to Supabase, so nothing has to be pasted into a web editor.
 #
 # curl does the HTTPS, not python. A python.org install on macOS ships without
@@ -350,6 +386,7 @@ cmd_migrate() {
         exit 1 ;;
     esac
   done
+  cmd_authurl
   say ""
   ok "database is up to date"
 }
@@ -736,6 +773,7 @@ sanaku - control script
   sh ~/sanaku.sh update      pull the latest version of this script
   sh ~/sanaku.sh ship        do EVERYTHING: database, workflow, both sites
   sh ~/sanaku.sh migrate     apply pending SQL to Supabase (no copy-paste)
+  sh ~/sanaku.sh authurl     point Supabase login links at the command center
   sh ~/sanaku.sh next        what should I do right now? (start here)
   sh ~/sanaku.sh status      health check + prospect counts
   sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
@@ -781,6 +819,7 @@ case "${1:-}" in
   doctor)    cmd_doctor ;;
   audit)     cmd_audit ;;
   migrate)   cmd_migrate ;;
+  authurl)   cmd_authurl ;;
   ship)      cmd_ship ;;
   logs)      cmd_logs ;;
   next)      cmd_next ;;
