@@ -59,6 +59,7 @@ export default function Clients() {
   const [loading, setLoading] = useState(true);
   const [onboarding, setOnboarding] = useState(false);
   const [branding, setBranding] = useState(null);
+  const [notice, setNotice] = useState(null);   // { bad, text }
 
   async function load() {
     setLoading(true);
@@ -93,12 +94,14 @@ export default function Clients() {
       ''
     );
     if (!email) return;
+    setNotice({ bad: false, text: `Sending invite to ${email.trim()}…` });
     const res = await invitePortalUser({ email, clientId: client.id });
-    if (res.ok) return alert(`Invite sent to ${email.trim()}.`);
-    alert(
-      `Could not send the invite.\n\n${res.error}\n\n` +
-      manualInviteSteps({ email: email.trim(), clientId: client.id, company: client.company_name })
-    );
+    if (res.ok) return setNotice({ bad: false, text: `Invite sent to ${email.trim()}.` });
+    setNotice({
+      bad: true,
+      text: `Could not send the invite.\n\n${res.error}\n\n` +
+        manualInviteSteps({ email: email.trim(), clientId: client.id, company: client.company_name }),
+    });
   }
 
   async function toggleKillSwitch(client) {
@@ -129,6 +132,18 @@ export default function Clients() {
         <div className="metric"><div className="v">{fmtMoney(totals.retainers)}</div><div className="l">Monthly retainers</div></div>
         <div className="metric"><div className="v">{totals.leads}</div><div className="l">Leads captured this month</div></div>
       </div>
+
+      {notice && (
+        <div className={'card ' + (notice.bad ? 'warn' : 'highlight')}>
+          <pre className="notice">{notice.text}</pre>
+          <div className="formactions" style={{ padding: '0 18px 16px' }}>
+            <button className="rowbtn" onClick={() => navigator.clipboard?.writeText(notice.text)}>
+              Copy
+            </button>
+            <button className="rowbtn" onClick={() => setNotice(null)}>Dismiss</button>
+          </div>
+        </div>
+      )}
 
       <StaffRequests clients={clients} onChanged={load} />
 

@@ -468,3 +468,9 @@ tbody tr:hover { background: var(--line-soft); }
   color: var(--sub); font-size: 13.5px; text-decoration: underline;
 }
 .login .linkish:hover { color: var(--ink); }
+/* Errors long enough to matter need to be readable and selectable, which a
+   browser alert is not - it truncates and cannot be copied. */
+.notice {
+  padding: 16px 18px; margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-family: inherit; font-size: 14px; line-height: 1.55; user-select: text;
+}

@@ -35,7 +35,20 @@ export async function invitePortalUser({ email, clientId }) {
     });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.ok) return { ok: true };
-    if (j.error) return { ok: false, error: j.error };
+    if (j.error) {
+      // n8n reports a 429 as "try spacing your requests out using the batching
+      // settings", which is advice for a workflow author, not for someone who
+      // just clicked Invite twice.
+      if (/rate|batch|429|too many/i.test(j.error)) {
+        return {
+          ok: false,
+          error: 'Supabase is rate-limiting invite emails right now. Wait about an hour, '
+               + 'or run `sh ~/sanaku.sh authcheck` — if it says mail still goes through '
+               + "Supabase's own sender, the Gmail setup did not take and that is the real limit.",
+        };
+      }
+      return { ok: false, error: j.error };
+    }
     // A 2xx with no body means the workflow died before any Respond node ran.
     // "answered 200" reads like success and tells you nothing about where.
     return {
