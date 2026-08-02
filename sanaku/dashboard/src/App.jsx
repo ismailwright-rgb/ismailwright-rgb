@@ -5,6 +5,7 @@ import Pipeline from './Pipeline.jsx';
 import Clients from './Clients.jsx';
 import Earnings from './Earnings.jsx';
 import Portal from './Portal.jsx';
+import SetPassword from './SetPassword.jsx';
 
 function ThemeToggle() {
   const [theme, setTheme] = useState(() => localStorage.getItem('sanaku-theme') || 'auto');
@@ -35,12 +36,19 @@ export default function App() {
   const [session, setSession] = useState(undefined); // undefined = still loading
   const [isStaff, setIsStaff] = useState(null);      // null = not yet resolved
   const [page, setPage] = useState('pipeline');
+  // An invite or reset link signs the person in and drops a type= marker in
+  // the URL fragment. Both have to end at "choose a password", or an invited
+  // client never has one and cannot return.
+  const [needsPassword, setNeedsPassword] = useState(
+    () => /type=(invite|recovery|signup)/.test(window.location.hash || '')
+  );
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
       setIsStaff(null);
+      if (event === 'PASSWORD_RECOVERY') setNeedsPassword(true);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -63,6 +71,7 @@ export default function App() {
 
   if (session === undefined) return null;
   if (!session) return <Login />;
+  if (needsPassword) return <SetPassword onDone={() => setNeedsPassword(false)} />;
   if (isStaff === null) return null;
   if (!isStaff) return <Portal onSignOut={signOut} />;
 

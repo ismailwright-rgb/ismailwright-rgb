@@ -461,3 +461,10 @@ tbody tr:hover { background: var(--line-soft); }
   width: 100%; padding: 9px 12px; border: 1px solid var(--line);
   border-radius: var(--r-s); background: var(--card);
 }
+/* A secondary action on the login card - looks like a link, behaves like a
+   button, so it is reachable by keyboard and screen reader alike. */
+.login .linkish {
+  width: 100%; margin-top: 14px; background: none; border: 0; padding: 6px;
+  color: var(--sub); font-size: 13.5px; text-decoration: underline;
+}
+.login .linkish:hover { color: var(--ink); }
