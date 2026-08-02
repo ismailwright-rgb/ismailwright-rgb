@@ -3,6 +3,7 @@ import { supabase } from './supabase.js';
 import OnboardClient from './OnboardClient.jsx';
 import Branding from './Branding.jsx';
 import AddOnRequests from './AddOnRequests.jsx';
+import StaffRequests from './StaffRequests.jsx';
 import { invitePortalUser, manualInviteSteps } from './invite.js';
 
 // Branding is set at onboarding, but onboarding happens once and logos change.
@@ -129,6 +130,8 @@ export default function Clients() {
         <div className="metric"><div className="v">{totals.leads}</div><div className="l">Leads captured this month</div></div>
       </div>
 
+      <StaffRequests clients={clients} onChanged={load} />
+
       <AddOnRequests clients={clients} onChanged={load} />
 
       {onboarding && (
@@ -218,8 +221,8 @@ export default function Clients() {
       </div>
 
       <p className="muted">
-        Billing statements, the change-request queue, and health alerts ship once the first
-        client is live — the tables (<code>sanaku_billing</code>, <code>sanaku_change_requests</code>) already exist.
+        Client requests appear above as they arrive. Statements are issued from the
+        <b> Earnings</b> tab.
       </p>
     </>
   );

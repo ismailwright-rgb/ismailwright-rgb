@@ -286,6 +286,15 @@ cmd_scrape() {
     sh "$_engine"
 }
 
+cmd_audit() {
+  need_cmd node
+  _work="$HOME/.sanaku-audit"
+  rm -rf "$_work"; mkdir -p "$_work"
+  curl -fsSL "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz" \
+    | tar xz -C "$_work" --strip-components=1
+  ( cd "$_work" && node sanaku/scripts/audit.mjs )
+}
+
 cmd_import() { # cmd_import WORKFLOW-NAME
   _wf="${1:-}"
   if [ -z "$_wf" ]; then
@@ -643,6 +652,7 @@ sanaku - control script
   sh ~/sanaku.sh next        what should I do right now? (start here)
   sh ~/sanaku.sh status      health check + prospect counts
   sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
+  sh ~/sanaku.sh audit       check the project for gaps before you go live
   sh ~/sanaku.sh logs        show what the last scraper run did, node by node
   sh ~/sanaku.sh scrape      run the prospect scraper now
   sh ~/sanaku.sh import NAME  install a workflow into n8n (see list below)
@@ -682,6 +692,7 @@ case "${1:-}" in
   status)    cmd_status ;;
   update)    cmd_update ;;
   doctor)    cmd_doctor ;;
+  audit)     cmd_audit ;;
   logs)      cmd_logs ;;
   next)      cmd_next ;;
   scrape)    cmd_scrape ;;

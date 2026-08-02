@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
+import Statements from './Statements.jsx';
 
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const monthStart = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; };
@@ -118,6 +119,7 @@ export default function Earnings() {
           <> Client-confirmed converted value this period: <b>{money(rows.reduce((s, r) => s + r.reportedValue, 0))}</b> (renewal ammunition, not a billing input).</>
         )}
       </p>
+      <Statements />
     </>
   );
 }
