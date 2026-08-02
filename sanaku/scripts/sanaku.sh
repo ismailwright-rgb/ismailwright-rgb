@@ -298,6 +298,57 @@ cmd_scrape() {
     sh "$_engine"
 }
 
+# Read back what Supabase is ACTUALLY configured to do, rather than trusting
+# that an earlier command set what you meant. The sender comes from whatever
+# OWNER_EMAIL happened to hold when `smtp` ran, and that is easy to get wrong
+# by one command's ordering.
+cmd_authcheck() {
+  ensure_config SUPABASE_URL SUPABASE_PAT
+  need_cmd python3
+  _ref=$(printf '%s' "$SUPABASE_URL" | sed 's|^https\{0,1\}://||; s|\.supabase\.co.*$||')
+  _tmp=$(mktemp -d)
+
+  head1 "What Supabase will actually do"
+  _code=$(curl -sS -o "$_tmp/cfg.json" -w '%{http_code}' -m 60 \
+    "https://api.supabase.com/v1/projects/$_ref/config/auth" \
+    -H "Authorization: Bearer $SUPABASE_PAT" 2>/dev/null) || _code="000"
+
+  case "$_code" in
+    2*) ;;
+    *) warn "could not read the config (HTTP $_code)"; rm -rf "$_tmp"; return 0 ;;
+  esac
+
+  WANT="${OWNER_EMAIL:-}" DASH="${DASHBOARD_URL:-}" python3 - "$_tmp/cfg.json" <<'PY'
+import json, os, sys
+c = json.load(open(sys.argv[1]))
+want, dash = os.environ.get("WANT", ""), os.environ.get("DASH", "").rstrip("/")
+
+sender = c.get("smtp_admin_email") or ""
+host   = c.get("smtp_host") or ""
+site   = c.get("site_url") or ""
+allow  = c.get("uri_allow_list") or ""
+
+def line(label, value, good, hint=""):
+    mark = "  ." if good else "  !"
+    print("%s %-22s %s" % (mark, label, value or "(not set)"))
+    if not good and hint:
+        print("      %s" % hint)
+
+line("Emails come from", sender, bool(sender) and (not want or sender == want),
+     "Expected %s. Fix: sh ~/sanaku.sh set OWNER_EMAIL %s  then  sh ~/sanaku.sh smtp" % (want, want))
+line("Sent via", host or "Supabase's own sender", bool(host),
+     "Supabase's built-in sender is rate limited and looks like phishing. Run: sh ~/sanaku.sh smtp")
+line("Sender name", c.get("smtp_sender_name") or "", bool(c.get("smtp_sender_name")))
+line("Login links go to", site, bool(site) and "localhost" not in site,
+     "Invite links will land on localhost. Run: sh ~/sanaku.sh authurl")
+line("Redirects allowed", allow, bool(allow) and (not dash or dash in allow),
+     "Run: sh ~/sanaku.sh authurl")
+PY
+  rm -rf "$_tmp"
+  say ""
+  return 0
+}
+
 # Send client emails from Sanaku, not from noreply@mail.app.supabase.io.
 #
 # Two reasons this is not cosmetic. Supabase's built-in sender is rate limited
@@ -354,6 +405,7 @@ sys.stdout.write(json.dumps({
       say "set"
       say ""
       ok "Client emails now come from $OWNER_EMAIL"
+      cmd_authcheck
       say "  Send yourself a test invite before you send one to a client." ;;
     *)
       say "FAILED (HTTP $_code)"
@@ -849,6 +901,7 @@ sanaku - control script
   sh ~/sanaku.sh migrate     apply pending SQL to Supabase (no copy-paste)
   sh ~/sanaku.sh authurl     point Supabase login links at the command center
   sh ~/sanaku.sh smtp        send client emails from your address, not Supabase's
+  sh ~/sanaku.sh authcheck   show what Supabase will ACTUALLY send, and from where
   sh ~/sanaku.sh next        what should I do right now? (start here)
   sh ~/sanaku.sh status      health check + prospect counts
   sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
@@ -896,6 +949,7 @@ case "${1:-}" in
   migrate)   cmd_migrate ;;
   authurl)   cmd_authurl ;;
   smtp)      cmd_smtp ;;
+  authcheck) cmd_authcheck ;;
   ship)      cmd_ship ;;
   logs)      cmd_logs ;;
   next)      cmd_next ;;
