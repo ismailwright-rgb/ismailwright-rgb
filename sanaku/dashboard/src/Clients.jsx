@@ -104,6 +104,69 @@ export default function Clients() {
     });
   }
 
+
+  // Churn keeps the record: leads, statements and history stay, the client
+  // stops counting toward active clients and MRR, workflows stop, and portal
+  // logins are revoked. This is what "they cancelled" actually means.
+  async function endClient(client) {
+    const going = client.status !== 'churned';
+    if (!going) {
+      const { error } = await supabase.from('sanaku_clients')
+        .update({ status: 'active' }).eq('id', client.id);
+      if (error) return setNotice({ bad: true, text: error.message });
+      return load();
+    }
+    if (!window.confirm(
+      `Close out ${client.company_name}?\n\n` +
+      `· Workflows stop immediately\n` +
+      `· Their portal logins are revoked\n` +
+      `· They stop counting toward active clients and monthly retainers\n\n` +
+      `Leads, statements and notes are KEPT — you can still bill for work already done, ` +
+      `and you can reactivate them later.`
+    )) return;
+
+    const { error } = await supabase.from('sanaku_clients')
+      .update({ status: 'churned', workflow_enabled: false }).eq('id', client.id);
+    if (error) return setNotice({ bad: true, text: 'Could not close them out: ' + error.message });
+    // Revoke portal access separately - leaving it is how an ex-client keeps
+    // reading their dashboard for months after they stopped paying.
+    const { error: e2 } = await supabase.from('sanaku_client_users')
+      .delete().eq('client_id', client.id);
+    setNotice({
+      bad: !!e2,
+      text: e2
+        ? `${client.company_name} is closed out, but their portal logins could not be revoked: ${e2.message}`
+        : `${client.company_name} closed out. Workflows stopped, portal access revoked, history kept.`,
+    });
+    load();
+  }
+
+  // Hard delete, for rows created by mistake. Refused once there is anything
+  // worth keeping, because the cascade would take the leads and statements
+  // with it and there is no undo.
+  async function deleteClient(client) {
+    const s = leadStats[client.id] || { total: 0 };
+    const { count } = await supabase.from('sanaku_billing')
+      .select('id', { count: 'exact', head: true }).eq('client_id', client.id);
+    if (s.total > 0 || (count || 0) > 0) {
+      return setNotice({
+        bad: true,
+        text: `${client.company_name} has ${s.total} lead(s) and ${count || 0} statement(s), so deleting `
+            + `would destroy billing history that cannot be recovered.\n\n`
+            + `Use "Close out" instead — it stops everything and revokes access but keeps the record.`,
+      });
+    }
+    const typed = window.prompt(
+      `Permanently delete ${client.company_name}? This cannot be undone.\n\n` +
+      `Type the company name to confirm:`, '');
+    if (typed?.trim() !== client.company_name) return;
+
+    const { error } = await supabase.from('sanaku_clients').delete().eq('id', client.id);
+    if (error) return setNotice({ bad: true, text: 'Delete failed: ' + error.message });
+    setNotice({ bad: false, text: `${client.company_name} deleted.` });
+    load();
+  }
+
   async function toggleKillSwitch(client) {
     const turningOff = client.workflow_enabled;
     const msg = turningOff
@@ -226,6 +289,12 @@ export default function Clients() {
                       </button>
                       <button className="rowbtn" onClick={() => inviteToPortal(c)}>Invite</button>
                       <button className="rowbtn" onClick={() => setBranding(c)}>Branding</button>
+                      <button className="rowbtn" onClick={() => endClient(c)}>
+                        {c.status === 'churned' ? 'Reactivate' : 'Close out'}
+                      </button>
+                      {c.status === 'churned' && (
+                        <button className="rowbtn" onClick={() => deleteClient(c)}>Delete</button>
+                      )}
                     </td>
                   </tr>
                 );
