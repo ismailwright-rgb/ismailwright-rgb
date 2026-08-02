@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
+import AddOns from './AddOns.jsx';
 
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const day = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -79,7 +80,7 @@ export default function Portal({ onSignOut }) {
           ? <img className="brandlogo" src={client.brand_logo_url} alt={brand} />
           : <span className="brand">{brand}</span>}
         <nav>
-          {[['overview', 'Overview'], ['leads', 'Leads'], ['requests', 'Requests'], ['billing', 'Billing']].map(([k, l]) => (
+          {[['overview', 'Overview'], ['leads', 'Leads'], ['addons', 'Add services'], ['requests', 'Requests'], ['billing', 'Billing']].map(([k, l]) => (
             <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{l}</button>
           ))}
         </nav>
@@ -127,6 +128,8 @@ export default function Portal({ onSignOut }) {
             <LeadTable leads={leads} full />
           </div>
         )}
+
+        {tab === 'addons' && <AddOns client={client} />}
 
         {tab === 'requests' && <Requests client={client} requests={requests} onSaved={load} />}
 

@@ -391,3 +391,40 @@ tbody tr:hover { background: var(--line-soft); }
   * { transition: none !important; animation: none !important; }
 }
 .brandlogo { max-height: 30px; max-width: 190px; object-fit: contain; }
+
+/* ------------------------------------------------------------- add-ons ----
+   The client-facing shop. Priced plainly, in their brand colour, with the
+   compliance line always visible rather than buried in terms.
+   ------------------------------------------------------------------------- */
+.addons {
+  display: grid; gap: 14px; margin-bottom: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+}
+.addon {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 18px 19px 19px; display: flex; flex-direction: column; gap: 9px;
+}
+.addon.on { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-wash); }
+.addon-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.addon-head h4 { font-family: "Fraunces", Georgia, serif; font-size: 18px; font-weight: 600; }
+.addon-blurb { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
+
+/* Price sits in its own block so it is answerable at a glance - the question
+   a client actually opened this tab with. */
+.addon-price {
+  display: flex; flex-wrap: wrap; gap: 4px 20px;
+  padding: 12px 0; margin: 2px 0;
+  border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
+}
+.addon-price div { display: flex; flex-direction: column; gap: 2px; }
+.addon-price dt { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--sub); }
+.addon-price dd {
+  font-family: "Fraunces", Georgia, serif; font-size: 21px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.addon-detail { font-size: 13.5px; line-height: 1.55; color: var(--sub); }
+.addon-compliance {
+  font-size: 12px; line-height: 1.5; color: var(--sub);
+  padding-left: 11px; border-left: 2px solid var(--line);
+}
+.addon .bp-btn { margin-top: auto; align-self: flex-start; }

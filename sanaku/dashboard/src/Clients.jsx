@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import OnboardClient from './OnboardClient.jsx';
 import Branding from './Branding.jsx';
+import AddOnRequests from './AddOnRequests.jsx';
 
 // Branding is set at onboarding, but onboarding happens once and logos change.
 // This is the same component, saving straight back to the row.
@@ -132,6 +133,8 @@ export default function Clients() {
         <div className="metric"><div className="v">{fmtMoney(totals.retainers)}</div><div className="l">Monthly retainers</div></div>
         <div className="metric"><div className="v">{totals.leads}</div><div className="l">Leads captured this month</div></div>
       </div>
+
+      <AddOnRequests clients={clients} onChanged={load} />
 
       {onboarding && (
         <div className="card" style={{ padding: 0 }}>
