@@ -52,5 +52,8 @@ echo "    e.g. sanaku-command-center)."
 npx -y netlify-cli@17 deploy --prod --dir dist
 
 echo ""
-echo "Done. The 'Website URL' printed above is your dashboard."
+echo "Done. The 'Website URL' above is your COMMAND CENTER."
+echo "  You sign in there and get Pipeline / Clients / Earnings."
+echo "  A client signs in to the SAME address and gets their own portal instead."
+echo "  This is a different site from your public landing page (sanaku.sh site)."
 echo "Log in with the user you created in Supabase Authentication."
