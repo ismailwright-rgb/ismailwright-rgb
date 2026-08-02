@@ -757,5 +757,16 @@ case "${1:-}" in
   config)    shift; cmd_config "$@" ;;
   paste)     shift; cmd_paste "$@" ;;
   set)       shift; cmd_set "$@" ;;
-  *)         usage ;;
+  *)
+    # An unknown command almost always means this copy predates it. Saying so
+    # is the difference between a one-line fix and staring at a usage dump.
+    if [ -n "${1:-}" ]; then
+      say "Unknown command: $1"
+      say ""
+      say "Your copy of this script is probably out of date. Refresh it:"
+      say "  curl -fsSL -H 'Cache-Control: no-cache' \\"
+      say "    \"$RAW/sanaku.sh?cb=\$(date +%s)\" -o ~/sanaku.sh"
+      say ""
+    fi
+    usage ;;
 esac
