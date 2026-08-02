@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
 import Branding from './Branding.jsx';
+import { invitePortalUser, manualInviteSteps } from './invite.js';
 
 // Pricing structures that survive review, by vertical. The database enforces
 // this too (migration-002) - this is the friendly half of the same rule.
@@ -36,6 +37,7 @@ export default function OnboardClient({ onDone, onCancel }) {
   const [vertical, setVertical] = useState('home_services');
   const [f, setF] = useState({
     company_name: '',
+    portal_email: '',
     brand_name: '',
     brand_primary_color: '',
     brand_logo_url: '',
@@ -79,7 +81,7 @@ export default function OnboardClient({ onDone, onCancel }) {
     if (!f.company_name.trim()) return setErr('Company name is required.');
     setBusy(true);
     const num = (v) => (v === '' || v === null ? null : Number(v));
-    const { error } = await supabase.from('sanaku_clients').insert({
+    const { data: created, error } = await supabase.from('sanaku_clients').insert({
       company_name: f.company_name.trim(),
       vertical,
       status: 'active',
@@ -98,9 +100,27 @@ export default function OnboardClient({ onDone, onCancel }) {
       billing_starts_on: f.billing_starts_on || null,
       qualified_definition: usesPerLead ? f.qualified_definition : null,
       workflow_enabled: true,
-    });
+    }).select('id').single();
+
+    if (error) { setBusy(false); return setErr(error.message); }
+
+    // Onboarding without a way in is half a job, so the invite happens here
+    // rather than being a separate hunt through the roster afterwards.
+    const addr = f.portal_email.trim();
+    if (!addr) { setBusy(false); return onDone(); }
+
+    const res = await invitePortalUser({ email: addr, clientId: created.id });
     setBusy(false);
-    if (error) return setErr(error.message);
+    if (res.ok) {
+      alert(`${f.company_name.trim()} created. ${addr} has been emailed a link to set their password.`);
+      return onDone();
+    }
+    // The client row saved either way - only the invite failed, and there is a
+    // path that needs no n8n at all.
+    alert(
+      `${f.company_name.trim()} was created, but the invite could not be sent.\n\n${res.error}\n\n` +
+      manualInviteSteps({ email: addr, clientId: created.id, company: f.company_name.trim() })
+    );
     onDone();
   }
 
@@ -125,6 +145,18 @@ export default function OnboardClient({ onDone, onCancel }) {
 
       <label>Business name</label>
       <input value={f.company_name} onChange={(e) => set('company_name', e.target.value)} required />
+
+      <label>Their email, for the portal login</label>
+      <input
+        type="email"
+        value={f.portal_email}
+        placeholder="owner@valleyplumbing.com"
+        onChange={(e) => set('portal_email', e.target.value)}
+      />
+      <p className="muted">
+        They get an email with a link to set a password the moment this client is
+        created. Leave blank to invite someone later from the roster.
+      </p>
 
       <Branding value={f} onChange={(next) => setF(next)} />
 
@@ -192,7 +224,9 @@ export default function OnboardClient({ onDone, onCancel }) {
 
       {err && <p className="formerr">{err}</p>}
       <div className="formactions">
-        <button className="rowbtn primary" disabled={busy}>{busy ? 'Saving…' : 'Create client'}</button>
+        <button className="rowbtn primary" disabled={busy}>
+          {busy ? 'Saving…' : f.portal_email.trim() ? 'Create client & send invite' : 'Create client'}
+        </button>
         <button type="button" className="rowbtn" onClick={onCancel}>Cancel</button>
       </div>
     </form>
