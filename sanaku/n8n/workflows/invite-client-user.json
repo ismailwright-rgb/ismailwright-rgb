@@ -194,7 +194,13 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ email: $('Read Request').first().json.email, data: { client_id: $('Read Request').first().json.client_id }, redirect_to: $env.DASHBOARD_URL }) }}",
         "options": {
-          "timeout": 20000
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
         }
       },
       "id": "c1000000-0000-4000-8000-000000000007",
@@ -310,7 +316,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ ok: false, error: 'invite failed - check the email is not already registered' }) }}",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: (function(){  const r = $json.body || $json || {};  const m = String(r.msg || r.message || r.error_description || r.error || '');  if (/already|registered|exists/i.test(m)) return 'That email already has an account, so it cannot be invited again. If it is your own staff login, use an alias like you+client@gmail.com - it reaches the same inbox but Supabase treats it as a new user.';  return m || 'Supabase rejected the invite and gave no reason.';})() }) }}",
         "options": {
           "responseCode": 400,
           "responseHeaders": {
