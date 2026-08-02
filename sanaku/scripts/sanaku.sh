@@ -85,6 +85,23 @@ validate() { # validate KIND VALUE
       _bad=$(printf '%s' "$_v" | tr -d 'A-Za-z0-9_.:/-')
       [ -n "$_bad" ] && printf 'contains unexpected characters - the paste may have been mangled by your terminal'
       ;;
+    apppass)
+      # A Google app password is exactly 16 letters, shown in groups of four.
+      # The `key` rule demanded 20+ characters, so a CORRECT app password was
+      # rejected as "too short" - and the message sent you looking for a longer
+      # secret instead of a different kind of one.
+      _clean=$(printf '%s' "$_v" | tr -d ' ')
+      _n=$(printf '%s' "$_clean" | wc -c | tr -d ' ')
+      _sym=$(printf '%s' "$_clean" | tr -d 'A-Za-z0-9')
+      if [ -n "$_sym" ]; then
+        printf 'that looks like your normal Google password, not an app password. Gmail refuses account passwords over SMTP. Sign in as the sending account, then Google Account > Security > 2-Step Verification > App passwords, and copy the 16 letters it generates'
+        return 0
+      fi
+      if [ "$_n" -ne 16 ]; then
+        printf 'an app password is exactly 16 letters (you gave %s). Google Account > Security > App passwords generates it - it is not any password you chose yourself' "$_n"
+        return 0
+      fi
+      ;;
     pat)
       case "$_v" in
         sbp_*) ;;
@@ -186,7 +203,7 @@ ensure_config() { # ensure_config key1 key2 ...
       SERPAPI_KEY)          ask SERPAPI_KEY "SerpAPI key (serpapi.com/manage-api-key)" key;;
       OWNER_EMAIL)          ask OWNER_EMAIL "Your email (for digests/alerts)" email;;
       DASHBOARD_URL)        ask DASHBOARD_URL "Command center URL (where client invite links land)" url;;
-      SMTP_PASS)            ask SMTP_PASS "Gmail app password for sending client emails" key;;
+      SMTP_PASS)            ask SMTP_PASS "App password for sending client emails - 16 letters from Google, not your own password" apppass;;
       SUPABASE_PAT)         ask SUPABASE_PAT "Supabase access token (supabase.com/dashboard/account/tokens, starts sbp_)" pat;;
     esac
   done
@@ -370,7 +387,7 @@ cmd_smtp() {
     say "  1. Google Account > Security > 2-Step Verification (turn it on if it is off)"
     say "  2. Then: Google Account > Security > App passwords"
     say "  3. Name it Sanaku, create, and copy the 16 characters"
-    ask SMTP_PASS "App password for $OWNER_EMAIL (16 characters, spaces are fine)" key
+    ask SMTP_PASS "App password for $OWNER_EMAIL - 16 letters like 'abcd efgh ijkl mnop'" apppass
     save_config
   fi
 
@@ -833,6 +850,7 @@ cmd_set() { # cmd_set KEYNAME VALUE
 
   case "$_target" in
     SUPABASE_PAT) _kind=pat ;;
+    SMTP_PASS)    _kind=apppass ;;
     *URL)        _kind=url ;;
     *EMAIL)      _kind=email ;;
     SERPAPI_KEY) _kind=key ;;
@@ -872,6 +890,7 @@ cmd_paste() { # cmd_paste KEYNAME
 
   case "$_target" in
     SUPABASE_PAT) _kind=pat ;;
+    SMTP_PASS)    _kind=apppass ;;
     *URL)   _kind=url ;;
     *EMAIL) _kind=email ;;
     SERPAPI_KEY) _kind=key ;;
