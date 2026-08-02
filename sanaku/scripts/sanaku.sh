@@ -366,6 +366,50 @@ PY
   return 0
 }
 
+# Ask Gmail directly whether the app password works.
+#
+# Worth its own command because a bad credential and a bad Supabase config
+# produce the same symptom - an invite that fails with "Error sending invite
+# email" - and telling them apart otherwise means digging through auth logs.
+# curl answers in two seconds: silence means Gmail accepted it.
+cmd_mailtest() {
+  ensure_config OWNER_EMAIL SMTP_PASS
+  _pw=$(printf '%s' "$SMTP_PASS" | tr -d ' ')
+  _msg=$(mktemp)
+  printf 'Subject: Sanaku SMTP test\nFrom: %s\nTo: %s\n\nIf you are reading this, Gmail accepted the app password.\n' \
+    "$OWNER_EMAIL" "$OWNER_EMAIL" > "$_msg"
+
+  head1 "Asking Gmail to accept $OWNER_EMAIL"
+  if curl -sS --ssl-reqd --url 'smtps://smtp.gmail.com:465' \
+       --user "$OWNER_EMAIL:$_pw" \
+       --mail-from "$OWNER_EMAIL" --mail-rcpt "$OWNER_EMAIL" \
+       --upload-file "$_msg" -o /dev/null 2>"$_msg.err"; then
+    ok "accepted - check $OWNER_EMAIL for the test message"
+    say ""
+    say "Use this in Supabase > Authentication > SMTP:"
+    say "  Host      smtp.gmail.com      Port  465"
+    say "  Username  $OWNER_EMAIL"
+    say "  Password  $_pw"
+    say "  Sender    $OWNER_EMAIL       Name  Sanaku"
+    say ""
+    say "Sender MUST equal Username - Gmail refuses to send as anything else."
+  else
+    warn "Gmail rejected it"
+    sed 's/^/    /' "$_msg.err" 2>/dev/null | head -3
+    say ""
+    say "  535 means the app password is wrong for this account:"
+    say "    1. myaccount.google.com/apppasswords - check the avatar is $OWNER_EMAIL"
+    say "    2. Delete every existing one, create one, copy the 16 letters"
+    say "    3. sh ~/sanaku.sh set SMTP_PASS <those letters>   (spaces are stripped)"
+    say "    4. sh ~/sanaku.sh mailtest"
+    say ""
+    say "  Also check that inbox for a Google 'Critical security alert' -"
+    say "  Google blocks logins it does not recognise, and that reads as 535 too."
+  fi
+  rm -f "$_msg" "$_msg.err"
+  return 0
+}
+
 # Send client emails from Sanaku, not from noreply@mail.app.supabase.io.
 #
 # Two reasons this is not cosmetic. Supabase's built-in sender is rate limited
@@ -928,6 +972,7 @@ sanaku - control script
   sh ~/sanaku.sh migrate     apply pending SQL to Supabase (no copy-paste)
   sh ~/sanaku.sh authurl     point Supabase login links at the command center
   sh ~/sanaku.sh smtp        send client emails from your address, not Supabase's
+  sh ~/sanaku.sh mailtest    ask Gmail directly whether your app password works
   sh ~/sanaku.sh authcheck   show what Supabase will ACTUALLY send, and from where
   sh ~/sanaku.sh next        what should I do right now? (start here)
   sh ~/sanaku.sh status      health check + prospect counts
@@ -976,6 +1021,7 @@ case "${1:-}" in
   migrate)   cmd_migrate ;;
   authurl)   cmd_authurl ;;
   smtp)      cmd_smtp ;;
+  mailtest)  cmd_mailtest ;;
   authcheck) cmd_authcheck ;;
   ship)      cmd_ship ;;
   logs)      cmd_logs ;;
