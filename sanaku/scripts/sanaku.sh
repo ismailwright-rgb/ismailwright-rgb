@@ -587,8 +587,10 @@ cmd_set() { # cmd_set KEYNAME VALUE
   if [ -n "$_err" ]; then warn "rejected: $_err"; exit 1; fi
 
   eval "$_target=\$_value"
-  # shellcheck disable=SC2086
-  ensure_config $KEYS
+  # NOT ensure_config here. Setting one value must never interrogate you about
+  # every other one - adding a new key to KEYS would then turn `set ANYTHING`
+  # into a questionnaire. load_config has already read whatever was stored;
+  # anything still unset is simply written back empty.
   save_config
   ok "$_target set: $(preview "$_value")"
   say "Check it with:  sh ~/sanaku.sh doctor"
@@ -626,7 +628,8 @@ cmd_paste() { # cmd_paste KEYNAME
   fi
   eval "$_target=\$_clip"
   # shellcheck disable=SC2086
-  ensure_config $KEYS   # fills anything else still missing
+  # see cmd_set: one value in, one value out
+     # fills anything else still missing
   save_config
   ok "$_target set from clipboard: $(preview "$_clip")"
   say "Check it with:  sh ~/sanaku.sh doctor"
