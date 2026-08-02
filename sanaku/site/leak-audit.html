@@ -114,6 +114,41 @@
   .mathrow.total span:last-child { font-family: "Fraunces", serif; font-size: 21px; color: #4fd39a; }
   .assume { font-size: 12.5px; color: #86998f; margin-top: 20px; line-height: 1.55; }
 
+
+  /* ---------------------------------------------------------------- charts --
+     Two pictures, because a column of dollar figures is read and a picture is
+     felt. Both are driven by the same numbers as the readout, and both render
+     from defaults so they survive being printed to PDF. */
+  .leakbar { margin: 22px 0 6px; }
+  .leakbar .track {
+    display: flex; height: 46px; border-radius: 9px; overflow: hidden;
+    border: 1px solid #2a463b;
+  }
+  .leakbar .kept { background: #1f4034; display: flex; align-items: center; justify-content: center; }
+  .leakbar .lost {
+    background: #c9603f; display: flex; align-items: center; justify-content: center;
+    min-width: 46px;
+  }
+  .leakbar .seg-l { font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; padding: 0 8px; }
+  .leakbar .legend { display: flex; gap: 18px; margin-top: 9px; font-size: 12.5px; color: #9fb3aa; }
+  .leakbar .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+
+  .moneychart { display: flex; align-items: flex-end; gap: 14px; margin: 8px 0 4px; }
+  .mc { flex: 1; display: flex; flex-direction: column; text-align: center; }
+  /* A definite height here is what makes the bars' percentages mean anything.
+     Without it they are percentages of an indefinite box, and flex-shrink
+     then squashes the tallest bar smallest - the exact opposite of the point. */
+  .mc .plot { height: 130px; display: flex; align-items: flex-end; }
+  .mc .bar { width: 100%; flex: none; border-radius: 8px 8px 0 0; min-height: 4px; transition: height .18s ease; }
+  .mc.a .bar { background: #c9603f; }
+  .mc.b .bar { background: #3fbf85; }
+  .mc.c .bar { background: #436357; }
+  .mc .amt {
+    font-family: "Fraunces", serif; font-size: 17px; color: #fff; margin-bottom: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .mc .cap { font-size: 11.5px; color: #9fb3aa; margin-top: 9px; line-height: 1.35; }
+
   /* --------------------------------------------------------------- steps -- */
   .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 30px; }
   @media (max-width: 780px) { .steps { grid-template-columns: 1fr; } }
@@ -172,15 +207,53 @@
 
   /* --------------------------------------------------------------- print -- */
   @media print {
-    @page { margin: 14mm; }
-    body { font-size: 11.5pt; background: #fff; }
+    @page { margin: 12mm; }
+    body { font-size: 9.5pt; line-height: 1.42; background: #fff; }
     .printbtn, .btn { display: none !important; }
-    section { padding: 22px 0; break-inside: auto; }
-    header.hero { padding: 24px 0 20px; }
-    header.hero h1 { font-size: 32pt; }
-    #calc, .bundle, #close { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .step, .scen, .t, .bundle, table { break-inside: avoid; }
+    section { padding: 13px 0; break-inside: auto; }
+    section > .wrap > h2 { font-size: 17pt; }
+    header.hero { padding: 10px 0 12px; }
+    header.hero h1 { font-size: 26pt; }
+    header.hero p { font-size: 11pt; margin-top: 10px; }
+    .eyebrow { font-size: 7.5pt; margin-bottom: 5px; }
+    .sub { font-size: 10pt; margin-top: 6px; }
+    table { margin-top: 12px; }
+    th, td { padding: 6px 9px; }
+    td { font-size: 10pt; }
+    .footnote { margin-top: 9px; font-size: 9pt; }
+    .calcgrid { gap: 18px; margin-top: 16px; }
+    .field { margin-bottom: 10px; }
+    .readout { padding: 16px; }
+    .bignum { font-size: 26pt; }
+    .steps { gap: 12px; margin-top: 16px; }
+    .step { padding: 13px 14px; }
+    .step h3 { font-size: 13pt; margin: 3px 0 6px; }
+    .step p { font-size: 9.5pt; }
+    .step .stat { margin-top: 9px; padding: 7px 9px; font-size: 9pt; }
+    .step .price { margin-top: 9px; padding-top: 7px; font-size: 9pt; }
+    .bundle { margin-top: 16px; padding: 16px 18px; }
+    .bundle .figure { font-size: 24pt; margin-top: 8px; }
+    .trust { gap: 10px; margin-top: 16px; }
+    .t p { font-size: 9pt; }
+    .t h4 { font-size: 11pt; }
+    .assume { margin-top: 12px; font-size: 8pt; }
+    /* the sliders are furniture on paper - the numbers they produced are not */
+    /* Sliders are furniture on paper. The numbers they produced are not, and
+       a bare "35%" with no label is worse than useless. */
+    input[type=range] { display: none; }
+    .field { display: inline-block; margin-right: 20px; vertical-align: top; }
+    .field label { font-size: 6.5pt; letter-spacing: .08em; margin-bottom: 1px; max-width: 130px; }
+    .field .val { font-size: 12pt; margin-top: 0; }
+    select { background: #fff; color: #111; border: 1px solid #ccc; padding: 4px 8px; font-size: 9.5pt; }
+    #calc, .bundle, #close, .leakbar .track, .leakbar .kept, .leakbar .lost,
+    .mc .bar { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .mc .plot { height: 96px; }
+    .step, .scen, .t, .bundle, table, .readout, #close { break-inside: avoid; }
     h2, h3 { break-after: avoid; }
+    /* the footer alone on a final page reads as a printing accident */
+    footer { break-before: avoid; padding: 12px 0 0; }
+    #close { padding: 20px 0; }
+    #close h2 { font-size: 19pt; }
     .wrap { max-width: none; padding: 0; }
   }
 </style>
@@ -248,7 +321,7 @@
         </div>
         <div class="field">
           <label for="value">What one closed customer is worth to you</label>
-          <input type="range" id="value" min="200" max="20000" step="100" value="1600">
+          <input type="range" id="value" min="200" max="20000" step="50" value="1600">
           <div class="val" id="valueVal">$1,600</div>
         </div>
         <div class="field">
@@ -273,6 +346,20 @@
 
       <div>
         <div class="readout">
+          <div class="lead-out">Where your leads actually go</div>
+          <div class="leakbar">
+            <div class="track">
+              <div class="kept" id="barKept" style="width:75%"><span class="seg-l" id="keptL">56 reach you</span></div>
+              <div class="lost" id="barLost" style="width:25%"><span class="seg-l" id="lostL">19 don't</span></div>
+            </div>
+            <div class="legend">
+              <span><i style="background:#1f4034"></i>Answered</span>
+              <span><i style="background:#c9603f"></i>Never properly answered</span>
+            </div>
+          </div>
+
+          <div class="splitline"></div>
+
           <div class="lead-out">Walking out the door</div>
           <div class="bignum" id="lossYear">$0</div>
           <div class="caption"><span id="lossMonth">$0</span> a month · <span id="slipped">0</span> leads slipping past you every month</div>
@@ -286,6 +373,15 @@
             <div class="scen"><h4>Strong</h4><div class="amt" id="sc3">$0</div></div>
           </div>
           <div class="caption" style="margin-top:10px">Recovered revenue in year one, if 25% / 40% / 55% of slipped leads get caught.</div>
+
+          <div class="splitline"></div>
+
+          <div class="lead-out" style="margin-bottom:12px">Year one, side by side</div>
+          <div class="moneychart">
+            <div class="mc a"><div class="amt" id="cA">$0</div><div class="plot"><div class="bar" id="bA" style="height:100%"></div></div><div class="cap">Walking<br>away</div></div>
+            <div class="mc b"><div class="amt" id="cB">$0</div><div class="plot"><div class="bar" id="bB" style="height:40%"></div></div><div class="cap">You keep<br>with Sanaku</div></div>
+            <div class="mc c"><div class="amt" id="cC">$0</div><div class="plot"><div class="bar" id="bC" style="height:8%"></div></div><div class="cap">What Sanaku<br>costs</div></div>
+          </div>
 
           <div class="splitline"></div>
 
@@ -605,6 +701,13 @@
     const lostYear  = lostMonth * 12;
 
     $("slipped").textContent   = Math.round(slipped);
+
+    // --- leak bar: the split, drawn ---
+    const lostPct = Math.max(6, Math.min(94, miss * 100));   // keep both labels legible
+    $("barKept").style.width = (100 - lostPct) + "%";
+    $("barLost").style.width = lostPct + "%";
+    $("keptL").textContent = Math.round(leads - slipped) + " reach you";
+    $("lostL").textContent = Math.round(slipped) + " don't";
     $("lossMonth").textContent = fmt(lostMonth);
     $("lossYear").textContent  = fmtK(lostYear);
 
@@ -617,6 +720,14 @@
     const cost    = packageCost(ind);
     const yearCost = cost.setup + cost.monthly * 12;
     const net      = rec[1] - yearCost;
+
+    // --- money chart: the three numbers, to scale against each other ---
+    const kept = rec[1];
+    const top  = Math.max(lostYear, kept, yearCost, 1);
+    const h    = (v) => Math.max(3, (v / top) * 100) + "%";
+    $("cA").textContent = fmtK(lostYear);  $("bA").style.height = h(lostYear);
+    $("cB").textContent = fmtK(kept);      $("bB").style.height = h(kept);
+    $("cC").textContent = fmtK(yearCost);  $("bC").style.height = h(yearCost);
 
     $("mRec").textContent     = fmt(rec[1]);
     $("mSetup").textContent   = "–" + fmt(cost.setup);

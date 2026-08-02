@@ -305,6 +305,43 @@ cmd_import() { # cmd_import WORKFLOW-NAME
     sh "$_engine"
 }
 
+cmd_secure() {
+  ensure_config N8N_URL
+  case "$N8N_URL" in
+    https://*) ok "n8n is already on HTTPS - nothing to do."; return 0 ;;
+  esac
+  _ip=$(printf '%s' "$N8N_URL" | sed 's|^https\{0,1\}://||; s|:.*$||; s|/.*$||')
+  head1 "Put n8n behind HTTPS"
+  say "Your dashboard is HTTPS; n8n is plain HTTP. Browsers block an HTTPS page"
+  say "from calling an HTTP endpoint, so the Invite button cannot work until"
+  say "this is done. It is free and takes about five minutes."
+  say ""
+  say "Run these THREE lines. The first opens a session on the droplet;"
+  say "the next two run there, not on your Mac:"
+  say ""
+  say "  ssh root@$_ip"
+  say "  curl -fsSL $RAW/secure-n8n.sh -o secure-n8n.sh"
+  say "  sh secure-n8n.sh"
+  say ""
+  say "When it finishes it prints your new https:// address. Then, back here:"
+  say ""
+  say "  sh ~/sanaku.sh set N8N_URL https://$_ip.nip.io"
+  say "  sh ~/sanaku.sh dashboard"
+  say ""
+}
+
+cmd_pdf() {
+  need_cmd node
+  say "Building the leak-audit PDF..."
+  _which="${1:-home}"
+  _work="$HOME/.sanaku-site-build"
+  rm -rf "$_work"; mkdir -p "$_work"
+  curl -fsSL "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz" \
+    | tar xz -C "$_work" --strip-components=1
+  ( cd "$_work/sanaku" && node scripts/make-pdf.mjs "$_which" "$HOME/Sanaku_Leak_Audit_$_which.pdf" )
+  ok "saved to $HOME/Sanaku_Leak_Audit_$_which.pdf"
+}
+
 cmd_dashboard() {
   ensure_config SUPABASE_URL SUPABASE_ANON_KEY N8N_URL
   need_cmd npm
@@ -608,6 +645,8 @@ sanaku - control script
   sh ~/sanaku.sh import NAME  install a workflow into n8n (see list below)
   sh ~/sanaku.sh dashboard   deploy the internal command center
   sh ~/sanaku.sh site        deploy the public landing page
+  sh ~/sanaku.sh secure      how to put n8n behind HTTPS (needed for Invite)
+  sh ~/sanaku.sh pdf [which] make an emailable leak-audit PDF (home|dental|law)
   sh ~/sanaku.sh config      re-enter stored keys (add names to redo just those)
   sh ~/sanaku.sh paste KEY   read one value straight from the system clipboard
   sh ~/sanaku.sh set KEY VAL set one value directly (paste the value on the line)
@@ -646,6 +685,8 @@ case "${1:-}" in
   import)    shift; cmd_import "$@" ;;
   dashboard) cmd_dashboard ;;
   site)      cmd_site ;;
+  secure)    cmd_secure ;;
+  pdf)       shift; cmd_pdf "$@" ;;
   config)    shift; cmd_config "$@" ;;
   paste)     shift; cmd_paste "$@" ;;
   set)       shift; cmd_set "$@" ;;
