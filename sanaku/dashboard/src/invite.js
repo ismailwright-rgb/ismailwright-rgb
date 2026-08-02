@@ -35,7 +35,15 @@ export async function invitePortalUser({ email, clientId }) {
     });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.ok) return { ok: true };
-    return { ok: false, error: j.error || `The invite endpoint answered ${r.status}.` };
+    if (j.error) return { ok: false, error: j.error };
+    // A 2xx with no body means the workflow died before any Respond node ran.
+    // "answered 200" reads like success and tells you nothing about where.
+    return {
+      ok: false,
+      error: r.ok
+        ? 'The workflow started but never confirmed - open n8n > Executions and look at the last run of "Sanaku - Invite Client User".'
+        : `The invite endpoint answered ${r.status}.`,
+    };
   } catch (e) {
     // A blocked mixed-content request and a dead server look identical from
     // here, so name both rather than guessing at one.
