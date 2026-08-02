@@ -85,6 +85,14 @@ validate() { # validate KIND VALUE
       _bad=$(printf '%s' "$_v" | tr -d 'A-Za-z0-9_.:/-')
       [ -n "$_bad" ] && printf 'contains unexpected characters - the paste may have been mangled by your terminal'
       ;;
+    pat)
+      case "$_v" in
+        sbp_*) ;;
+        *) printf 'a Supabase access token starts with "sbp_" - create one at supabase.com/dashboard/account/tokens'; return 0 ;;
+      esac
+      _bad=$(printf '%s' "$_v" | tr -d 'A-Za-z0-9_')
+      [ -n "$_bad" ] && printf 'contains characters the token cannot have - the paste was mangled'
+      ;;
     email)
       case "$_v" in
         *@*.*) ;;
@@ -130,13 +138,14 @@ SUPABASE_SERVICE_KEY='$SUPABASE_SERVICE_KEY'
 SUPABASE_ANON_KEY='$SUPABASE_ANON_KEY'
 SERPAPI_KEY='$SERPAPI_KEY'
 OWNER_EMAIL='$OWNER_EMAIL'
+SUPABASE_PAT='$SUPABASE_PAT'
 DASHBOARD_URL='$DASHBOARD_URL'
 EOF
   chmod 600 "$CONFIG"
   ok "saved to $CONFIG (readable only by you)"
 }
 
-KEYS="N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY OWNER_EMAIL DASHBOARD_URL"
+KEYS="N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY OWNER_EMAIL DASHBOARD_URL SUPABASE_PAT"
 
 load_config() {
   # Values passed in the environment win over the stored file, so a fully
@@ -176,6 +185,7 @@ ensure_config() { # ensure_config key1 key2 ...
       SERPAPI_KEY)          ask SERPAPI_KEY "SerpAPI key (serpapi.com/manage-api-key)" key;;
       OWNER_EMAIL)          ask OWNER_EMAIL "Your email (for digests/alerts)" email;;
       DASHBOARD_URL)        ask DASHBOARD_URL "Command center URL (where client invite links land)" url;;
+      SUPABASE_PAT)         ask SUPABASE_PAT "Supabase access token (supabase.com/dashboard/account/tokens, starts sbp_)" pat;;
     esac
   done
   N8N_URL="${N8N_URL%/}"
@@ -284,6 +294,43 @@ cmd_scrape() {
   SERPAPI_KEY="$SERPAPI_KEY" OWNER_EMAIL="$OWNER_EMAIL" \
   MAX_NEW="${MAX_NEW:-20}" \
     sh "$_engine"
+}
+
+# Apply SQL straight to Supabase, so nothing has to be pasted into a web editor.
+cmd_migrate() {
+  ensure_config SUPABASE_URL SUPABASE_PAT
+  need_cmd python3
+  _ref=$(printf '%s' "$SUPABASE_URL" | sed 's|^https\{0,1\}://||; s|\.supabase\.co.*$||')
+  [ -n "$_ref" ] || { warn "could not read the project ref out of SUPABASE_URL"; exit 1; }
+
+  _work="$HOME/.sanaku-migrate"
+  rm -rf "$_work"; mkdir -p "$_work"
+  curl -fsSL "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz" \
+    | tar xz -C "$_work" --strip-components=1
+
+  head1 "Applying SQL to project $_ref"
+  _engine=$(fetch_engine apply-sql.py)
+  for _f in "$_work"/sanaku/supabase/RUN-THIS-NOW.sql "$_work"/sanaku/supabase/ADDONS-RUN-THIS.sql; do
+    [ -f "$_f" ] || continue
+    printf '  %s ... ' "$(basename "$_f")"
+    SQL_FILE="$_f" PROJECT_REF="$_ref" PAT="$SUPABASE_PAT" python3 "$_engine" || exit 1
+  done
+  say ""
+  ok "database is up to date"
+}
+
+# Everything, in the right order, in one command.
+cmd_ship() {
+  head1 "1/4  Database"
+  cmd_migrate
+  head1 "2/4  Client invite workflow"
+  cmd_import invite-client-user || warn "workflow import failed - Invite will fall back to manual steps"
+  head1 "3/4  Command center"
+  cmd_dashboard
+  head1 "4/4  Public site"
+  cmd_site
+  say ""
+  ok "Everything is live."
 }
 
 cmd_audit() {
@@ -586,6 +633,7 @@ cmd_set() { # cmd_set KEYNAME VALUE
   [ -n "$_value" ] || { say "No value given. Usage: sh ~/sanaku.sh set $_target <value>"; exit 1; }
 
   case "$_target" in
+    SUPABASE_PAT) _kind=pat ;;
     *URL)        _kind=url ;;
     *EMAIL)      _kind=email ;;
     SERPAPI_KEY) _kind=key ;;
@@ -624,6 +672,7 @@ cmd_paste() { # cmd_paste KEYNAME
   _clip=$(printf '%s' "$_clip" | tr -d '\n\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 
   case "$_target" in
+    SUPABASE_PAT) _kind=pat ;;
     *URL)   _kind=url ;;
     *EMAIL) _kind=email ;;
     SERPAPI_KEY) _kind=key ;;
@@ -649,6 +698,8 @@ usage() {
 sanaku - control script
 
   sh ~/sanaku.sh update      pull the latest version of this script
+  sh ~/sanaku.sh ship        do EVERYTHING: database, workflow, both sites
+  sh ~/sanaku.sh migrate     apply pending SQL to Supabase (no copy-paste)
   sh ~/sanaku.sh next        what should I do right now? (start here)
   sh ~/sanaku.sh status      health check + prospect counts
   sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
@@ -693,6 +744,8 @@ case "${1:-}" in
   update)    cmd_update ;;
   doctor)    cmd_doctor ;;
   audit)     cmd_audit ;;
+  migrate)   cmd_migrate ;;
+  ship)      cmd_ship ;;
   logs)      cmd_logs ;;
   next)      cmd_next ;;
   scrape)    cmd_scrape ;;
