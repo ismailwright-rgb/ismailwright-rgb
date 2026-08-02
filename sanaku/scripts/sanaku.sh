@@ -427,7 +427,14 @@ sys.stdout.write(json.dumps({
       say "  Send yourself a test invite before you send one to a client." ;;
     *)
       say "FAILED (HTTP $_code)"
-      cut -c1-300 "$_tmp/resp.txt" 2>/dev/null | sed 's/^/    /'
+      # A 5xx from Supabase comes back as a full Cloudflare error page. Dumping
+      # 150 lines of HTML at someone buries the one line that matters.
+      if head -c 200 "$_tmp/resp.txt" 2>/dev/null | grep -qi '<!DOCTYPE\|<html'; then
+        say "    Supabase's API is down right now (not your config, not your token)."
+        say "    Wait a few minutes and run this again, or set it by hand below."
+      else
+        cut -c1-300 "$_tmp/resp.txt" 2>/dev/null | sed 's/^/    /'
+      fi
       say ""
       say "  Set it by hand instead: Supabase > Project Settings > Authentication"
       say "  > SMTP Settings > Enable Custom SMTP"
