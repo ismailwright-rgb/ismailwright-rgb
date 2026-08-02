@@ -297,6 +297,12 @@ cmd_scrape() {
 }
 
 # Apply SQL straight to Supabase, so nothing has to be pasted into a web editor.
+#
+# curl does the HTTPS, not python. A python.org install on macOS ships without
+# CA certificates until you run Install Certificates.command, so urllib fails
+# with CERTIFICATE_VERIFY_FAILED on a perfectly good connection. curl uses the
+# system trust store and just works. python is still used to build the JSON
+# body - that is string work, not network work.
 cmd_migrate() {
   ensure_config SUPABASE_URL SUPABASE_PAT
   need_cmd python3
@@ -309,11 +315,40 @@ cmd_migrate() {
     | tar xz -C "$_work" --strip-components=1
 
   head1 "Applying SQL to project $_ref"
-  _engine=$(fetch_engine apply-sql.py)
   for _f in "$_work"/sanaku/supabase/RUN-THIS-NOW.sql "$_work"/sanaku/supabase/ADDONS-RUN-THIS.sql; do
     [ -f "$_f" ] || continue
     printf '  %s ... ' "$(basename "$_f")"
-    SQL_FILE="$_f" PROJECT_REF="$_ref" PAT="$SUPABASE_PAT" python3 "$_engine" || exit 1
+
+    SQL_FILE="$_f" python3 -c 'import json,os,sys; sys.stdout.write(json.dumps({"query": open(os.environ["SQL_FILE"], encoding="utf-8").read()}))' > "$_work/body.json"
+
+    _code=$(curl -sS -o "$_work/resp.txt" -w '%{http_code}' -m 180 -X POST \
+      "https://api.supabase.com/v1/projects/$_ref/database/query" \
+      -H "Authorization: Bearer $SUPABASE_PAT" \
+      -H "Content-Type: application/json" \
+      --data-binary "@$_work/body.json" 2>"$_work/curlerr.txt") || _code="000"
+
+    case "$_code" in
+      2*)
+        say "applied" ;;
+      000)
+        say "FAILED (could not connect)"
+        sed 's/^/    /' "$_work/curlerr.txt" 2>/dev/null | head -3
+        exit 1 ;;
+      401|403)
+        say "FAILED (token rejected)"
+        say "    Make a new one at supabase.com/dashboard/account/tokens, then:"
+        say "      sh ~/sanaku.sh set SUPABASE_PAT sbp_..."
+        exit 1 ;;
+      404)
+        say "FAILED (no such endpoint)"
+        say "    This script's assumption about the API is wrong, not your SQL."
+        say "    Paste the file into the SQL Editor and say that migrate 404'd."
+        exit 1 ;;
+      *)
+        say "FAILED (HTTP $_code)"
+        cut -c1-400 "$_work/resp.txt" 2>/dev/null | sed 's/^/    /'
+        exit 1 ;;
+    esac
   done
   say ""
   ok "database is up to date"
