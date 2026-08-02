@@ -14,7 +14,7 @@
 //   7. No secret-looking literals in the JSON
 //   8. Every "={{" expression has balanced "}}"
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -147,6 +147,68 @@ for (const { dir, name: file } of files) {
 
   console.log(`  ok    ${file} (${wf.nodes.length} nodes)`);
 }
+
+
+// ---------------------------------------------------------------------------
+// Price parity: the sales sheet hardcodes prices in JS, the portal reads them
+// from the database. They are quoted to the same prospect days apart, so a
+// change in one and not the other is a credibility problem, not a typo.
+// ---------------------------------------------------------------------------
+function checkPrices() {
+  const sqlPath = 'sanaku/supabase/ADDONS-RUN-THIS.sql';
+  const htmlPath = 'sanaku/site/leak-audit.html';
+  if (!existsSync(sqlPath) || !existsSync(htmlPath)) return;
+  console.log('\nPrice parity (sales sheet vs catalog)');
+
+  const sql = readFileSync(sqlPath, 'utf8');
+  const rows = {};
+  const starts = [...sql.matchAll(/^\('/gm)].map((m) => m.index);
+  starts.forEach((st, i) => {
+    const blk = sql.slice(st, starts[i + 1] ?? sql.length);
+    const code = blk.match(/^\('([a-z0-9_]+)'/)[1];
+    const m = blk.match(/array\[[^\]]*\],\s*(\d+),\s*(\d+),/);
+    if (m) rows[code] = [+m[1], +m[2]];
+  });
+
+  const html = readFileSync(htmlPath, 'utf8');
+  const blk = html.split('const PRICE = {')[1]?.split('\n  };')[0] ?? '';
+  const grab = (ind, key) => {
+    const seg = blk.split(ind + ':')[1] ?? '';
+    const m = seg.match(new RegExp(key + ':\\[(\\d+),\\s*(\\d+)\\]'));
+    return m ? [+m[1], +m[2]] : null;
+  };
+  const bundleOf = (ind) => {
+    const seg = blk.split(ind + ':')[1] ?? '';
+    const m = seg.match(/bundle: \[(\d+),\s*(\d+)\]/);
+    return m ? [+m[1], +m[2]] : null;
+  };
+
+  const MAP = {
+    home: [['missed', 'recover_missed_call_home'], ['afterhours', 'after_hours_intake_home'],
+           ['nurture', 'nurture_home'], ['reminders', 'reminders_home'],
+           ['agent', 'voice_reception_home'], ['callback', 'voice_callback_home']],
+    dental: [['missed', 'recover_missed_call_medical'], ['afterhours', 'after_hours_intake_medical'],
+             ['nurture', 'nurture_medical'], ['reminders', 'reminders_medical'],
+             ['agent', 'voice_reception_medical']],
+    law: [['missed', 'recover_missed_call_law'], ['afterhours', 'after_hours_intake_law'],
+          ['nurture', 'nurture_law'], ['reminders', 'reminders_law'],
+          ['agent', 'voice_reception_law'], ['callback', 'voice_callback_law']],
+  };
+  const BUNDLE = { home: 'bundle_recovery_home', dental: 'bundle_recovery_medical', law: 'bundle_recovery_law' };
+  const same = (a, b) => a && b && a[0] === b[0] && a[1] === b[1];
+  let n = 0;
+  for (const [ind, pairs] of Object.entries(MAP)) {
+    for (const [key, code] of pairs) {
+      const h = grab(ind, key), s = rows[code];
+      if (!same(h, s)) { fail(htmlPath, `${ind}.${key} (${code}): sheet=${h} catalog=${s}`); n++; }
+    }
+    if (!same(bundleOf(ind), rows[BUNDLE[ind]])) {
+      fail(htmlPath, `${ind}.bundle: sheet=${bundleOf(ind)} catalog=${rows[BUNDLE[ind]]}`); n++;
+    }
+  }
+  if (n === 0) console.log(`  ok    sheet matches all ${Object.keys(rows).length} catalog rows`);
+}
+checkPrices();
 
 if (failures > 0) {
   console.error(`\n${failures} validation failure(s).`);
