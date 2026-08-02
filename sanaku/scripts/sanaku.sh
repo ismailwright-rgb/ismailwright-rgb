@@ -139,13 +139,14 @@ SUPABASE_ANON_KEY='$SUPABASE_ANON_KEY'
 SERPAPI_KEY='$SERPAPI_KEY'
 OWNER_EMAIL='$OWNER_EMAIL'
 SUPABASE_PAT='$SUPABASE_PAT'
+SMTP_PASS='$SMTP_PASS'
 DASHBOARD_URL='$DASHBOARD_URL'
 EOF
   chmod 600 "$CONFIG"
   ok "saved to $CONFIG (readable only by you)"
 }
 
-KEYS="N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY OWNER_EMAIL DASHBOARD_URL SUPABASE_PAT"
+KEYS="N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY OWNER_EMAIL DASHBOARD_URL SUPABASE_PAT SMTP_PASS"
 
 load_config() {
   # Values passed in the environment win over the stored file, so a fully
@@ -185,6 +186,7 @@ ensure_config() { # ensure_config key1 key2 ...
       SERPAPI_KEY)          ask SERPAPI_KEY "SerpAPI key (serpapi.com/manage-api-key)" key;;
       OWNER_EMAIL)          ask OWNER_EMAIL "Your email (for digests/alerts)" email;;
       DASHBOARD_URL)        ask DASHBOARD_URL "Command center URL (where client invite links land)" url;;
+      SMTP_PASS)            ask SMTP_PASS "Gmail app password for sending client emails" key;;
       SUPABASE_PAT)         ask SUPABASE_PAT "Supabase access token (supabase.com/dashboard/account/tokens, starts sbp_)" pat;;
     esac
   done
@@ -294,6 +296,78 @@ cmd_scrape() {
   SERPAPI_KEY="$SERPAPI_KEY" OWNER_EMAIL="$OWNER_EMAIL" \
   MAX_NEW="${MAX_NEW:-20}" \
     sh "$_engine"
+}
+
+# Send client emails from Sanaku, not from noreply@mail.app.supabase.io.
+#
+# Two reasons this is not cosmetic. Supabase's built-in sender is rate limited
+# to a handful of messages an hour, so a run of invites silently stops going
+# out. And a password link from an address the client has never heard of, for
+# a service they pay hundreds a month for, reads exactly like phishing.
+cmd_smtp() {
+  ensure_config SUPABASE_URL SUPABASE_PAT OWNER_EMAIL
+  need_cmd python3
+
+  case "$OWNER_EMAIL" in
+    *@gmail.com) ;;
+    *) say "Sender will be $OWNER_EMAIL - make sure that mailbox can send via SMTP." ;;
+  esac
+
+  if [ -z "${SMTP_PASS:-}" ]; then
+    head1 "Gmail app password"
+    say "Gmail refuses your normal password over SMTP. You need an app password:"
+    say "  1. Google Account > Security > 2-Step Verification (turn it on if it is off)"
+    say "  2. Then: Google Account > Security > App passwords"
+    say "  3. Name it Sanaku, create, and copy the 16 characters"
+    ask SMTP_PASS "App password for $OWNER_EMAIL (16 characters, spaces are fine)" key
+    save_config
+  fi
+
+  _ref=$(printf '%s' "$SUPABASE_URL" | sed 's|^https\{0,1\}://||; s|\.supabase\.co.*$||')
+  _tmp=$(mktemp -d)
+
+  printf '  sender -> %s ... ' "$OWNER_EMAIL"
+  SENDER="$OWNER_EMAIL" PASS="$SMTP_PASS" python3 -c '
+import json, os, sys
+# Gmail app passwords are shown in groups of four; people paste the spaces.
+pw = os.environ["PASS"].replace(" ", "")
+sys.stdout.write(json.dumps({
+    "smtp_admin_email": os.environ["SENDER"],
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 465,
+    "smtp_user": os.environ["SENDER"],
+    "smtp_pass": pw,
+    "smtp_sender_name": "Sanaku",
+    # The built-in limit is a few an hour. Gmail allows far more, and an
+    # invite that never arrives is indistinguishable from a broken product.
+    "rate_limit_email_sent": 100,
+}))' > "$_tmp/body.json"
+
+  _code=$(curl -sS -o "$_tmp/resp.txt" -w '%{http_code}' -m 60 -X PATCH \
+    "https://api.supabase.com/v1/projects/$_ref/config/auth" \
+    -H "Authorization: Bearer $SUPABASE_PAT" \
+    -H "Content-Type: application/json" \
+    --data-binary "@$_tmp/body.json" 2>/dev/null) || _code="000"
+
+  case "$_code" in
+    2*)
+      say "set"
+      say ""
+      ok "Client emails now come from $OWNER_EMAIL"
+      say "  Send yourself a test invite before you send one to a client." ;;
+    *)
+      say "FAILED (HTTP $_code)"
+      cut -c1-300 "$_tmp/resp.txt" 2>/dev/null | sed 's/^/    /'
+      say ""
+      say "  Set it by hand instead: Supabase > Project Settings > Authentication"
+      say "  > SMTP Settings > Enable Custom SMTP"
+      say "    Host      smtp.gmail.com     Port  465"
+      say "    Username  $OWNER_EMAIL"
+      say "    Password  your 16-character app password"
+      say "    Sender    $OWNER_EMAIL       Name  Sanaku" ;;
+  esac
+  rm -rf "$_tmp"
+  return 0
 }
 
 # Point Supabase Auth at the command center.
@@ -774,6 +848,7 @@ sanaku - control script
   sh ~/sanaku.sh ship        do EVERYTHING: database, workflow, both sites
   sh ~/sanaku.sh migrate     apply pending SQL to Supabase (no copy-paste)
   sh ~/sanaku.sh authurl     point Supabase login links at the command center
+  sh ~/sanaku.sh smtp        send client emails from your address, not Supabase's
   sh ~/sanaku.sh next        what should I do right now? (start here)
   sh ~/sanaku.sh status      health check + prospect counts
   sh ~/sanaku.sh doctor      diagnose connection/key problems step by step
@@ -820,6 +895,7 @@ case "${1:-}" in
   audit)     cmd_audit ;;
   migrate)   cmd_migrate ;;
   authurl)   cmd_authurl ;;
+  smtp)      cmd_smtp ;;
   ship)      cmd_ship ;;
   logs)      cmd_logs ;;
   next)      cmd_next ;;
