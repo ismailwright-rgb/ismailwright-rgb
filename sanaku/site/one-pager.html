@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sanaku — Every missed call has a price tag</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ==========================================================================
+     ONE page. Letter. Everything is sized to that constraint - if a change
+     pushes it to two, it stops being the thing a lead will actually read.
+     ========================================================================= */
+  :root {
+    --paper:#fff; --ink:#172a23; --soft:#51625b; --line:#dcd7ca;
+    --green:#0d6b42; --gold:#9a7226; --rust:#c9603f;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:"Instrument Sans",-apple-system,sans-serif;
+    color:var(--ink); background:#e9e6df; font-size:10.9pt; line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  .sheet {
+    width:8.5in; min-height:11in; margin:18px auto; background:var(--paper);
+    padding:0.44in 0.5in 0.36in; box-shadow:0 6px 30px rgba(0,0,0,.16);
+    display:flex; flex-direction:column;
+  }
+  h1,h2,h3,.serif { font-family:"Fraunces",Georgia,serif; font-weight:500; letter-spacing:-.01em; }
+
+  /* ------------------------------------------------------------- masthead - */
+  .mast { display:flex; align-items:flex-start; gap:14px; padding-bottom:9px; border-bottom:2px solid var(--ink); }
+  .mark { font-family:"Fraunces",serif; font-weight:600; font-size:17pt; letter-spacing:.2em; line-height:1; }
+  .mast .tag { font-size:8pt; color:var(--soft); margin-top:4px; }
+  .contact { margin-left:auto; text-align:right; font-size:9pt; line-height:1.45; }
+  .contact .ph { font-family:"Fraunces",serif; font-size:13pt; font-weight:600; color:var(--green); display:block; }
+  .contact a { color:var(--soft); text-decoration:none; }
+
+  /* ---------------------------------------------------------------- hero -- */
+  h1 { font-size:27pt; line-height:1.04; margin:16px 0 8px; }
+  .lede { font-size:11.2pt; color:var(--soft); max-width:5.6in; }
+
+  .eyebrow {
+    font-size:7.4pt; font-weight:600; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--gold); margin:17px 0 7px;
+  }
+
+  /* --------------------------------------------------------------- table -- */
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:left; padding:6px 7px; border-bottom:1px solid var(--line); }
+  th { font-size:6.8pt; text-transform:uppercase; letter-spacing:.11em; color:var(--soft); font-weight:600; border-bottom:1.2px solid var(--ink); }
+  td { font-size:9.9pt; }
+  td.n { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  td.loss { font-family:"Fraunces",serif; font-size:10pt; font-weight:600; color:var(--green); }
+  tr.me td { background:#f2f7f4; }
+  tr.me td:first-child { font-weight:600; box-shadow:inset 3px 0 0 var(--green); }
+
+  /* ------------------------------------------------------------ your math - */
+  .math { display:flex; gap:9px; align-items:stretch; }
+  .box { flex:1; border:1px solid var(--line); border-radius:7px; padding:11px 12px; }
+  .box.hi { background:#0f2b20; border-color:#0f2b20; color:#eaf3ee; }
+  .box .k { font-size:6.8pt; text-transform:uppercase; letter-spacing:.11em; color:var(--soft); font-weight:600; }
+  .box.hi .k { color:#8fb0a0; }
+  .box .v { font-family:"Fraunces",serif; font-size:21pt; font-weight:600; line-height:1.12; font-variant-numeric:tabular-nums; }
+  .box.a .v { color:var(--rust); }
+  .box.hi .v { color:#4fd39a; }
+  .box .s { font-size:7.6pt; color:var(--soft); }
+  .box.hi .s { color:#8fb0a0; }
+
+  /* the leak, drawn */
+  .track { display:flex; height:19px; border-radius:5px; overflow:hidden; margin-top:8px; border:1px solid var(--line); }
+  .track .kept { background:#cfe0d6; }
+  .track .lost { background:var(--rust); }
+  .tracklab { display:flex; justify-content:space-between; font-size:7.6pt; color:var(--soft); margin-top:3px; }
+
+  /* --------------------------------------------------------------- steps -- */
+  .steps { display:grid; grid-template-columns:1fr 1fr; gap:13px 18px; }
+  .st { display:flex; gap:8px; }
+  .st .no { font-family:"Fraunces",serif; font-size:8.5pt; font-weight:600; color:var(--gold); padding-top:1px; }
+  .st h3 { font-size:11.2pt; line-height:1.2; }
+  .st p { font-size:9.2pt; color:var(--soft); line-height:1.38; }
+
+  /* --------------------------------------------------------------- price -- */
+  .price { display:flex; gap:9px; margin-top:4px; }
+  .pk { flex:1; border:1px solid var(--line); border-radius:7px; padding:11px 13px; }
+  .pk.main { border-color:var(--green); border-width:1.5px; background:#f2f7f4; }
+  .pk .t { font-family:"Fraunces",serif; font-size:10.5pt; font-weight:600; }
+  .pk .f { font-family:"Fraunces",serif; font-size:17pt; font-weight:600; color:var(--green); font-variant-numeric:tabular-nums; }
+  .pk .f small { font-family:"Instrument Sans",sans-serif; font-size:8pt; color:var(--soft); font-weight:400; }
+  .pk .d { font-size:8.6pt; color:var(--soft); line-height:1.35; }
+
+  /* ---------------------------------------------------------------- foot -- */
+  .foot {
+    margin-top:auto; padding-top:9px; border-top:2px solid var(--ink);
+    display:flex; align-items:center; gap:14px;
+  }
+  .foot .cta { font-family:"Fraunces",serif; font-size:13pt; font-weight:600; line-height:1.2; }
+  .foot .cta small { display:block; font-family:"Instrument Sans",sans-serif; font-size:8.4pt; font-weight:400; color:var(--soft); margin-top:2px; }
+  .foot .reach { margin-left:auto; text-align:right; font-size:9pt; line-height:1.4; }
+  .foot .reach b { font-family:"Fraunces",serif; font-size:13pt; color:var(--green); display:block; }
+  .foot .reach a { color:var(--soft); text-decoration:none; }
+  .rule { font-size:8pt; color:var(--soft); margin-top:7px; line-height:1.35; }
+
+  @media print {
+    @page { size:Letter; margin:0; }
+    body { background:#fff; }
+    .sheet { margin:0; box-shadow:none; width:auto; min-height:auto; height:11in; }
+    * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="mast">
+    <div>
+      <div class="mark">SANAKU</div>
+      <div class="tag">Lead-capture automation for local service businesses</div>
+    </div>
+    <div class="contact">
+      <span class="ph">(714) 584-4086</span>
+      <a href="mailto:sanakuuai@gmail.com">sanakuuai@gmail.com</a><br>
+      <a href="https://sanaku.netlify.app">sanaku.netlify.app</a>
+    </div>
+  </div>
+
+  <h1>Every missed call has a price tag.</h1>
+  <p class="lede">
+    You already pay for the phone to ring. Sanaku catches the leads that currently
+    walk away — under your brand, not ours.
+  </p>
+
+  <div class="eyebrow">The leak · what one lost lead actually costs</div>
+  <table>
+    <thead><tr><th>Industry</th><th>Leads / Mo</th><th>Value / Lead</th><th>Lost at 25%</th></tr></thead>
+    <tbody>
+      <tr id="r-dental"><td>Dental / Medical</td><td class="n">45–65</td><td class="n">$800–$1,200</td><td class="n loss">$9,000–$19,500</td></tr>
+      <tr id="r-law"><td>Personal Injury Law</td><td class="n">80–120</td><td class="n">$3,500–$5,000</td><td class="n loss">$70,000–$150,000</td></tr>
+      <tr id="r-home"><td>HVAC / Home Services</td><td class="n">60–90</td><td class="n">$1,200–$2,000</td><td class="n loss">$18,000–$45,000</td></tr>
+    </tbody>
+  </table>
+
+  <div class="eyebrow">What that means for you · <span id="indName">HVAC / Home Services</span></div>
+  <div class="math">
+    <div class="box a">
+      <div class="k">Walking out the door</div>
+      <div class="v" id="mLoss">$126k</div>
+      <div class="s">a year · <span id="mSlip">19</span> leads a month never properly answered</div>
+    </div>
+    <div class="box hi">
+      <div class="k">You'd keep</div>
+      <div class="v" id="mKeep">$50k</div>
+      <div class="s">a year, catching 40% of them</div>
+    </div>
+    <div class="box">
+      <div class="k">Pays for itself in</div>
+      <div class="v" id="mBack">2 months</div>
+      <div class="s">then every $1 returns <b id="mMult">5.6×</b></div>
+    </div>
+  </div>
+  <div class="track">
+    <div class="kept" id="tKept" style="width:75%"></div>
+    <div class="lost" id="tLost" style="width:25%"></div>
+  </div>
+  <div class="tracklab">
+    <span id="lKept">56 of 75 leads reach you</span>
+    <span id="lLost">19 don't</span>
+  </div>
+
+  <div class="eyebrow">How the catch works</div>
+  <div class="steps">
+    <div class="st"><span class="no">01</span><div>
+      <h3>Missed-Call Text-Back</h3>
+      <p>A call goes unanswered → within seconds the caller gets a text from your number: “Sorry we missed you — what do you need help with?” The reply is captured, qualified, and you're alerted.</p>
+    </div></div>
+    <div class="st"><span class="no">02</span><div>
+      <h3>After-Hours Intake</h3>
+      <p>When the office is closed, a smart form or chat asks the three questions that qualify the lead, then books the appointment or escalates urgent work to your on-call phone.</p>
+    </div></div>
+    <div class="st"><span class="no">03</span><div>
+      <h3>Lead Nurture Sequences</h3>
+      <p>Five-touch follow-up for everyone who inquired and went quiet. Most businesses follow up once and stop — the sale usually happens on touch three or four.</p>
+    </div></div>
+    <div class="st"><span class="no">04</span><div>
+      <h3>Reminders &amp; No-Show Recovery</h3>
+      <p>Confirmations at booking, reminders at 24h and 1h, plus an automatic “life happens — want to rebook?” the morning after a no-show.</p>
+    </div></div>
+  </div>
+
+  <div class="eyebrow">What it costs</div>
+  <div class="price">
+    <div class="pk main">
+      <div class="t">Complete Lead Recovery</div>
+      <div class="f" id="pBundle">$650<small>/month · <span id="pBundleS">$1,200</span> setup</small></div>
+      <div class="d">All four above, working as one system. 30-day pilot free — you see real captured leads before you pay anything.</div>
+    </div>
+    <div class="pk">
+      <div class="t" id="pVoiceT">Add: AI Phone Agent</div>
+      <div class="f" id="pVoice">$350<small>/month · <span id="pVoiceS">$750</span> setup</small></div>
+      <div class="d">Answers on the second ring, 24/7. Qualifies the caller and books straight into your calendar.</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="cta">
+      See your real number.
+      <small>15-minute free leak audit. No pressure. Just clarity on what you're currently losing.</small>
+    </div>
+    <div class="reach">
+      <b>(714) 584-4086</b>
+      <a href="mailto:sanakuuai@gmail.com">sanakuuai@gmail.com</a>
+    </div>
+  </div>
+  <p class="rule">
+    Under your brand, not ours. We never cold-call: automated calls only ever go to people who
+    just contacted you. Every text honours STOP immediately, and you can pause everything from
+    your portal in one click.
+  </p>
+
+</div>
+
+<script>
+  const IND = {
+    home:   { name:"HVAC / Home Services",  leads:75,  value:1600, bundle:[1200,650],  voice:[750,350],  vt:"AI Phone Agent" },
+    dental: { name:"Dental / Medical",      leads:55,  value:1000, bundle:[1600,850],  voice:[1500,650], vt:"AI Front-Desk Agent" },
+    law:    { name:"Personal Injury Law",   leads:100, value:4250, bundle:[2200,1100], voice:[1500,650], vt:"AI Intake Agent" },
+  };
+  const MISS = 0.25, CLOSE = 0.35, CATCH = 0.40;
+  const $ = (id) => document.getElementById(id);
+  const fmt  = (n) => "$" + Math.round(n).toLocaleString("en-US");
+  const fmtK = (n) => n >= 10000 ? "$" + Math.round(n/1000) + "k" : fmt(n);
+
+  const which = (new URLSearchParams(location.search).get("i") || "home").toLowerCase();
+  const d = IND[which] || IND.home;
+
+  const slip  = d.leads * MISS;
+  const lostY = slip * CLOSE * d.value * 12;
+  const keep  = lostY * CATCH;
+  const cost  = d.bundle[0] + d.bundle[1] * 12;
+  const days  = cost / (keep / 365);
+
+  $("indName").textContent = d.name;
+  $("mLoss").textContent = fmtK(lostY);
+  $("mSlip").textContent = Math.round(slip);
+  $("mKeep").textContent = fmtK(keep);
+  const plural = (n, word) => n + " " + word + (n === 1 ? "" : "s");
+  $("mBack").textContent = days < 31
+    ? plural(Math.max(1, Math.round(days)), "day")
+    : plural(Math.round(days / 30.4), "month");
+  $("mMult").textContent = (keep / cost).toFixed(1) + "×";
+
+  $("tKept").style.width = (100 - MISS*100) + "%";
+  $("tLost").style.width = (MISS*100) + "%";
+  $("lKept").textContent = Math.round(d.leads - slip) + " of " + d.leads + " leads reach you";
+  $("lLost").textContent = Math.round(slip) + " don't";
+
+  $("pBundle").firstChild.textContent  = fmt(d.bundle[1]);
+  $("pBundleS").textContent = fmt(d.bundle[0]);
+  $("pVoice").firstChild.textContent   = fmt(d.voice[1]);
+  $("pVoiceS").textContent  = fmt(d.voice[0]);
+  $("pVoiceT").textContent  = "Add: " + d.vt;
+
+  // Highlight the reader's own row so they find themselves in the table.
+  const row = $("r-" + (IND[which] ? which : "home"));
+  if (row) row.className = "me";
+</script>
+</body>
+</html>

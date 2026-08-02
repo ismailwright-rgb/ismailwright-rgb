@@ -40,31 +40,39 @@ async function loadPlaywright() {
 const { chromium } = await loadPlaywright();
 
 const here = dirname(fileURLToPath(import.meta.url));
-const page$ = resolve(join(here, '..', 'site', 'leak-audit.html'));
+// One-pager by default: it is the thing a lead will actually read. --full
+// renders the long audit sheet instead.
+const FULL = process.argv.includes('--full');
+const file = FULL ? 'leak-audit.html' : 'one-pager.html';
+const page$ = resolve(join(here, '..', 'site', file));
 if (!existsSync(page$)) {
   console.error('Cannot find site/leak-audit.html');
   process.exit(1);
 }
 
 const INDUSTRY = { home: 'HVAC / Home Services', dental: 'Dental / Medical', law: 'Personal Injury Law' };
-const which = (process.argv[2] || 'home').toLowerCase();
+const which = (process.argv.filter((a) => !a.startsWith('--'))[2] || 'home').toLowerCase();
 if (!INDUSTRY[which]) {
   console.error(`Unknown industry "${which}". Use one of: ${Object.keys(INDUSTRY).join(', ')}`);
   process.exit(1);
 }
-const out = resolve(process.argv[3] || join(here, '..', 'site', `Sanaku_Leak_Audit_${which}.pdf`));
+const args = process.argv.filter((a) => !a.startsWith('--'));
+const out = resolve(args[3] || join(here, '..', 'site',
+  FULL ? `Sanaku_Leak_Audit_${which}.pdf` : `Sanaku_${which}.pdf`));
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
-await page.goto('file://' + page$, { waitUntil: 'networkidle' });
-
-// Drive the page into the state we want printed.
-await page.selectOption('#industry', which);
+// The one-pager takes its vertical from the query string; the audit sheet has
+// a dropdown that has to be driven.
+await page.goto('file://' + page$ + (FULL ? '' : '?i=' + which), { waitUntil: 'networkidle' });
+if (FULL) {
+  await page.selectOption('#industry', which);
+}
 await page.waitForTimeout(250);
 
 // Fail loudly rather than shipping a PDF with $0 everywhere: if the calculator
 // did not run, every figure would print as its placeholder.
-const loss = await page.textContent('#lossYear');
+const loss = await page.textContent(FULL ? '#lossYear' : '#mLoss');
 if (!loss || loss === '$0') {
   console.error('The calculator did not populate - refusing to write a blank PDF.');
   await browser.close();
@@ -76,7 +84,8 @@ await page.pdf({
   path: out,
   format: 'Letter',
   printBackground: true,
-  margin: { top: '14mm', bottom: '14mm', left: '13mm', right: '13mm' },
+  // The one-pager sets its own margins in CSS so it can guarantee one page.
+  margin: FULL ? { top: '14mm', bottom: '14mm', left: '13mm', right: '13mm' } : undefined,
 });
 await browser.close();
 

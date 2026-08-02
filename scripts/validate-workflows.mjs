@@ -206,7 +206,27 @@ function checkPrices() {
       fail(htmlPath, `${ind}.bundle: sheet=${bundleOf(ind)} catalog=${rows[BUNDLE[ind]]}`); n++;
     }
   }
-  if (n === 0) console.log(`  ok    sheet matches all ${Object.keys(rows).length} catalog rows`);
+  // The one-pager carries its own copy of the bundle and voice prices.
+  const opPath = 'sanaku/site/one-pager.html';
+  if (existsSync(opPath)) {
+    const op = readFileSync(opPath, 'utf8');
+    const OP = { home: 'bundle_recovery_home', dental: 'bundle_recovery_medical', law: 'bundle_recovery_law' };
+    const OPV = { home: 'voice_reception_home', dental: 'voice_reception_medical', law: 'voice_reception_law' };
+    for (const ind of Object.keys(OP)) {
+      const line = op.split('\n').find((l) => l.trim().startsWith(ind + ':'));
+      if (!line) { fail(opPath, `no row for ${ind}`); n++; continue; }
+      const b = line.match(/bundle:\[(\d+),(\d+)\]/);
+      const v = line.match(/voice:\[(\d+),(\d+)\]/);
+      if (!same(b && [+b[1], +b[2]], rows[OP[ind]])) {
+        fail(opPath, `${ind} bundle: one-pager=${b && [+b[1], +b[2]]} catalog=${rows[OP[ind]]}`); n++;
+      }
+      if (!same(v && [+v[1], +v[2]], rows[OPV[ind]])) {
+        fail(opPath, `${ind} voice: one-pager=${v && [+v[1], +v[2]]} catalog=${rows[OPV[ind]]}`); n++;
+      }
+    }
+  }
+
+  if (n === 0) console.log(`  ok    sheet + one-pager match all ${Object.keys(rows).length} catalog rows`);
 }
 checkPrices();
 
