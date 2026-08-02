@@ -33,6 +33,7 @@ set -eu
 DASHBOARD_URL="${DASHBOARD_URL:-https://sanaku-command-center.netlify.app}"
 OWNER_EMAIL="${OWNER_EMAIL:-}"
 SERPAPI_KEY="${SERPAPI_KEY:-}"
+SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}"
 ACTIVATE="${ACTIVATE:-1}"
 
 N8N_URL="${N8N_URL%/}"
@@ -55,7 +56,7 @@ jsonget() { python3 -c "import sys,json;d=json.load(sys.stdin);print(eval(sys.ar
 
 # Printed so a stale cached copy is visible immediately, rather than being
 # diagnosed from an identical-looking traceback.
-BUILD="6"
+BUILD="7"
 echo "import-workflow.sh build $BUILD"
 
 echo "==> Checking n8n API access..."
@@ -82,7 +83,7 @@ print(json.dumps({
 echo "    credential: $SUPA_CRED_ID"
 
 echo "==> Patching for this instance..."
-export SUPA_CRED_ID DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY TMPDIR_WF="$TMP"
+export SUPA_CRED_ID DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY SUPABASE_ANON_KEY TMPDIR_WF="$TMP"
 python3 <<'PY'
 import json, os, re, sys
 
@@ -96,13 +97,16 @@ VALUES = {
     "DASHBOARD_URL":      os.environ["DASHBOARD_URL"].rstrip("/"),
     "SANAKU_OWNER_EMAIL": os.environ.get("OWNER_EMAIL", ""),
     "SERPAPI_KEY":        os.environ.get("SERPAPI_KEY", ""),
+    "SUPABASE_ANON_KEY":  os.environ.get("SUPABASE_ANON_KEY", ""),
 }
 VALUES = {k: v for k, v in VALUES.items() if v}
 
 # Without these the workflow fails in a way that looks like something else:
 # a bad SUPABASE_URL reads as an auth error, and a bad DASHBOARD_URL sends
 # the client an invite link that 404s.
-REQUIRED = {"SUPABASE_URL", "DASHBOARD_URL"}
+# Without the anon key, /auth/v1/user rejects the call and every invite
+# reports "not authorized" no matter who is signed in.
+REQUIRED = {"SUPABASE_URL", "DASHBOARD_URL", "SUPABASE_ANON_KEY"}
 
 def patch(obj):
     if isinstance(obj, dict):

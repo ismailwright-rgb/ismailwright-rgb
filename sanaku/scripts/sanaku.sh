@@ -385,12 +385,13 @@ cmd_import() { # cmd_import WORKFLOW-NAME
     exit 1
   fi
   case "$_wf" in *.json) ;; *) _wf="$_wf.json" ;; esac
-  ensure_config N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY
+  ensure_config N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY
   need_cmd python3
   _engine=$(fetch_engine import-workflow.sh)
   N8N_URL="$N8N_URL" N8N_KEY="$N8N_KEY" \
   SUPABASE_URL="$SUPABASE_URL" SUPABASE_SERVICE_KEY="$SUPABASE_SERVICE_KEY" \
   OWNER_EMAIL="${OWNER_EMAIL:-}" SERPAPI_KEY="${SERPAPI_KEY:-}" \
+  SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
   DASHBOARD_URL="${DASHBOARD_URL:-https://sanaku-command-center.netlify.app}" \
   WF_FILE="$_wf" \
     sh "$_engine"
