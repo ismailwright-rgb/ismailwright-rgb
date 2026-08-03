@@ -548,7 +548,8 @@ cmd_migrate() {
   head1 "Applying SQL to project $_ref"
   for _f in "$_work"/sanaku/supabase/RUN-THIS-NOW.sql \
             "$_work"/sanaku/supabase/ADDONS-RUN-THIS.sql \
-            "$_work"/sanaku/supabase/VOICE-RUN-THIS.sql; do
+            "$_work"/sanaku/supabase/VOICE-RUN-THIS.sql \
+            "$_work"/sanaku/supabase/SERVICES-RUN-THIS.sql; do
     [ -f "$_f" ] || continue
     printf '  %s ... ' "$(basename "$_f")"
 

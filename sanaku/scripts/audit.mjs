@@ -188,7 +188,10 @@ if (problems === before6) ok('portal reads the filtered view only; no margin fie
 head('Built but not wired');
 const allCode = [...src.map((f) => readFileSync(f, 'utf8')),
                  ...wfs.map((f) => readFileSync(join(wfDir, f), 'utf8'))].join('\n');
-const IGNORE = new Set(['sanaku_staff', 'sanaku_client_users']);  // reached via policies/functions only
+// Reached via policies or security-definer functions only, never named by a
+// screen or a workflow. sanaku_addon_bundle_members is read inside
+// sanaku_has_addon(), which is the only thing that should ever read it.
+const IGNORE = new Set(['sanaku_staff', 'sanaku_client_users', 'sanaku_addon_bundle_members']);
 let dangling = 0;
 for (const t of [...tables].sort()) {
   if (IGNORE.has(t) || !t.startsWith('sanaku_')) continue;
