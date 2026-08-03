@@ -261,28 +261,28 @@ sc.cell(row=sr + 2, column=1).fill = NOTE_FILL
 #    and started billing immediately. Below that, the trial is an investment.
 # ---------------------------------------------------------------------------
 tr = wb.create_sheet("Trial")
-tr["A1"] = "The 30-day trial — cost of the offer, and when it pays back"
+tr["A1"] = "The 30-day free month — what it costs you, and when it pays back"
 tr["A1"].font = H1
-tr["A2"] = ("Trial: pay the starting fee, run it 30 days, then the monthly begins. "
-            "Packages are excluded on purpose — a free month of a package is thousands per prospect.")
+tr["A2"] = ("Pay the service's setup fee, run it 30 days, then the monthly begins. "
+            "There is no trial discount — the free month is the offer, and it applies to every service.")
 tr["A2"].font = MUTED
 tr.merge_cells("A2:H2")
 
-header(tr, 4, ["Service", "Normal setup", "Trial start", "Given up at signup",
+header(tr, 4, ["Service", "Setup fee", "Paid to start", "Discount given",
                "Monthly from day 31", "Free month costs", "Year one on trial",
                "Year one paid up front"],
        [32, 14, 13, 18, 19, 16, 17, 20])
 
 tro = 5
 for s in services:
-    if s.get("trial_setup_fee") is None:
+    if not s.get("monthly_fee"):
         continue
     ref = row_of[s["code"]]
     tr.cell(row=tro, column=1, value=s["name"] + "  (" + ", ".join(s["allowed_verticals"]) + ")").font = BODY
     c = tr.cell(row=tro, column=2, value=f"='All Services'!E{ref}")
     c.font, c.number_format = BODY, MONEY
-    c = tr.cell(row=tro, column=3, value=float(s["trial_setup_fee"]))
-    c.font, c.number_format = INPUT, MONEY
+    c = tr.cell(row=tro, column=3, value=f"='All Services'!E{ref}")
+    c.font, c.number_format = BODY, MONEY
     for col, formula in (
         (4, f"=B{tro}-C{tro}"),                    # setup discount given away
         (5, f"='All Services'!F{ref}"),            # ongoing monthly

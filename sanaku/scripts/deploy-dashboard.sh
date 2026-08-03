@@ -27,7 +27,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 BRANCH="claude/n8n-prospect-tiering-hgkjb0"
-TARBALL="https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz"
+TARBALL="https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz?cb=$(date +%s)"
 WORK="$HOME/.sanaku-dashboard-build"
 
 echo "==> Downloading dashboard source..."

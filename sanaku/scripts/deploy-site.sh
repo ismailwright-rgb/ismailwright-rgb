@@ -14,7 +14,7 @@
 set -euo pipefail
 
 BRANCH="claude/n8n-prospect-tiering-hgkjb0"
-TARBALL="https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz"
+TARBALL="https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz?cb=$(date +%s)"
 WORK="$HOME/.sanaku-site-build"
 
 echo "==> Downloading site source..."

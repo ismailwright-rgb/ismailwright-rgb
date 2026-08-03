@@ -110,11 +110,13 @@ and are the standard structures firms already approve.
 
 | Vertical | Setup | Monthly | Per lead |
 |---|---|---|---|
-| Home services | $500 | $500–$1,000 | $50 (cap it) |
-| Dental / med spa | $500 | $500–$1,200 | — flat only |
-| PI law | $500 | $1,000–$2,500 | $100 per lead delivered, or flat |
+| Home services | per service | $500–$1,000 | $50 (cap it) |
+| Dental / med spa | per service | $500–$1,200 | — flat only |
+| PI law | per service | $1,000–$2,500 | $100 per lead delivered, or flat |
 
 **Why keep the setup fee:** free pilots attract people who were never going to
-buy. $500 filters tire-kickers, pays for your build time, and gets cash in on
-day one. De-risk the *retainer* instead — that's what the free pilot window in
+buy. Charging setup up front filters tire-kickers, pays for your build time, and
+gets cash in on day one. It is the service's own setup fee — see the services
+sheet for the figure — not a flat number, because a $1,500 build and a $250 one
+do not cost the same to stand up. De-risk the *retainer* instead — that's what the free pilot window in
 section 2 is for.

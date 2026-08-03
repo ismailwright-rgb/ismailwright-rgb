@@ -266,6 +266,12 @@ if (!existsSync(catalogPath)) {
   // hidden the second - the agreement really did still quote it.
   const PER_FILE_OK = {
     'index.html': new Set([75]),           // "one booking: $75-$300" - client value
+    // The rationale doc exists to argue our prices AGAINST the market, so it
+    // quotes competitor rates and client-value figures by design. Scoped to
+    // this file: the same numbers appearing in a price list would still fail.
+    'pricing-rationale.md': new Set([
+      18, 75, 199, 293, 542, 1500, 3000, 5000, 15000,
+    ]),
   };
 
   const docs = [];

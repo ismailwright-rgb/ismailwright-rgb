@@ -77,9 +77,6 @@ for (const b of services.filter((s) => s.category === 'bundle')) {
   if (m.savesSetup <= 0 || m.savesMonthly <= 0) {
     problems.push(`${b.code}: costs more than its parts`);
   }
-  if (b.trial_setup_fee != null) {
-    problems.push(`${b.code}: bundles are not offered on trial - thirty free days of a package is thousands of dollars per prospect`);
-  }
   // Selling the phone agent and the after-hours-only phone agent together
   // charges twice for one product.
   const codes = m.parts.map((p) => p.code);
@@ -87,18 +84,6 @@ for (const b of services.filter((s) => s.category === 'bundle')) {
     problems.push(`${b.code}: contains both after-hours answering and the full phone agent`);
   }
 }
-// A trial price with no ongoing price beside it is the one thing this sheet
-// must never print: it is how someone signs up for $250 without being told what
-// month two costs.
-for (const s of services) {
-  if (s.trial_setup_fee != null && !Number(s.monthly_fee)) {
-    problems.push(`${s.code}: has a trial price but no monthly fee to state alongside it`);
-  }
-  if (s.trial_setup_fee != null && Number(s.trial_setup_fee) > Number(s.setup_fee)) {
-    problems.push(`${s.code}: trial price is higher than the normal setup fee`);
-  }
-}
-
 if (problems.length) {
   console.error('Refusing to generate - the catalog does not add up:\n');
   for (const p of problems) console.error('  ' + p);
@@ -129,11 +114,13 @@ function priceLine(s) {
 function serviceRow(s) {
   const [label, cls] = STATUS[s.build_status] || STATUS.planned;
   const extra = priceLine(s);
-  // The ongoing figure is written into the same cell as the trial figure, on
-  // purpose. Split across columns it can be read as "$250" and skimmed past;
-  // in one sentence it cannot.
-  const trial = s.trial_setup_fee != null
-    ? `<div class="trial"><b>${money(s.trial_setup_fee)}</b> to start, then
+  // The ongoing figure sits in the same cell as the entry figure, on purpose.
+  // Split across columns the first number can be read alone and skimmed past.
+  // The entry price IS the setup fee - there is no trial discount, the free
+  // month is the offer. Stated next to the ongoing price so nobody reads the
+  // first number alone.
+  const trial = Number(s.monthly_fee)
+    ? `<div class="trial"><b>${money(s.setup_fee)}</b> to start &middot; 30 days free &middot; then
          <b>${money(s.monthly_fee)}/month</b> from day 31</div>`
     : '';
   return `

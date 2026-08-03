@@ -542,7 +542,7 @@ cmd_migrate() {
 
   _work="$HOME/.sanaku-migrate"
   rm -rf "$_work"; mkdir -p "$_work"
-  curl -fsSL "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz" \
+  curl -fsSL -H 'Cache-Control: no-cache' "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz?cb=$(date +%s)" \
     | tar xz -C "$_work" --strip-components=1
 
   head1 "Applying SQL to project $_ref"
@@ -755,7 +755,7 @@ json.dump({"generated_from":"live Supabase catalog","services":a,"bundle_members
           open(os.environ["OUT"],"w"))
 print(f"  {len(a)} services, {len(m)} package links")' || return 1
 
-  curl -fsSL "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz" \
+  curl -fsSL -H 'Cache-Control: no-cache' "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz?cb=$(date +%s)" \
     | tar xz -C "$_work" --strip-components=1 || { err "could not fetch the generator"; return 1; }
 
   head1 "Generating"
@@ -823,7 +823,7 @@ cmd_audit() {
   need_cmd node
   _work="$HOME/.sanaku-audit"
   rm -rf "$_work"; mkdir -p "$_work"
-  curl -fsSL "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz" \
+  curl -fsSL -H 'Cache-Control: no-cache' "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz?cb=$(date +%s)" \
     | tar xz -C "$_work" --strip-components=1
   ( cd "$_work" && node sanaku/scripts/audit.mjs )
 }
@@ -879,7 +879,7 @@ cmd_pdf() {
   _which="${1:-home}"
   _work="$HOME/.sanaku-site-build"
   rm -rf "$_work"; mkdir -p "$_work"
-  curl -fsSL "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz" \
+  curl -fsSL -H 'Cache-Control: no-cache' "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz?cb=$(date +%s)" \
     | tar xz -C "$_work" --strip-components=1
   ( cd "$_work/sanaku" && node scripts/make-pdf.mjs "$_which" "$HOME/Sanaku_Leak_Audit_$_which.pdf" )
   ok "saved to $HOME/Sanaku_Leak_Audit_$_which.pdf"
