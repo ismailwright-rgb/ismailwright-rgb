@@ -207,5 +207,94 @@ for (const t of [...tables].sort()) {
 }
 if (!dangling) ok('every table is read or written by something');
 
+// ---------------------------------------------------------------------------
+// 8. Every price a customer can read must exist in the catalog.
+//
+//    This is the one that stops the mess repeating. Four documents drifted
+//    apart before anyone noticed: the website quoted per-lead at $50-$100 while
+//    the catalog said $15-$35, docs/addon-pricing.md quoted overage at $0.60
+//    against a real $0.45, and the signed pilot agreement quoted a flat setup
+//    the catalog did not have. Every other fix corrects today's drift; this
+//    makes tomorrow's fail here instead of reaching a prospect.
+// ---------------------------------------------------------------------------
+head('Prices → catalog');
+const catalogPath = join(R, 'docs', 'catalog.json');
+if (!existsSync(catalogPath)) {
+  console.log('  WARN  docs/catalog.json missing - run: sh ~/sanaku.sh sellsheet');
+} else {
+  const cat = JSON.parse(readFileSync(catalogPath, 'utf8'));
+  const known = new Set();
+  const add = (n) => { if (n != null && Number(n) > 0) known.add(Number(n)); };
+  for (const s of cat.services) {
+    add(s.setup_fee); add(s.monthly_fee); add(s.per_lead_fee);
+    add(s.per_lead_booked_fee); add(s.trial_setup_fee); add(s.included_minutes);
+  }
+  // Bundle sums and savings are printed on the sheet and are legitimately derived.
+  const mem = {};
+  for (const m of cat.bundle_members || []) (mem[m.bundle_code] ||= []).push(m.member_code);
+  const by = Object.fromEntries(cat.services.map((s) => [s.code, s]));
+  for (const [b, ms] of Object.entries(mem)) {
+    const parts = ms.map((c) => by[c]).filter(Boolean);
+    const ss = parts.reduce((a, p) => a + Number(p.setup_fee), 0);
+    const mm = parts.reduce((a, p) => a + Number(p.monthly_fee), 0);
+    add(ss); add(mm); add(ss - Number(by[b].setup_fee)); add(mm - Number(by[b].monthly_fee));
+  }
+
+  // Figures that are deliberately NOT prices: what a lost job is worth to a
+  // client, competitor rates quoted for comparison, calculator defaults, and
+  // our own cost to serve. Each is listed on purpose so that a real price can
+  // never hide among them.
+  const NOT_PRICES = new Set([
+    // what a client loses / earns - the leak calculator and vertical cards
+    1, 3, 8, 10, 15, 20, 25, 30, 45, 60, 72, 80, 90, 120, 150, 180, 200, 300,
+    600, 800, 1000, 2000, 2500, 3000, 5000, 6300, 6825, 12000, 15750, 20000,
+    22500, 24500, 50000, 52500,
+    // our cost to serve, quoted in the pricing docs
+    52, 55, 65,
+    // competitor rates quoted for comparison
+    49, 168, 249, 284, 325, 468, 542,
+  ]);
+
+  // A UI mockup showing what the client portal looks like. Every figure in it
+  // is fabricated sample data for a fictional company, not an offer.
+  const MOCKUPS = new Set(['portal-preview.html']);
+
+  // Scoped per file rather than globally, because the same number means
+  // different things in different documents. "$75" on the landing page is what
+  // one dental booking is worth to the practice; "$75" in the pilot agreement
+  // would be a per-lead rate we no longer charge. A global exemption would have
+  // hidden the second - the agreement really did still quote it.
+  const PER_FILE_OK = {
+    'index.html': new Set([75]),           // "one booking: $75-$300" - client value
+  };
+
+  const docs = [];
+  for (const d of ['site', 'docs']) {
+    const dir = join(R, d);
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir)) {
+      if (/\.(html|md)$/.test(f) && !MOCKUPS.has(f)) docs.push(join(dir, f));
+    }
+  }
+  let drift = 0;
+  for (const f of docs) {
+    const text = readFileSync(f, 'utf8');
+    const local = PER_FILE_OK[f.split('/').pop()] || new Set();
+    const seen = new Set();
+    // $126k and $1.2m are magnitudes in a value argument, never a price on an
+    // invoice, so the suffix forms are skipped rather than truncated to $126.
+    for (const m of text.matchAll(/\$([\d,]+)(?![\d.]*[\dkKmM])/g)) {
+      const n = Number(m[1].replace(/,/g, ''));
+      if (!n || seen.has(n)) continue;
+      seen.add(n);
+      if (!known.has(n) && !NOT_PRICES.has(n) && !local.has(n)) {
+        bad(f.replace(R + '/', ''), `quotes $${n.toLocaleString()}, which is not in the catalog`);
+        drift++;
+      }
+    }
+  }
+  if (!drift) ok(`${docs.length} documents quote only catalog prices`);
+}
+
 console.log(problems ? `\n${problems} problem(s) found.\n` : '\nNothing broken. Every reference resolves.\n');
 process.exit(problems ? 1 : 0);

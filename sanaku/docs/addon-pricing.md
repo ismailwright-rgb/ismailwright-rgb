@@ -28,22 +28,28 @@ support — which is the actual work, and where the price comes from.
 
 ## The catalog
 
-Seeded by `migration-007-addons.sql`. Each client sees only their own vertical.
+**There is no price table in this file, deliberately.** There used to be, and by
+the time anyone noticed it had drifted badly: it listed eight of the
+twenty-eight services, and both its overage and its per-lead figures were well
+adrift of what the catalog actually charged. A hand-typed table sitting
+next to a generator will always lose to it, and the copy people read is the one
+that is wrong.
 
-| Add-on | Vertical | Setup | Monthly | Included | Overage | Per lead |
-|---|---|---|---|---|---|---|
-| AI Phone Agent | Home services | $750 | $350 | 400 min | $0.60/min | — |
-| AI Intake Agent | Law firm | $1,500 | $650 | 400 min | $0.75/min | $35 |
-| AI Front-Desk Agent | Medical | $1,500 | $650 | 400 min | $0.75/min | — |
-| Instant Lead Callback | Home services | $500 | $250 | 300 min | $0.60/min | $20 |
-| Instant Lead Callback | Law firm | $1,000 | $450 | 300 min | $0.75/min | $35 |
-| After-Hours Answering | All | $350 | $175 | 150 min | $0.60/min | — |
-| Spanish-Speaking Agent | All | $250 | $100 | — | — | — |
-| Review Requests (SMS) | Home svc, law | $250 | $100 | — | — | — |
+The prices live in `sanaku_addons`. To see them:
 
-**Margin at the included tier:** 400 minutes costs ~$65 to serve against $350
-collected — about 81%. Overage at $0.60 against $0.15 cost keeps the margin
-roughly constant as volume grows, which is the entire point of the allowance.
+```sh
+sh ~/sanaku.sh sellsheet     # pulls live and writes the sheet + workbook
+```
+
+That produces `sell-sheet.html` (printable, for clients) and
+`sanaku-services.xlsx` (every figure a formula, for you). `node
+scripts/audit.mjs` fails if any other document quotes a number the catalog does
+not contain.
+
+**Margin at the included tier:** 400 minutes costs ~$52–72 to serve against $350
+collected — roughly 79–85%. Overage priced well above the ~$0.18 all-in cost
+keeps that margin roughly constant as volume grows, which is the entire point of
+the allowance.
 
 **Never sell unlimited minutes.** Your cost is linear in volume and a flat
 unlimited price is a bet that your best client stays small. The allowance is

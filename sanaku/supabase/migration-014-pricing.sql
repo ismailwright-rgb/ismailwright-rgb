@@ -72,6 +72,27 @@ where code in ('voice_reception_home', 'voice_callback_home');
 comment on column sanaku_addons.per_lead_booked_fee is
   'Charged per lead with outcome=booked, INSTEAD of per_lead_fee, when the subscription is set to charge_on=booked. Never in addition.';
 
+-- ----------------------------------------------------------------------------
+-- 2b. One entry price, because three documents already say so.
+--
+--     docs/pilot-agreement.md - the contract a client actually signs - quotes
+--     $500 setup for all three verticals, and site/index.html says the same.
+--     migration-013 had introduced a $250-$750 scale, which meant the sheet, the
+--     website and the signed agreement each quoted a different number for the
+--     same thing.
+--
+--     $500 flat wins because it is the one already in the contract, and because
+--     a single memorable number is a lower barrier than a table. Capped at the
+--     normal setup so a $250 service never costs MORE to try than to buy.
+--
+--     The contract's own reasoning, kept here so it is not lost: "free pilots
+--     attract people who were never going to buy. $500 filters tire-kickers,
+--     pays for your build time, and gets cash in on day one."
+-- ----------------------------------------------------------------------------
+update sanaku_addons
+   set trial_setup_fee = least(500, setup_fee)
+ where category <> 'bundle';
+
 -- Which of the two a given client is on. Per subscription, not per catalog row,
 -- because it is a commercial choice made when the deal is done.
 alter table sanaku_client_addons

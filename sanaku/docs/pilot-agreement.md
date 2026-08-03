@@ -112,7 +112,7 @@ and are the standard structures firms already approve.
 |---|---|---|---|
 | Home services | $500 | $500–$1,000 | $50 (cap it) |
 | Dental / med spa | $500 | $500–$1,200 | — flat only |
-| PI law | $500 | $1,000–$2,500 | $75–$100 per lead delivered, or flat |
+| PI law | $500 | $1,000–$2,500 | $100 per lead delivered, or flat |
 
 **Why keep the setup fee:** free pilots attract people who were never going to
 buy. $500 filters tire-kickers, pays for your build time, and gets cash in on

@@ -123,6 +123,13 @@
   .vert .pricing-note { font-size: 12.5px; color: var(--ink-soft); border-top: 1px dashed var(--line); margin-top: 18px; padding-top: 12px; }
 
   /* ---- catalog ---- */
+  /* Availability, said plainly. Three of these workflows are not built yet, and
+     a catalog headed "pick the leak you want plugged first" must not offer one
+     we cannot plug. Same wording as the sell sheet, on purpose. */
+  .avail { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .02em;
+    padding: 3px 9px; border-radius: 999px; margin: 0 0 10px; }
+  .avail.on   { background: rgba(13, 107, 66, .10); color: var(--green-deep); }
+  .avail.soon { background: rgba(185, 138, 47, .14); color: #8a6516; }
   #catalog { background: var(--paper-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
   @media (max-width: 960px) { .cat-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -316,30 +323,35 @@
       <div class="cat">
         <div class="tag flag">Flagship · fastest ROI</div>
         <h3>Missed-Call Text-Back</h3>
+        <div class="avail on">Available now</div>
         <p>A call goes unanswered → within seconds, the caller gets a text from your business number: "Sorry we missed you — what do you need help with?" The reply is captured, qualified, and the owner is alerted.</p>
         <div class="roi">A plumber missing 6 calls a week who recovers just <b>2 jobs</b> has paid for the entire service.</div>
       </div>
       <div class="cat">
         <div class="tag">Capture</div>
         <h3>After-Hours Intake</h3>
+        <div class="avail on">Available now</div>
         <p>Form or chat that doesn't just collect a name — it asks the three questions that qualify the lead, then books the appointment or escalates urgent work to your on-call phone.</p>
         <div class="roi">Typically <b>30–45%</b> of captured leads arrive when the office is closed.</div>
       </div>
       <div class="cat">
         <div class="tag">Convert</div>
         <h3>Lead Nurture</h3>
+        <div class="avail soon">In development — not yet available</div>
         <p>Five-touch follow-up for everyone who inquired and went quiet. Most businesses follow up once, then give up — the sale usually happens on touch three or four.</p>
         <div class="roi">Re-engages the <b>60%+</b> of inquiries that never got a second touch.</div>
       </div>
       <div class="cat">
         <div class="tag">Retain</div>
         <h3>Appointment Reminders &amp; No-Show Recovery</h3>
+        <div class="avail soon">In development — not yet available</div>
         <p>Confirmations at booking, reminders at 24h and 1h, and an automatic "life happens — want to rebook?" message the morning after a no-show.</p>
         <div class="roi">Cutting no-shows from 20% to 10% at a dental practice ≈ <b>thousands/month</b> recovered.</div>
       </div>
       <div class="cat">
         <div class="tag">Grow</div>
         <h3>Review Engine</h3>
+        <div class="avail soon">In development — not yet available</div>
         <p>After the job's done, the happy customer gets a perfectly-timed review request from your name. Reviews compound: more reviews → more calls → more work for the other workflows to catch.</p>
         <div class="roi">Review count is the <b>#1 local ranking lever</b> most businesses under-work.</div>
       </div>
@@ -383,11 +395,21 @@
       </div>
       <div class="price">
         <h3>Retainer + per lead captured</h3>
-        <div class="num">Base +<small> $50–$100 per qualified lead</small></div>
+        <div class="num">Base +<small> $50 home services · $100 law, per qualified lead</small></div>
         <p>Lower base, and we get paid when the system actually catches something. Every billable lead is logged with a timestamp you can audit — we bill from our meter, never from what you report.</p>
         <ul>
           <li>You define "qualified" with us up front</li>
           <li>Monthly cap available, so your bill is predictable</li>
+          <li>Lead-shopping sites sell the same lead to three to eight of your competitors. Yours is exclusive — they called you.</li>
+        </ul>
+      </div>
+      <div class="price">
+        <h3>Retainer + per booked job</h3>
+        <div class="num">Base +<small> $125 per job booked into your calendar</small></div>
+        <p>Home services only. You pay when the agent actually books work, not when it takes a message. We charge from the booking our own system made — never from a figure you report to us.</p>
+        <ul>
+          <li>Nothing owed for an enquiry that never became a job</li>
+          <li>Not offered to law firms or healthcare: a fee tied to a signed case is fee-splitting, and per-patient fees carry anti-kickback exposure</li>
         </ul>
       </div>
     </div>
@@ -396,6 +418,11 @@
         <b>First 30 days of service are free.</b> You pay the $500 setup, we build it, and you
         watch what it catches before a single monthly invoice. If the meter doesn't justify the
         fee, walk away — you'll still have the leads it caught.
+        <br><br>
+        The 30 days starts the day your service goes live, not the day you sign. The phone agent
+        can start same-day; anything that sends text messages needs your number registered with
+        the mobile carriers first, which we handle and which takes a few days. Services that cost
+        under $500 to set up cost less to start, never more.
       </div>
       <a class="btn cta-mail" href="#">Start with the leak number →</a>
     </div>
