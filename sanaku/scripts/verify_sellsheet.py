@@ -33,6 +33,8 @@ wb = load_workbook(wb_path)
 
 PATTERNS = [
     (r"'([^']+)'!([A-Z]+\d+)", "ref"),
+    # MIN(ref, n) - the trial entry cap
+    (r"MIN\('([^']+)'!([A-Z]+\d+),([\d.]+)\)", "mincap"),
     (r"SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)", "sum"),
     (r"([A-Z]+\d+)-([A-Z]+\d+)", "sub"),
     (r"([A-Z]+\d+)\*([A-Z]+\d+)", "mul"),
@@ -59,6 +61,8 @@ def val(sheet, coord, depth=0):
         g = m.groups()
         if kind == "ref":
             return val(g[0], g[1], depth + 1)
+        if kind == "mincap":
+            return min(val(g[0], g[1], depth + 1) or 0, float(g[2]))
         if kind == "sum":
             return sum(val(sheet, f"{g[0]}{r}", depth + 1) or 0
                        for r in range(int(g[1]), int(g[3]) + 1))
@@ -140,10 +144,12 @@ for r in range(5, tr.max_row + 1):
         continue
     setup = val("Trial", f"B{r}")
     start = val("Trial", f"C{r}")
+    cap = float(cat.get("trial_entry_cap") or 10**9)
     monthly = val("Trial", f"E{r}")
     for coord, expect, what in (
         (f"D{r}", setup - start, "setup given up"),
         (f"F{r}", monthly, "free month cost"),
+        (f"C{r}", min(setup, cap), "capped entry fee"),
         (f"G{r}", start + monthly * 11, "year one on trial"),
         (f"H{r}", setup + monthly * 12, "year one paid up front"),
     ):

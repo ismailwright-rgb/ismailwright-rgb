@@ -70,6 +70,19 @@
   .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
   .hero-note { font-size: 13.5px; color: var(--ink-soft); margin-top: 18px; }
 
+  /* ---- live demo line ----
+     The strongest thing on this page: a prospect can experience the product
+     before spending anything. Hidden until DEMO_PHONE is set, so an
+     unconfigured site never shows a button that dials nowhere. */
+  .tryit {
+    display: flex; gap: 22px; align-items: center; flex-wrap: wrap;
+    justify-content: space-between; margin-top: 30px; padding: 22px 26px;
+    background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--green);
+    border-radius: var(--radius); max-width: 720px;
+  }
+  .tryit b { font-size: 17px; }
+  .tryit p { font-size: 14.5px; color: var(--ink-soft); margin-top: 4px; max-width: 46ch; }
+
   /* ---- stat strip ---- */
   .strip { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--paper-2); margin-top: 64px; }
   .strip-inner { display: grid; grid-template-columns: repeat(3, 1fr); max-width: 1080px; margin: 0 auto; }
@@ -239,6 +252,15 @@
       <a class="btn ghost" href="#catalog">See the workflows</a>
     </div>
     <p class="hero-note">Built for personal injury firms, medical &amp; dental practices, and home-service companies.</p>
+
+    <div class="tryit" id="tryit" hidden>
+      <div>
+        <b>Hear it answer, right now.</b>
+        <p>Call the demo line. It picks up as a plumbing company, asks what you need, and books
+           you in — the same agent your customers would reach. No form, no signup, about a minute.</p>
+      </div>
+      <a class="btn" href="#">Call the demo line →</a>
+    </div>
   </div>
   <div class="strip">
     <div class="strip-inner">
@@ -421,7 +443,7 @@
         <div class="num">$500–$1,500<small> /month</small></div>
         <p>One number, everything included: your workflows, hosting, monitoring, and a monthly captured-leads report. The only option we offer healthcare — and the cleanest for law firms.</p>
         <ul>
-          <li>One-time setup, priced per service — see the services sheet</li>
+          <li>Setup is priced per service — but you pay at most $750 to start</li>
           <li>Cancel monthly — your data stays yours</li>
         </ul>
       </div>
@@ -447,9 +469,10 @@
     </div>
     <div class="pilot reveal">
       <div>
-        <b>First 30 days of service are free.</b> You pay the setup fee for whatever service you
-        pick, we build it, and you watch what it catches before a single monthly invoice. If the
-        meter doesn't justify the fee, walk away — you'll still have the leads it caught.
+        <b>First 30 days of service are free, and you pay at most $750 to start.</b>
+        Setup is priced per service, but only the first $750 of it falls due before your free
+        month ends — the rest on day 31, and only if you carry on. If the meter doesn't justify
+        the fee, walk away: you owe nothing further and you keep every lead it caught.
         <br><br>
         The 30 days starts the day your service goes live, not the day you sign. The phone agent
         can start same-day; anything that sends text messages needs your number registered with
@@ -512,6 +535,19 @@
   // ---- config: set PHONE to a public number (e.g. "+16265551234") to surface call links ----
   const EMAIL = "sanakuuai@gmail.com";
   const PHONE = "";
+  // The live demo line - your VAPI number, seeded by:  sh ~/sanaku.sh demo seed +1...
+  // Leave it blank and the "hear it answer" block stays hidden rather than
+  // rendering a button that dials nowhere.
+  const DEMO_PHONE = "";
+
+  // ---- live demo line ----
+  if (DEMO_PHONE) {
+    const box = document.getElementById("tryit");
+    const a = box.querySelector("a");
+    a.href = "tel:" + DEMO_PHONE.replace(/[^\d+]/g, "");
+    a.textContent = "Call " + DEMO_PHONE + " \u2192";
+    box.hidden = false;
+  }
 
   // ---- calculator ----
   const volume = document.getElementById("volume");

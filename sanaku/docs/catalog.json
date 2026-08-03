@@ -784,5 +784,6 @@
             "member_code": "voice_spanish"
         }
     ],
-    "generated_from": "sanaku_addons via the migration chain (007-015)"
+    "generated_from": "sanaku_addons via the migration chain (007-016)",
+    "trial_entry_cap": 750
 }

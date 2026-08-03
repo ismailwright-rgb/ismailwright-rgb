@@ -128,6 +128,23 @@ Why per service rather than one flat number: a $1,500 intake-agent build and a
 $250 review-request build do not cost the same to stand up, and charging the
 same for both loses money on one and overcharges on the other.
 
+**Why it is capped anyway.** Setup priced at full whack is coherent but it is
+not a trial — nobody "tries" something for $4,450, and asking a firm for $1,500
+before a single call is answered is the opposite of a low-risk way in. So only
+the first slice is due before the free month ends; the balance falls due on day
+31 and only if they continue. Home services is unaffected, its setups already
+sit at or under the cap. Law and the packages become trialable at all, which
+they were not.
+
+Revenue from anyone who stays is unchanged. What is given up is cash timing, and
+the write-off on people who saw it work and still left — which should be a small
+number if the product is any good, and is worth knowing about if it is not.
+
+The cap lives in `sanaku_settings`, so tuning it against how many trials convert
+is an UPDATE rather than a migration. Buying outright, with no trial, still pays
+full setup up front: the cap is a property of the trial, not a discount on the
+product.
+
 **The clock starts when the service goes live, not when they sign.** Anything
 that sends SMS needs A2P 10DLC carrier registration first, which takes days;
 the voice agent can start same-day. Burning a client's free month while they

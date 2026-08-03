@@ -20,6 +20,10 @@ const catalogPath = process.argv[2] || join(HERE, '..', 'docs', 'catalog.json');
 const outDir = process.argv[3] || join(HERE, '..', 'docs');
 
 const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
+// Most a client pays before their free month ends; the rest falls due on day 31
+// and only if they continue. One number, read from the catalog so the sheet and
+// the database can never quote different caps.
+const CAP = Number(catalog.trial_entry_cap) || Infinity;
 const services = catalog.services.filter((s) => s.active !== false);
 const byCode = Object.fromEntries(services.map((s) => [s.code, s]));
 const members = {};
@@ -119,9 +123,12 @@ function serviceRow(s) {
   // The entry price IS the setup fee - there is no trial discount, the free
   // month is the offer. Stated next to the ongoing price so nobody reads the
   // first number alone.
+  const entry = Math.min(Number(s.setup_fee), CAP);
+  const balance = Number(s.setup_fee) - entry;
   const trial = Number(s.monthly_fee)
-    ? `<div class="trial"><b>${money(s.setup_fee)}</b> to start &middot; 30 days free &middot; then
-         <b>${money(s.monthly_fee)}/month</b> from day 31</div>`
+    ? `<div class="trial"><b>${money(entry)}</b> to start &middot; 30 days free &middot; then
+         <b>${money(s.monthly_fee)}/month</b> from day 31${
+           balance > 0 ? `, plus the ${money(balance)} balance of setup` : ''}</div>`
     : '';
   return `
         <tr>

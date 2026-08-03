@@ -26,6 +26,9 @@ catalog_path = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE.parent / "docs" 
 out_path = Path(sys.argv[2]) if len(sys.argv) > 2 else HERE.parent / "docs" / "sanaku-services.xlsx"
 
 catalog = json.loads(catalog_path.read_text())
+# Most a client pays before the free month ends. Read from the catalog so the
+# workbook and the database cannot quote different caps.
+CAP = float(catalog.get("trial_entry_cap") or 10**9)
 services = [s for s in catalog["services"] if s.get("active") is not False]
 services.sort(key=lambda s: (s["sort"], s["code"]))
 by_code = {s["code"]: s for s in services}
@@ -263,12 +266,13 @@ sc.cell(row=sr + 2, column=1).fill = NOTE_FILL
 tr = wb.create_sheet("Trial")
 tr["A1"] = "The 30-day free month — what it costs you, and when it pays back"
 tr["A1"].font = H1
-tr["A2"] = ("Pay the service's setup fee, run it 30 days, then the monthly begins. "
-            "There is no trial discount — the free month is the offer, and it applies to every service.")
+tr["A2"] = ("Pay at most $750 to start, run it 30 days, then the monthly begins and the balance of "
+            "setup falls due — only if they continue. Nothing here is discounted: the free "
+            "month and the deferred balance are the offer.")
 tr["A2"].font = MUTED
 tr.merge_cells("A2:H2")
 
-header(tr, 4, ["Service", "Setup fee", "Paid to start", "Discount given",
+header(tr, 4, ["Service", "Setup fee", "Paid to start", "Balance at day 31",
                "Monthly from day 31", "Free month costs", "Year one on trial",
                "Year one paid up front"],
        [32, 14, 13, 18, 19, 16, 17, 20])
@@ -281,10 +285,10 @@ for s in services:
     tr.cell(row=tro, column=1, value=s["name"] + "  (" + ", ".join(s["allowed_verticals"]) + ")").font = BODY
     c = tr.cell(row=tro, column=2, value=f"='All Services'!E{ref}")
     c.font, c.number_format = BODY, MONEY
-    c = tr.cell(row=tro, column=3, value=f"='All Services'!E{ref}")
+    c = tr.cell(row=tro, column=3, value=f"=MIN('All Services'!E{ref},{CAP:g})")
     c.font, c.number_format = BODY, MONEY
     for col, formula in (
-        (4, f"=B{tro}-C{tro}"),                    # setup discount given away
+        (4, f"=B{tro}-C{tro}"),                    # balance, due day 31 if they stay
         (5, f"='All Services'!F{ref}"),            # ongoing monthly
         (6, f"=E{tro}"),                           # the free month, at cost of one month's fee
         (7, f"=C{tro}+(E{tro}*11)"),               # trial: start fee + 11 billed months
@@ -301,7 +305,7 @@ for col in (4, 6, 7, 8):
     c.font, c.number_format = DERIVED, MONEY
 
 tr.cell(row=tro + 2, column=1,
-        value="'Given up at signup' is setup discount only. 'Free month costs' is one month's fee "
+        value="'Balance at day 31' is deferred, not discounted - billed in full if they continue and written off only if they walk. 'Free month costs' is one month's fee "
               "forgone — not what it costs to serve, which is far less: a voice minute runs "
               "$0.13-0.18 and a text $0.011, so a free month of a $250 service costs well under "
               "$10 to actually deliver. The real cost of the offer is the deferred revenue, "
