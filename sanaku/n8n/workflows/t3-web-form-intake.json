@@ -1,0 +1,761 @@
+{
+  "name": "Sanaku - T3 Web Form Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## T3 - Web Form Intake\n\nCatalog: `after_hours_intake_home` / `_law` / `_medical`.\n\nThe client's website form posts here. We capture the lead, grade it against\ntheir own `qualified_definition`, text the person back in their name, and\nalert the owner.\n\n**Checked in order, and every refusal is logged with a reason:**\n1. Does the form say which business it is? (`business_number` = their\n   `inbound_number` - the same key T1 and T2 use.)\n2. `sanaku_has_addon` - bought and still active. A cancelled add-on stops the\n   software the same day it stops the invoice.\n3. `workflow_enabled` + `status` - the kill switch.\n4. Opted out? Permanent, per client.\n5. Inside 8am-9pm in the client's timezone.\n\n**We capture the lead even when we may not reply.** The enquiry is theirs and\nthe alert still goes out; only the automated text waits.\n\n**consent_source = 'web_form'.** They typed their number into the client's own\nsite asking to be contacted. This is what makes T4's callback lawful - without a\nrow like this, T4 refuses to dial.\n\nThe reply always carries STOP instructions.\n\n**Form fields** (POST /webhook/t3-form) - common aliases are accepted:\n```\n{ \"business_number\": \"+17145551234\",   // required: whose form this is\n  \"name\": \"...\", \"phone\": \"...\", \"email\": \"...\", \"message\": \"...\" }\n```\n\nCredentials: Supabase Service Role (Custom Auth), Twilio account,\nOpenRouter (Header Auth).  Env: SUPABASE_URL, OPENROUTER_MODEL.",
+        "height": 860,
+        "width": 620,
+        "color": 4
+      },
+      "id": "e0000000-0000-4000-8000-000000000001",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "t3-form",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000002",
+      "name": "Form Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        140,
+        720
+      ],
+      "webhookId": "e1100000-0000-4000-8000-000000000003"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Read whatever the client's form plugin posted into a known shape.\n// Form builders disagree on field names, so accept the common ones rather than\n// making every client rename their fields.\nconst b = ($input.first().json || {}).body || {};\nconst pick = (...keys) => {\n  for (const k of keys) {\n    const v = b[k] ?? b[k.toLowerCase()] ?? b[k.toUpperCase()];\n    if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();\n  }\n  return null;\n};\n\nconst e164 = (v) => {\n  const d = String(v || '').replace(/[^\\d+]/g, '');\n  if (/^\\+\\d{10,15}$/.test(d)) return d;\n  if (/^1\\d{10}$/.test(d)) return '+' + d;\n  if (/^\\d{10}$/.test(d)) return '+1' + d;\n  return null;\n};\n\n// Which client's form is this? The site embeds their tracked number, same key\n// every other T workflow uses, so onboarding sets one field and not two.\nconst forNumber = e164(pick('business_number', 'to', 'client_number', 'inbound_number'));\nconst phone = e164(pick('phone', 'tel', 'telephone', 'mobile', 'phone_number', 'your-phone'));\nconst email = pick('email', 'e-mail', 'email_address', 'your-email');\nconst name = pick('name', 'full_name', 'fullname', 'your-name', 'first_name');\nconst message = pick('message', 'comments', 'details', 'description', 'how_can_we_help', 'your-message');\n\nif (!forNumber) {\n  return [{ json: { invalid: true, error: 'the form did not say which business it belongs to' } }];\n}\nif (!phone && !email) {\n  return [{ json: { invalid: true, error: 'no phone and no email - nothing to follow up with' } }];\n}\n\nreturn [{ json: {\n  invalid: false, for_number: forNumber, phone, email, name,\n  message: message || '(no message)',\n} }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000004",
+      "name": "Normalize Submission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $json.invalid !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e3000000-0000-4000-8000-000000000005",
+      "name": "Readable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        580,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_clients?inbound_number=eq.{{ encodeURIComponent($json.for_number) }}&select=*&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e4000000-0000-4000-8000-000000000006",
+      "name": "Find Client",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        640
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e3000000-0000-4000-8000-000000000007",
+      "name": "Client Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1020,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/sanaku_has_addon",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ _client_id: $json.id, _code: 'after_hours_intake_' + ($json.vertical === 'law_firm' ? 'law' : $json.vertical === 'medical' ? 'medical' : 'home') }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e5000000-0000-4000-8000-000000000008",
+      "name": "Has The Add-On?",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        640
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_client_suppression?client_id=eq.{{ $('Find Client').first().json.id }}&phone=eq.{{ encodeURIComponent($('Normalize Submission').first().json.phone || 'none') }}&select=id&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e4000000-0000-4000-8000-000000000009",
+      "name": "Check Suppression",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1460,
+        640
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "/**\n * The one gate every outbound message passes through.\n *\n * T1 grew its own version of this inline, and copying that node into five more\n * workflows would give five copies that drift. This is the single source: the\n * build scripts in n8n/build/ inline it into each workflow's Code node, and\n * outbound-guard.test.mjs is what proves it still does what it claims.\n *\n * Four questions, in this order. Any \"no\" stops the send.\n *\n *   1. Did they buy it?      A cancelled add-on must stop the software the same\n *                            day it stops the invoice.\n *   2. Is the client on?     workflow_enabled and status - the kill switch.\n *   3. Did they ask for it?  consent_source on the lead. An AI voice is an\n *                            artificial voice under the TCPA; calling a mobile\n *                            without prior express consent runs $500-$1,500 per\n *                            call. Texts carry the same exposure.\n *   4. Is it a decent hour?  8am-9pm in the CLIENT's timezone, since the person\n *                            being contacted just dialled a local business.\n *   5. Have they said stop?  Permanent, per client, honoured immediately.\n *\n * Deliberately returns a reason on refusal rather than a bare false: the\n * execution log is where you find out why a client's customer heard nothing,\n * and \"blocked\" without a why is a support ticket.\n */\n\n/** Consent kinds that permit us to start a conversation, by channel. */\nconst CONSENT_FOR_VOICE = ['web_form', 'inbound_call', 'inbound_sms', 'chat'];\nconst CONSENT_FOR_SMS = ['web_form', 'inbound_call', 'inbound_sms', 'chat', 'existing_customer'];\n\n/**\n * @param {object} o\n * @param {object} o.client        the sanaku_clients row\n * @param {boolean} o.hasAddon     result of sanaku_has_addon()\n * @param {boolean} o.suppressed   a row exists in sanaku_client_suppression\n * @param {string=} o.consentSource lead.consent_source\n * @param {string} o.channel       'sms' | 'voice'\n * @param {Date=} o.now            injectable so the tests are not time-of-day flaky\n * @returns {{maySend:boolean, reason:string|null, localTime:string, afterHours:boolean}}\n */\nfunction outboundGuard({ client, hasAddon, suppressed, consentSource, channel, now }) {\n  const at = now || new Date();\n  const tz = (client && client.timezone) || 'America/Los_Angeles';\n\n  const parts = new Intl.DateTimeFormat('en-US', {\n    timeZone: tz, hour12: false, weekday: 'short', hour: '2-digit', minute: '2-digit',\n  }).formatToParts(at);\n  const get = (t) => parts.find((p) => p.type === t).value;\n  // Node resolves hour12:false to hourCycle h23, so this reads 00-23 and the\n  // modulo never fires. It is here because h24 is a real hour cycle (01-24) and\n  // a runtime resolving to it would read midnight as 24, i.e. \"later than 21\",\n  // and silently refuse to send for an hour every night. Cheap insurance.\n  const hour = Number(get('hour')) % 24;\n  const minute = Number(get('minute'));\n  const dow = get('weekday').toLowerCase();\n  const localTime = String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ' ' + tz;\n\n  // after_hours is the CLIENT's own opening hours - a billing and renewal\n  // signal, and a different question from whether we are allowed to send.\n  const span = ((client && client.business_hours) || {})[dow];\n  let afterHours = true;\n  if (Array.isArray(span) && span.length === 2) {\n    const toMin = (s) => Number(String(s).split(':')[0]) * 60 + Number(String(s).split(':')[1] || 0);\n    const mins = hour * 60 + minute;\n    afterHours = !(mins >= toMin(span[0]) && mins < toMin(span[1]));\n  }\n\n  const refuse = (reason) => ({ maySend: false, reason, localTime, afterHours });\n\n  if (!client || !client.id) return refuse('no client matched');\n  if (!hasAddon) return refuse('this client has not bought this service, or cancelled it');\n  if (client.workflow_enabled !== true || client.status !== 'active') {\n    return refuse('client paused (kill switch)');\n  }\n\n  const allowed = channel === 'voice' ? CONSENT_FOR_VOICE : CONSENT_FOR_SMS;\n  if (!consentSource || allowed.indexOf(consentSource) === -1) {\n    return refuse(\n      'no consent on record' + (consentSource ? ' valid for ' + channel + ' (' + consentSource + ')' : '')\n    );\n  }\n\n  if (suppressed) return refuse('this person has opted out');\n\n  // Quiet hours are a deferral, not a rejection: the lead is already captured,\n  // only the send waits. Callers should re-try rather than drop.\n  if (!(hour >= 8 && hour < 21)) return refuse('outside the 8am-9pm window (' + localTime + ')');\n\n  return { maySend: true, reason: null, localTime, afterHours };\n}\n\n// Everything the send decision needs, gathered in one place so the execution log\n// shows exactly why a message did or did not go out.\nconst client = $('Find Client').first().json;\nconst form = $('Normalize Submission').first().json;\n\n// PostgREST returns a bare JSON scalar for an rpc that returns boolean, and n8n\n// wraps a non-object body differently depending on version. Read every shape it\n// can arrive in, and treat anything unrecognised as NO.\n//\n// Failing closed matters here: this is what stops a workflow running for a\n// client who cancelled. An unreadable answer must never read as \"yes\".\nfunction readBool(items) {\n  const j = (items && items[0] && items[0].json);\n  if (j === true || j === 'true') return true;\n  if (j && typeof j === 'object') {\n    for (const k of ['sanaku_has_addon', 'data', 'result', 'value']) {\n      if (j[k] === true || j[k] === 'true') return true;\n    }\n  }\n  return false;\n}\n\n// Both lookups run with alwaysOutputData, so an empty result is still one item.\nconst hasAddonResult = readBool($('Has The Add-On?').all());\nconst suppressed = ($('Check Suppression').all() || []).some((i) => i.json && i.json.id);\n\n// A form submission IS the consent - they typed their number into the client's\n// own website asking to be contacted about this job.\nconst g = outboundGuard({\n  client,\n  hasAddon: hasAddonResult,\n  suppressed,\n  consentSource: 'web_form',\n  channel: 'sms',\n});\n\nconst brand = client.brand_name || client.company_name;\n\nreturn [{ json: {\n  client_id: client.id,\n  brand,\n  from_number: client.sending_number || client.inbound_number,\n  to_number: form.phone,\n  name: form.name,\n  email: form.email,\n  message: form.message,\n  after_hours: g.afterHours,\n  may_send: g.maySend && !!form.phone,\n  block_reason: g.reason,\n  local_time: g.localTime,\n  escalation_phone: client.escalation_phone,\n  reply: 'Thanks for getting in touch with ' + brand + \" - we've got your message and will come back to you\"\n       + (g.afterHours ? ' first thing.' : ' shortly.')\n       + '\\n\\nReply STOP to opt out.',\n} }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000010",
+      "name": "Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free', messages: [ { role: 'system', content: 'You grade web enquiries to a local service business. The business defines a QUALIFIED lead as: ' + ($('Find Client').first().json.qualified_definition || 'someone with a real need for the service who left a way to reach them, not spam, not a vendor, not a wrong number') + '. Reply with STRICT JSON only: {\"qualified\": true|false, \"score\": 0-100, \"urgent\": true|false, \"summary\": \"under 15 words\"}. urgent = they need help today (leak, outage, pain, emergency).' }, { role: 'user', content: $('Normalize Submission').first().json.message } ], max_tokens: 120, temperature: 0 }) }}",
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "e8000000-0000-4000-8000-000000000001",
+      "name": "Grade With Their Definition",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        640
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter-header-auth",
+          "name": "OpenRouter (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Read the grader's JSON, and fail toward capturing the lead.\n// A model that returns prose must not cost the client a customer, so an\n// unreadable answer means \"keep it, unqualified\" rather than \"drop it\".\nlet out = { qualified: false, score: 0, urgent: false, summary: '' };\ntry {\n  const raw = $input.first().json.choices[0].message.content;\n  const m = String(raw).match(/\\{[\\s\\S]*\\}/);\n  // No braces at all is the common failure - the model answered in prose and\n  // threw nothing. That has to land in the same place as a parse error, or the\n  // owner gets an alert with a blank summary and no clue why.\n  if (!m) throw new Error('no JSON in the reply');\n  out = { ...out, ...JSON.parse(m[0]) };\n} catch (e) {\n  out.summary = 'could not grade automatically - read the message yourself';\n}\nconst g = $('Guard').first().json;\nreturn [{ json: { ...g, ...out } }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000011",
+      "name": "Grade Submission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2120,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_client_leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, name: $json.name, phone: $json.to_number, email: $json.email, channel: 'web_form', after_hours: $json.after_hours, qualified: $json.qualified === true, lead_score: $json.score || 0, billable: true, consent_source: 'web_form', consent_at: new Date().toISOString(), last_message_at: new Date().toISOString(), conversation: [{ dir: 'in', at: new Date().toISOString(), body: $json.message }] }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e5000000-0000-4000-8000-000000000012",
+      "name": "Log Lead (billing meter)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2340,
+        640
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'web form lead write failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 800), payload: { client_id: $('Guard').first().json.client_id, phone: $('Guard').first().json.to_number } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e5000000-0000-4000-8000-000000000013",
+      "name": "Log Write Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2560,
+        860
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $('Guard').first().json.may_send === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e3000000-0000-4000-8000-000000000014",
+      "name": "May We Text Them?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2560,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Guard').first().json.from_number }}",
+        "to": "={{ $('Guard').first().json.to_number }}",
+        "message": "={{ $('Guard').first().json.reply }}",
+        "options": {}
+      },
+      "id": "e6000000-0000-4000-8000-000000000015",
+      "name": "Text Them Back",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2780,
+        460
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "twilio-account",
+          "name": "Twilio account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const g = $('Grade Submission').first().json;\nconst row = $input.first().json;\n\nconst lines = [];\nlines.push((g.urgent ? 'URGENT web enquiry' : 'New web enquiry') + (g.after_hours ? ' (after hours)' : ''));\nif (g.name) lines.push('Who: ' + g.name);\nif (g.to_number) lines.push('Call back: ' + g.to_number);\nif (g.email) lines.push('Email: ' + g.email);\nlines.push('', String(g.message).slice(0, 300));\nif (!g.may_send) lines.push('', 'We did NOT text them: ' + g.block_reason);\n\nreturn [{ json: {\n  send: !!g.escalation_phone && (g.qualified || g.urgent || !g.after_hours),\n  to: g.escalation_phone,\n  from: g.from_number,\n  body: lines.join('\\n'),\n  lead_id: (row && row.id) || null,\n} }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000016",
+      "name": "Build Owner Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $json.send === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e3000000-0000-4000-8000-000000000017",
+      "name": "Alert Configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3220,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $json.from }}",
+        "to": "={{ $json.to }}",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "e6000000-0000-4000-8000-000000000018",
+      "name": "Alert The Owner",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        3440,
+        480
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "twilio-account",
+          "name": "Twilio account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e7000000-0000-4000-8000-000000000019",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3660,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, reason: 'unreadable form, unknown business, add-on inactive, or client paused' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e7000000-0000-4000-8000-000000000020",
+      "name": "Respond Skipped",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3660,
+        940
+      ]
+    }
+  ],
+  "connections": {
+    "Form Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Submission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Submission": {
+      "main": [
+        [
+          {
+            "node": "Readable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Readable?": {
+      "main": [
+        [
+          {
+            "node": "Find Client",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Client": {
+      "main": [
+        [
+          {
+            "node": "Client Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Found?": {
+      "main": [
+        [
+          {
+            "node": "Has The Add-On?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has The Add-On?": {
+      "main": [
+        [
+          {
+            "node": "Check Suppression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Suppression": {
+      "main": [
+        [
+          {
+            "node": "Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard": {
+      "main": [
+        [
+          {
+            "node": "Grade With Their Definition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grade With Their Definition": {
+      "main": [
+        [
+          {
+            "node": "Grade Submission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Grade Submission": {
+      "main": [
+        [
+          {
+            "node": "Log Lead (billing meter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Lead (billing meter)": {
+      "main": [
+        [
+          {
+            "node": "May We Text Them?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Write Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Write Failure": {
+      "main": [
+        [
+          {
+            "node": "Respond Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "May We Text Them?": {
+      "main": [
+        [
+          {
+            "node": "Text Them Back",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Owner Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Them Back": {
+      "main": [
+        [
+          {
+            "node": "Build Owner Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Owner Alert": {
+      "main": [
+        [
+          {
+            "node": "Alert Configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Configured?": {
+      "main": [
+        [
+          {
+            "node": "Alert The Owner",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert The Owner": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  },
+  "pinData": {},
+  "meta": {}
+}
