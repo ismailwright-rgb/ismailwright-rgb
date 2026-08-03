@@ -29,78 +29,92 @@ function period(back) {
  */
 export default function Statements() {
   const [back, setBack] = useState(1);              // default: last complete month
-  const [clients, setClients] = useState([]);
-  const [leads, setLeads] = useState([]);
-  const [addons, setAddons] = useState([]);
+  const [rows, setRows] = useState([]);
   const [issued, setIssued] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
 
   const p = useMemo(() => period(back), [back]);
 
   async function load() {
     setLoading(true);
-    const [c, l, a, b] = await Promise.all([
-      // No statement is ever drafted for a demo client - it would sit in
-      // sanaku_billing looking exactly like a real one.
-      supabase.from('sanaku_clients').select('*').eq('status', 'active').eq('is_demo', false).order('company_name'),
-      supabase.from('sanaku_client_leads')
-        .select('client_id, qualified, billable, captured_at')
-        .gte('captured_at', p.start.toISOString())
-        .lt('captured_at', new Date(p.end.getTime() + 86400000).toISOString()),
-      supabase.from('sanaku_client_addons').select('client_id, monthly_fee, status').eq('status', 'active'),
+    // One question - "what does this client owe" - deserves one answer. The
+    // arithmetic used to live here in JS AND in migration-002's SQL, which is
+    // two implementations that can drift on the number a client is charged.
+    // sanaku_statements_for_period() is now the only one, and it is the same
+    // function the database itself uses. Demo clients are excluded inside it.
+    const [f, b] = await Promise.all([
+      supabase.rpc('sanaku_statements_for_period', { _start: iso(p.start), _end: iso(p.end) }),
       supabase.from('sanaku_billing').select('*').eq('period_start', iso(p.start)),
     ]);
-    setClients(c.data || []);
-    setLeads(l.data || []);
-    setAddons(a.data || []);
+    if (f.error) { setErr(f.error.message); setRows([]); }
+    else { setErr(''); setRows(f.data || []); }
     setIssued(b.data || []);
     setLoading(false);
   }
   useEffect(() => { load(); }, [back]);
 
-  function figuresFor(c) {
-    const mine = leads.filter((x) => x.client_id === c.id && x.billable !== false);
-    const qualified = mine.filter((x) => x.qualified).length;
-    const retainer = Number(c.monthly_retainer || 0);
-    const cap = c.per_lead_monthly_cap == null ? Infinity : Number(c.per_lead_monthly_cap);
-    const perLead = Math.min(Number(c.per_lead_fee || 0) * qualified, cap);
-    const addon = addons.filter((x) => x.client_id === c.id)
-      .reduce((s, x) => s + Number(x.monthly_fee || 0), 0);
-    return {
-      captured: mine.length, qualified, retainer, perLead, addon,
-      total: retainer + perLead + addon,
-      capped: Number(c.per_lead_fee || 0) * qualified > cap,
-    };
-  }
-
   const statementFor = (id) => issued.find((s) => s.client_id === id);
 
-  async function issue(c) {
-    const f = figuresFor(c);
+  async function issue(f) {
+    const line = (label, amount) => `${label.padEnd(16)}${money(amount)}\n`;
     const msg =
-      `Issue ${p.label} statement for ${c.company_name}?\n\n` +
-      `Retainer        ${money(f.retainer)}\n` +
-      `Qualified leads ${f.qualified} → ${money(f.perLead)}${f.capped ? ' (capped)' : ''}\n` +
-      (f.addon ? `Add-ons         ${money(f.addon)}\n` : '') +
+      `Issue ${p.label} statement for ${f.company_name}?\n\n` +
+      (f.retainer_due ? line('Retainer', f.retainer_due) : '') +
+      (f.setup_due ? line('Setup (one-off)', f.setup_due) : '') +
+      (f.addons_due ? line('Services', f.addons_due) : '') +
+      (f.in_trial ? `Services        ${money(0)} — still in trial\n` : '') +
+      (f.per_lead_due ? line(`Leads (${f.leads_qualified})`, f.per_lead_due) + (f.capped ? '                at monthly cap\n' : '') : '') +
+      (f.overage_due ? line('Voice overage', f.overage_due) : '') +
       `------------------------------\n` +
-      `Total           ${money(f.total)}\n\n` +
+      line('Total', f.total_due) + '\n' +
+      (f.setup_due
+        ? `The setup fee is billed ONCE — issuing this marks it charged so it ` +
+          `cannot appear again next month.\n\n`
+        : '') +
       `It saves as a DRAFT. Nothing is sent and no card is charged — you still ` +
       `invoice them however you normally do.`;
     if (!window.confirm(msg)) return;
 
-    setBusy(c.id);
+    setBusy(f.client_id);
     const { error } = await supabase.from('sanaku_billing').insert({
-      client_id: c.id,
+      client_id: f.client_id,
       period_start: iso(p.start),
       period_end: iso(p.end),
-      retainer_due: f.retainer,
-      leads_captured: f.captured,
-      total_due: f.total,
+      retainer_due: f.retainer_due,
+      setup_due: f.setup_due,
+      addons_due: f.addons_due,
+      per_lead_due: f.per_lead_due,
+      overage_due: f.overage_due,
+      leads_captured: f.leads_captured,
+      total_due: f.total_due,
       status: 'draft',
     });
+    if (error) { setBusy(''); return alert('Could not save the statement: ' + error.message); }
+
+    // Stamp the setup fee as charged. Without this it is due again every month
+    // for the life of the subscription - the statement above would be right and
+    // every one after it wrong.
+    if (Number(f.setup_due) > 0) {
+      const { error: stampErr } = await supabase
+        .from('sanaku_client_addons')
+        .update({ setup_billed_on: iso(p.end) })
+        .eq('client_id', f.client_id)
+        .eq('status', 'active')
+        .is('setup_billed_on', null)
+        .not('live_on', 'is', null)
+        .lte('live_on', iso(p.end));
+      if (stampErr) {
+        setBusy('');
+        return alert(
+          'The statement saved, but the setup fee could not be marked as charged:\n\n' +
+          stampErr.message +
+          '\n\nIt will appear on next month\'s statement too. Fix it before issuing again.'
+        );
+      }
+    }
     setBusy('');
-    if (error) return alert('Could not save the statement: ' + error.message);
     load();
   }
 
@@ -114,7 +128,7 @@ export default function Statements() {
 
   if (loading) return <div className="card"><div className="empty">Loading…</div></div>;
 
-  const grand = clients.reduce((s, c) => s + figuresFor(c).total, 0);
+  const grand = rows.reduce((s, r) => s + Number(r.total_due || 0), 0);
 
   return (
     <div className="card">
@@ -126,36 +140,47 @@ export default function Statements() {
         </span>
       </h3>
 
-      {clients.length === 0 ? (
+      {err && <div className="empty">Could not work out this period: {err}</div>}
+
+      {!err && rows.length === 0 ? (
         <div className="empty">No active clients yet.</div>
-      ) : (
+      ) : !err && (
         <table>
           <thead>
             <tr>
-              <th>Client</th><th className="hide-m">Leads</th><th className="hide-m">Qualified</th>
-              <th>Retainer</th><th className="hide-m">Per lead</th><th className="hide-m">Add-ons</th>
+              <th>Client</th><th className="hide-m">Qualified</th>
+              <th className="hide-m">Retainer</th><th className="hide-m">Setup</th>
+              <th className="hide-m">Services</th><th className="hide-m">Per lead</th>
+              <th className="hide-m">Overage</th>
               <th>Total</th><th>Statement</th>
             </tr>
           </thead>
           <tbody>
-            {clients.map((c) => {
-              const f = figuresFor(c);
+            {rows.map((f) => {
+              const c = { id: f.client_id, company_name: f.company_name };
               const s = statementFor(c.id);
+              const cell = (n) => (Number(n) ? money(n) : '—');
               return (
                 <tr key={c.id}>
-                  <td><b>{c.company_name}</b></td>
-                  <td className="hide-m num">{f.captured}</td>
-                  <td className="hide-m num">{f.qualified}</td>
-                  <td className="num">{money(f.retainer)}</td>
+                  <td>
+                    <b>{c.company_name}</b>
+                    {f.in_trial && <div className="muted">in trial — services not billed</div>}
+                  </td>
+                  <td className="hide-m num">{f.leads_qualified}</td>
+                  <td className="hide-m num">{cell(f.retainer_due)}</td>
+                  {/* A one-off. It shows once, on the first statement after the
+                      service goes live, and never again. */}
+                  <td className="hide-m num">{cell(f.setup_due)}</td>
+                  <td className="hide-m num">{cell(f.addons_due)}</td>
                   <td className="hide-m num">
-                    {money(f.perLead)}
+                    {cell(f.per_lead_due)}
                     {f.capped && <div className="muted">at cap</div>}
                   </td>
-                  <td className="hide-m num">{f.addon ? money(f.addon) : '—'}</td>
-                  <td className="num"><b>{money(f.total)}</b></td>
+                  <td className="hide-m num">{cell(f.overage_due)}</td>
+                  <td className="num"><b>{money(f.total_due)}</b></td>
                   <td>
                     {!s ? (
-                      <button className="rowbtn primary" disabled={busy === c.id} onClick={() => issue(c)}>
+                      <button className="rowbtn primary" disabled={busy === c.id} onClick={() => issue(f)}>
                         {busy === c.id ? 'Saving…' : 'Issue'}
                       </button>
                     ) : (
@@ -178,7 +203,10 @@ export default function Statements() {
       <p className="muted" style={{ padding: '12px 16px 14px' }}>
         Issuing writes the statement to their portal's Billing tab. It does not send
         an email and does not take payment — this is the record, not the invoice.
-        Per-lead is counted from qualified leads only, and stops at the monthly cap.
+        Per-lead counts qualified leads only, charges each one once at whichever rate
+        covers its channel, and stops at the monthly cap. A setup fee appears on the
+        first statement after a service goes live and never again. A service still
+        inside its trial bills nothing.
       </p>
     </div>
   );

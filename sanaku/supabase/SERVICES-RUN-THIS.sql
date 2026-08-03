@@ -730,6 +730,63 @@ returns numeric language sql stable as $$
   from public.sanaku_statement(_client_id, _start, _end) s
 $$;
 
+-- migration-002 shipped sanaku_period_due(), which totals retainer + per-lead
+-- and knows nothing about services, setup, trials or overage. Nothing calls it
+-- today, which is the only reason it has not produced a wrong invoice - but a
+-- billing function that quietly under-reports is a trap sitting in the schema
+-- waiting for someone to trust it. Redefined to delegate, so there is one
+-- answer and the old name still works.
+-- Dropped rather than replaced: the column list differs from migration-002's,
+-- and Postgres refuses to change a function's return type in place.
+drop function if exists public.sanaku_period_due(uuid, date, date);
+create function public.sanaku_period_due(_client_id uuid, _from date, _to date)
+returns table (
+  leads_captured int, leads_qualified int, after_hours_leads int,
+  retainer_due numeric, per_lead_due numeric, total_due numeric
+)
+language sql stable security definer set search_path = '' as $$
+  select s.leads_captured, s.leads_qualified,
+         (select count(*)::int from public.sanaku_client_leads
+          where client_id = _client_id and billable is not false and after_hours
+            and captured_at >= _from::timestamptz and captured_at < (_to + 1)::timestamptz),
+         s.retainer_due, s.per_lead_due,
+         s.setup_due + s.addons_due + s.per_lead_due + s.overage_due + s.retainer_due
+  from public.sanaku_statement(_client_id, _from, _to) s
+$$;
+
+revoke execute on function public.sanaku_period_due(uuid, date, date) from public, anon;
+grant   execute on function public.sanaku_period_due(uuid, date, date) to authenticated;
+
+-- Every billable client for a period, in one round trip. The Statements screen
+-- calls this instead of doing the arithmetic in JavaScript, so there is exactly
+-- one answer to "what does this client owe" rather than two that can drift.
+create or replace function public.sanaku_statements_for_period(_start date, _end date)
+returns table (
+  client_id uuid, company_name text,
+  setup_due numeric, addons_due numeric, per_lead_due numeric,
+  overage_due numeric, retainer_due numeric, total_due numeric,
+  leads_captured int, leads_qualified int, capped boolean, in_trial boolean
+)
+language sql stable security definer set search_path = '' as $$
+  select c.id, c.company_name,
+         s.setup_due, s.addons_due, s.per_lead_due, s.overage_due, s.retainer_due,
+         s.setup_due + s.addons_due + s.per_lead_due + s.overage_due + s.retainer_due,
+         s.leads_captured, s.leads_qualified,
+         -- Flag a capped bill so the screen can say so rather than silently
+         -- showing a number smaller than the leads imply.
+         (c.per_lead_monthly_cap is not null and s.per_lead_due >= c.per_lead_monthly_cap),
+         exists (select 1 from public.sanaku_client_addons ca
+                 where ca.client_id = c.id and ca.status = 'active'
+                   and ca.trial_ends_on is not null and ca.trial_ends_on >= _end)
+  from public.sanaku_clients c
+  cross join lateral public.sanaku_statement(c.id, _start, _end) s
+  where c.status = 'active' and c.is_demo is not true
+  order by c.company_name
+$$;
+
+revoke execute on function public.sanaku_statements_for_period(date, date) from public, anon;
+grant   execute on function public.sanaku_statements_for_period(date, date) to authenticated;
+
 revoke execute on function public.sanaku_statement(uuid, date, date) from public, anon;
 revoke execute on function public.sanaku_statement_total(uuid, date, date) from public, anon;
 grant   execute on function public.sanaku_statement(uuid, date, date) to authenticated;
@@ -742,7 +799,6 @@ do $$ begin
 end $$;
 
 commit;
-
 
 -- ============================================================================
 -- VERIFY
