@@ -20,7 +20,19 @@
 // still in build is listed separately as what is coming, or not at all.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+
+// ESM ignores NODE_PATH, so a globally installed playwright is not importable
+// by name. Same approach make-pdf.mjs already takes.
+function pwPath() {
+  for (const base of [execSync('npm root -g').toString().trim(), join(process.cwd(), 'node_modules')]) {
+    const p = join(base, 'playwright', 'index.mjs');
+    if (existsSync(p)) return pathToFileURL(p).href;
+  }
+  return 'playwright';
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const catalogPath = process.argv[2] || join(HERE, '..', 'docs', 'catalog.json');
@@ -107,7 +119,22 @@ function page(v) {
     .sort((a, b) => a.sort - b.sort);
   const notes = [...new Set(live.map((s) => s.compliance_note).filter(Boolean))];
 
-  return `<div style="margin:0;padding:0;background:${PAPER};">
+  // A COMPLETE document, not a fragment. Written as a bare <div> first, these
+  // opened as mojibake or not at all: no charset declaration meant a browser
+  // opening the file from disk guessed the encoding, and every em dash, middot
+  // and arrow came out wrong. The wrapper costs nothing for the email workflow -
+  // selecting all and copying from a RENDERED page copies the rendering, not
+  // the source - and it is the difference between a file that opens and one
+  // that does not.
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sanaku — ${esc(v.label)}</title>
+</head>
+<body style="margin:0;padding:0;background:${PAPER};">
+<div style="margin:0;padding:0;background:${PAPER};">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
        style="background:${PAPER};padding:24px 12px;">
   <tr>
@@ -185,6 +212,8 @@ function page(v) {
   </tr>
 </table>
 </div>
+</body>
+</html>
 `;
 }
 
@@ -229,6 +258,7 @@ function plain(v) {
 }
 
 mkdirSync(outDir, { recursive: true });
+const written = [];
 let n = 0;
 for (const v of VERTICALS) {
   const live = services.filter((s) => s.allowed_verticals.includes(v.key)
@@ -239,8 +269,30 @@ for (const v of VERTICALS) {
   }
   writeFileSync(join(outDir, `sanaku-${v.file}.html`), page(v));
   writeFileSync(join(outDir, `sanaku-${v.file}.txt`), plain(v));
+  written.push(v.file);
   console.log(`  sanaku-${v.file}.html + .txt  (${live.length} service${live.length > 1 ? 's' : ''} offered)`);
   n++;
 }
 console.log(`wrote ${n} email pages to ${outDir}`);
-console.log('Open the .html in a browser, select all, copy, paste into your email.');
+// A PDF twin, because an attachment has to open on whatever the recipient
+// happens to be using. HTML in an inbox is at the mercy of their client; a PDF
+// is not, and it is what most people expect an attachment to be.
+try {
+  const { chromium } = await import(pwPath());
+  const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium' });
+  for (const f of written) {
+    const p = await b.newPage();
+    await p.goto(pathToFileURL(join(outDir, `sanaku-${f}.html`)).href, { waitUntil: 'load' });
+    await p.pdf({ path: join(outDir, `sanaku-${f}.pdf`), format: 'Letter',
+                  printBackground: true, margin: { top: '14mm', bottom: '14mm', left: '12mm', right: '12mm' } });
+    await p.close();
+    console.log(`  sanaku-${f}.pdf`);
+  }
+  await b.close();
+} catch (e) {
+  console.error('  (PDFs skipped: ' + e.message.split('\n')[0] + ')');
+  console.error('  The .html and .txt are still written and usable.');
+}
+
+console.log('');
+console.log('Attach the .pdf, or open the .html and copy-paste it into the email body.');
