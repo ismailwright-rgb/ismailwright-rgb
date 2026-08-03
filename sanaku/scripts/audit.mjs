@@ -96,7 +96,9 @@ const wfs = existsSync(wfDir) ? readdirSync(wfDir).filter((f) => f.endsWith('.js
 const before = problems;
 for (const f of wfs) {
   const raw = readFileSync(join(wfDir, f), 'utf8');
-  for (const m of raw.matchAll(/\/rest\/v1\/([a-z0-9_]+)/g)) {
+  // /rest/v1/rpc/<fn> is a function call, not a table. Checking it against the
+  // table list reports every legitimate rpc as a missing table.
+  for (const m of raw.matchAll(/\/rest\/v1\/(?!rpc\/)([a-z0-9_]+)/g)) {
     if (!tables.has(m[1])) bad(f, `posts to /rest/v1/${m[1]} which no migration creates`);
   }
   for (const m of raw.matchAll(/rpc\/([a-z0-9_]+)/g)) {
