@@ -20,12 +20,37 @@ diffed, reviewed, or rolled back after a bad edit.
    workflow drops them anyway.
 4. **Assign** the number to the assistant.
 
-`{{brand}}`, `{{city}}` and `{{callback_promise}}` are VAPI template variables.
-Set them per client under the assistant's variable values, or pass them in
-`assistantOverrides` if you ever run several clients through one assistant.
-`callback_promise` is the tail of a sentence — something like
-" first thing in the morning" or " within the hour" — so leave it empty rather
-than putting a full sentence in it.
+## The placeholders are substituted BEFORE you upload — not by VAPI
+
+`{{brand}}`, `{{city}}` and `{{callback_promise}}` must be replaced in the file
+on the way in. VAPI only fills its own template variables in when values are
+passed **at call time**, and a number statically assigned to an assistant does
+not pass any. Upload this file with the braces intact and the agent answers the
+phone and says, out loud:
+
+> "Thanks for calling {{brand}}."
+
+So substitute first, and check nothing survived before you POST:
+
+```sh
+grep -c '{{' /tmp/assistant.json      # must print 0
+```
+
+`callback_promise` is the tail of a sentence — " first thing in the morning",
+" within the hour" — so leave it empty rather than putting a whole sentence in.
+
+(If you ever do run several clients through one assistant, that is the case
+where VAPI's own `assistantOverrides.variableValues` is the right mechanism.
+One assistant per client is simpler and is what the setup above assumes.)
+
+## Voicemail detection is off on purpose
+
+`voicemailDetection.enabled` ships `false`. When it misfires it hangs up on a
+live caller it mistook for an answering machine — losing exactly the lead the
+product exists to catch. Turn it on only for a client who demonstrably gets
+machine pickups, and only on a Twilio-imported number: the `twilio` provider
+needs the call to be on Twilio's infrastructure, so on a VAPI-native number it
+is at best ignored.
 
 ## What is deliberately in the prompt
 

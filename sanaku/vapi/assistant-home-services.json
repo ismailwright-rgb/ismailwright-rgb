@@ -100,7 +100,7 @@
 
   "voicemailDetection": {
     "provider": "twilio",
-    "enabled": true
+    "enabled": false
   },
 
   "startSpeakingPlan": {
