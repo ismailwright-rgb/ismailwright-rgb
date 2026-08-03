@@ -11,7 +11,10 @@
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [40, 0]
+      "position": [
+        40,
+        0
+      ]
     },
     {
       "parameters": {
@@ -24,7 +27,10 @@
       "name": "Missed Call Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [140, 720],
+      "position": [
+        140,
+        720
+      ],
       "webhookId": "b1000000-0000-4000-8000-000000000101"
     },
     {
@@ -36,18 +42,30 @@
       "name": "Normalize Call",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [360, 720]
+      "position": [
+        360,
+        720
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "valid",
               "leftValue": "={{ $json.invalid === false }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -58,7 +76,10 @@
       "name": "Readable Payload?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [580, 720]
+      "position": [
+        580,
+        720
+      ]
     },
     {
       "parameters": {
@@ -66,15 +87,23 @@
         "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_clients?inbound_number=eq.{{ encodeURIComponent($json.called) }}&select=*&limit=1",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "b1000000-0000-4000-8000-000000000004",
       "name": "Find Client",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [800, 640],
+      "position": [
+        800,
+        640
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -84,13 +113,22 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "enabled",
               "leftValue": "={{ !!$json.id && $json.workflow_enabled === true && $json.status === 'active' }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -101,7 +139,10 @@
       "name": "Client Active? (kill switch)",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1020, 640]
+      "position": [
+        1020,
+        640
+      ]
     },
     {
       "parameters": {
@@ -109,15 +150,23 @@
         "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_client_suppression?client_id=eq.{{ $json.id }}&phone=eq.{{ encodeURIComponent($('Normalize Call').first().json.caller) }}&select=id&limit=1",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "b1000000-0000-4000-8000-000000000006",
       "name": "Check Suppression",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1240, 640],
+      "position": [
+        1240,
+        640
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -133,7 +182,10 @@
       "name": "Compose + Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1460, 640]
+      "position": [
+        1460,
+        640
+      ]
     },
     {
       "parameters": {
@@ -144,21 +196,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=representation" }
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, name: $json.caller_name, phone: $json.to_number, channel: 'missed_call', after_hours: $json.after_hours, qualified: false, outcome: 'no_response', billable: true, last_message_at: new Date().toISOString(), conversation: [{ dir: 'out', at: new Date().toISOString(), body: $json.may_send ? $json.message : '(queued - outside 8am-9pm calling window)' }] }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "b1000000-0000-4000-8000-000000000008",
       "name": "Log Lead (billing meter)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1680, 640],
+      "position": [
+        1680,
+        640
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -168,13 +231,22 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "may-send",
               "leftValue": "={{ $('Compose + Gate').first().json.may_send === true }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -185,7 +257,10 @@
       "name": "May We Text?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1900, 640]
+      "position": [
+        1900,
+        640
+      ]
     },
     {
       "parameters": {
@@ -200,9 +275,15 @@
       "name": "Send Text (client's number)",
       "type": "n8n-nodes-base.twilio",
       "typeVersion": 1,
-      "position": [2120, 540],
+      "position": [
+        2120,
+        540
+      ],
       "credentials": {
-        "twilioApi": { "id": "twilio-account", "name": "Twilio account" }
+        "twilioApi": {
+          "id": "twilio-account",
+          "name": "Twilio account"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -218,21 +299,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'text-back send failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 800), payload: { client_id: $('Compose + Gate').first().json.client_id, to: $('Compose + Gate').first().json.to_number } }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "b1000000-0000-4000-8000-000000000011",
       "name": "Log Send Failure",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2120, 760],
+      "position": [
+        2120,
+        760
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "supabase-custom-auth", "name": "Supabase Service Role (Custom Auth)" }
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -242,24 +334,36 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Tell the owner a call was missed and caught, so they can jump in if they want.\nconst g = $('Compose + Gate').first().json;\nconst when = g.after_hours ? 'while they were closed' : 'during business hours';\nreturn [{ json: {\n  to: g.escalation_phone,\n  email: g.escalation_email,\n  brand: g.brand,\n  body: 'Missed call from ' + g.to_number + ' ' + when + '. We texted them automatically' +\n        (g.may_send ? '.' : ' - queued until 8am (outside legal texting hours).'),\n  sendAlert: !!g.escalation_phone,\n} }];"
+        "jsCode": "// Tell the owner a call was missed and caught, so they can jump in if they want.\n//\n// SMS only. escalation_email used to be carried here too, next to a branch\n// that has no email node in it - so it read as wired and sent nothing. An\n// email alert needs a Google credential, which import-workflow.sh cannot\n// create and deliberately disables, so half-wiring it is worse than leaving\n// it out.\nconst g = $('Compose + Gate').first().json;\nconst when = g.after_hours ? 'while they were closed' : 'during business hours';\nreturn [{ json: {\n  to: g.escalation_phone,\n  brand: g.brand,\n  body: 'Missed call from ' + g.to_number + ' ' + when + '. We texted them automatically' +\n        (g.may_send ? '.' : ' - queued until 8am (outside legal texting hours).'),\n  sendAlert: !!g.escalation_phone,\n} }];"
       },
       "id": "b1000000-0000-4000-8000-000000000012",
       "name": "Build Owner Alert",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2340, 640]
+      "position": [
+        2340,
+        640
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "has-alert",
               "leftValue": "={{ $json.sendAlert === true }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -270,7 +374,10 @@
       "name": "Alert Configured?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [2560, 640]
+      "position": [
+        2560,
+        640
+      ]
     },
     {
       "parameters": {
@@ -285,9 +392,15 @@
       "name": "Alert The Owner",
       "type": "n8n-nodes-base.twilio",
       "typeVersion": 1,
-      "position": [2780, 540],
+      "position": [
+        2780,
+        540
+      ],
       "credentials": {
-        "twilioApi": { "id": "twilio-account", "name": "Twilio account" }
+        "twilioApi": {
+          "id": "twilio-account",
+          "name": "Twilio account"
+        }
       },
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
@@ -296,69 +409,232 @@
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify({ ok: true }) }}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "b1000000-0000-4000-8000-000000000015",
       "name": "Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [3000, 640]
+      "position": [
+        3000,
+        640
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify({ ok: false, reason: 'inactive, unknown number, or unreadable payload' }) }}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "b1000000-0000-4000-8000-000000000016",
       "name": "Respond Skipped",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1240, 900]
+      "position": [
+        1240,
+        900
+      ]
     }
   ],
   "connections": {
-    "Missed Call Webhook": { "main": [ [ { "node": "Normalize Call", "type": "main", "index": 0 } ] ] },
-    "Normalize Call": { "main": [ [ { "node": "Readable Payload?", "type": "main", "index": 0 } ] ] },
+    "Missed Call Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Call": {
+      "main": [
+        [
+          {
+            "node": "Readable Payload?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Readable Payload?": {
       "main": [
-        [ { "node": "Find Client", "type": "main", "index": 0 } ],
-        [ { "node": "Respond Skipped", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Find Client",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Find Client": { "main": [ [ { "node": "Client Active? (kill switch)", "type": "main", "index": 0 } ] ] },
+    "Find Client": {
+      "main": [
+        [
+          {
+            "node": "Client Active? (kill switch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Client Active? (kill switch)": {
       "main": [
-        [ { "node": "Check Suppression", "type": "main", "index": 0 } ],
-        [ { "node": "Respond Skipped", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Check Suppression",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Check Suppression": { "main": [ [ { "node": "Compose + Gate", "type": "main", "index": 0 } ] ] },
-    "Compose + Gate": { "main": [ [ { "node": "Log Lead (billing meter)", "type": "main", "index": 0 } ] ] },
-    "Log Lead (billing meter)": { "main": [ [ { "node": "May We Text?", "type": "main", "index": 0 } ] ] },
+    "Check Suppression": {
+      "main": [
+        [
+          {
+            "node": "Compose + Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose + Gate": {
+      "main": [
+        [
+          {
+            "node": "Log Lead (billing meter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Lead (billing meter)": {
+      "main": [
+        [
+          {
+            "node": "May We Text?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "May We Text?": {
       "main": [
-        [ { "node": "Send Text (client's number)", "type": "main", "index": 0 } ],
-        [ { "node": "Build Owner Alert", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Send Text (client's number)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Owner Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Send Text (client's number)": {
       "main": [
-        [ { "node": "Build Owner Alert", "type": "main", "index": 0 } ],
-        [ { "node": "Log Send Failure", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Build Owner Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Send Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Log Send Failure": { "main": [ [ { "node": "Build Owner Alert", "type": "main", "index": 0 } ] ] },
-    "Build Owner Alert": { "main": [ [ { "node": "Alert Configured?", "type": "main", "index": 0 } ] ] },
+    "Log Send Failure": {
+      "main": [
+        [
+          {
+            "node": "Build Owner Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Owner Alert": {
+      "main": [
+        [
+          {
+            "node": "Alert Configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Alert Configured?": {
       "main": [
-        [ { "node": "Alert The Owner", "type": "main", "index": 0 } ],
-        [ { "node": "Respond OK", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Alert The Owner",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Alert The Owner": { "main": [ [ { "node": "Respond OK", "type": "main", "index": 0 } ] ] }
+    "Alert The Owner": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1", "timezone": "America/Los_Angeles" },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  },
   "pinData": {},
   "meta": {}
 }
