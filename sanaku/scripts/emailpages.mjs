@@ -95,11 +95,11 @@ function serviceBlock(s) {
 
   return `
         <tr>
-          <td style="padding:18px 0;border-bottom:1px solid ${LINE};">
-            <div style="font:600 17px ${SANS};color:${INK};">${esc(s.name)}</div>
-            <div style="font:400 14px/1.55 ${SANS};color:${SUB};padding-top:5px;">${esc(s.blurb)}</div>
-            <div style="background:${WASH};border-radius:6px;padding:9px 12px;margin-top:11px;
-                        font:600 14px ${SANS};color:${ACCENT_2};">
+          <td style="padding:12px 0;border-bottom:1px solid ${LINE};">
+            <div style="font:600 15.5px ${SANS};color:${INK};">${esc(s.name)}</div>
+            <div style="font:400 13px/1.45 ${SANS};color:${SUB};padding-top:3px;">${esc(s.blurb)}</div>
+            <div style="background:${WASH};border-radius:6px;padding:7px 11px;margin-top:7px;
+                        font:600 13.5px ${SANS};color:${ACCENT_2};">
               ${money(entry)} to start &middot; 30 days free &middot; then ${money(s.monthly_fee)}/month
               ${balance > 0 ? `<div style="font:400 12.5px ${SANS};color:${ACCENT_2};padding-top:3px;">
                  plus the ${money(balance)} balance of setup on day 31, only if you carry on</div>` : ''}
@@ -136,29 +136,29 @@ function page(v) {
 <body style="margin:0;padding:0;background:${PAPER};">
 <div style="margin:0;padding:0;background:${PAPER};">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-       style="background:${PAPER};padding:24px 12px;">
+       style="background:${PAPER};padding:14px 10px;">
   <tr>
     <td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
              style="width:600px;max-width:100%;background:#ffffff;border:1px solid ${LINE};
-                    border-radius:10px;padding:34px 32px;">
+                    border-radius:10px;padding:26px 28px;">
 
         <tr><td style="font:600 22px ${SERIF};color:${INK};letter-spacing:.02em;">
           Sanaku<span style="color:${ACCENT};">.</span></td></tr>
 
-        <tr><td style="font:400 27px/1.15 ${SERIF};color:${INK};padding:18px 0 0;">
+        <tr><td style="font:400 23px/1.15 ${SERIF};color:${INK};padding:12px 0 0;">
           ${esc(v.lead)}</td></tr>
 
-        <tr><td style="font:400 15px/1.6 ${SANS};color:${SUB};padding:12px 0 0;">
+        <tr><td style="font:400 13.5px/1.5 ${SANS};color:${SUB};padding:9px 0 0;">
           We answer the calls and enquiries you are currently losing — after hours, at lunch,
           while your team is with a customer — under <b style="color:${INK};">your</b> name and
           your number. ${esc(v.story)}</td></tr>
 
-        <tr><td style="padding:24px 0 0;">
+        <tr><td style="padding:16px 0 0;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
                  style="background:${WASH};border-radius:8px;">
-            <tr><td style="padding:16px 18px;font:400 14px/1.6 ${SANS};color:${ACCENT_2};">
-              <b style="font-size:15px;">Try it for 30 days before you pay a monthly fee.</b><br>
+            <tr><td style="padding:12px 14px;font:400 13px/1.5 ${SANS};color:${ACCENT_2};">
+              <b style="font-size:14px;">Try it for 30 days before you pay a monthly fee.</b><br>
               You pay the setup fee to have it built — never more than ${money(CAP)} up front —
               then run it for a month and watch what it catches. If it does not pay for itself,
               walk away. You keep every lead it caught and owe nothing further.
@@ -167,7 +167,7 @@ function page(v) {
         </td></tr>
 
         <tr><td style="font:600 11.5px ${SANS};color:${SUB};letter-spacing:.09em;
-                       text-transform:uppercase;padding:30px 0 4px;
+                       text-transform:uppercase;padding:20px 0 3px;
                        border-bottom:2px solid ${INK};">
           Available now for ${esc(v.label)}</td></tr>
 
@@ -176,32 +176,32 @@ function page(v) {
         </table></td></tr>
 
         ${notes.length ? `
-        <tr><td style="padding:20px 0 0;">
+        <tr><td style="padding:13px 0 0;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
                  style="background:${PAPER};border-radius:8px;">
-            <tr><td style="padding:14px 16px;font:400 12.5px/1.65 ${SANS};color:${SUB};">
+            <tr><td style="padding:11px 13px;font:400 11.5px/1.5 ${SANS};color:${SUB};">
               <b style="color:${INK};">What we will and will not do.</b><br>
-              ${notes.map((n) => esc(n)).join('<br><br>')}
+              ${notes.map((n) => '&bull; ' + esc(n)).join('<br>')}
             </td></tr>
           </table>
         </td></tr>` : ''}
 
         ${soon.length ? `
-        <tr><td style="font:400 12.5px/1.6 ${SANS};color:${SUB};padding:22px 0 0;
+        <tr><td style="font:400 11.5px/1.5 ${SANS};color:${SUB};padding:13px 0 0;
                        border-top:1px solid ${LINE};margin-top:20px;">
           <b style="color:${INK};">In development, not yet available:</b>
           ${esc([...new Set(soon.map((s) => s.name))].join(', '))}.
           Listed so you can plan, not so it can be sold to you today.
         </td></tr>` : ''}
 
-        <tr><td style="padding:26px 0 0;">
+        <tr><td style="padding:16px 0 0;">
           <a href="mailto:${REPLY_TO}?subject=${encodeURIComponent('Sanaku — set up my number')}"
              style="display:inline-block;background:${ACCENT};color:#ffffff;text-decoration:none;
-                    font:600 15px ${SANS};padding:13px 26px;border-radius:999px;">
+                    font:600 14px ${SANS};padding:11px 22px;border-radius:999px;">
             Reply and we'll set up your number &rarr;</a>
         </td></tr>
 
-        <tr><td style="font:400 12px/1.6 ${SANS};color:${SUB};padding:22px 0 0;">
+        <tr><td style="font:400 11px/1.5 ${SANS};color:${SUB};padding:14px 0 0;">
           Prices are per service and current as of ${new Date().toISOString().slice(0, 10)}.
           Every lead we bill for is logged with a timestamp you can audit — we bill from our
           own meter, never from anything you report to us.
@@ -257,8 +257,16 @@ function plain(v) {
   return L.join('\n') + '\n';
 }
 
+// Page count straight out of the PDF catalog. Cheap, and it needs no extra
+// dependency to answer the only question that matters here.
+function pdfPageCount(file) {
+  const m = /\/Count\s+(\d+)/.exec(readFileSync(file, 'latin1'));
+  return m ? Number(m[1]) : 0;
+}
+
 mkdirSync(outDir, { recursive: true });
 const written = [];
+let failed = false;
 let n = 0;
 for (const v of VERTICALS) {
   const live = services.filter((s) => s.allowed_verticals.includes(v.key)
@@ -283,10 +291,32 @@ try {
   for (const f of written) {
     const p = await b.newPage();
     await p.goto(pathToFileURL(join(outDir, `sanaku-${f}.html`)).href, { waitUntil: 'load' });
-    await p.pdf({ path: join(outDir, `sanaku-${f}.pdf`), format: 'Letter',
-                  printBackground: true, margin: { top: '14mm', bottom: '14mm', left: '12mm', right: '12mm' } });
+    const out = join(outDir, `sanaku-${f}.pdf`);
+
+    // A one-pager has to actually be one page. Verticals carry different
+    // numbers of services, so a layout tuned until home services fits would
+    // leave law and medical half empty - and one tuned for law overflows on
+    // home services. So shrink to fit, and check rather than assume.
+    //
+    // The floor matters: below it the type stops being comfortably readable,
+    // and a second page beats an unreadable first one. Failing loudly there is
+    // the point - it means a service was added and the page needs editing, not
+    // squeezing.
+    let scale = 1, pages = 0;
+    for (; scale >= 0.78; scale -= 0.04) {
+      await p.pdf({ path: out, format: 'Letter', printBackground: true, scale,
+                    margin: { top: '12mm', bottom: '12mm', left: '11mm', right: '11mm' } });
+      pages = pdfPageCount(out);
+      if (pages === 1) break;
+    }
     await p.close();
-    console.log(`  sanaku-${f}.pdf`);
+    if (pages === 1) {
+      console.log(`  sanaku-${f}.pdf  (1 page${scale < 1 ? ` at ${Math.round(scale * 100)}%` : ''})`);
+    } else {
+      console.error(`  sanaku-${f}.pdf  STILL ${pages} PAGES even at 78% - trim the copy `
+                  + `or drop a section rather than shrinking it further.`);
+      failed = true;
+    }
   }
   await b.close();
 } catch (e) {
@@ -296,3 +326,4 @@ try {
 
 console.log('');
 console.log('Attach the .pdf, or open the .html and copy-paste it into the email body.');
+if (failed) process.exit(1);
