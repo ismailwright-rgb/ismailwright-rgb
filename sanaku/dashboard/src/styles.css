@@ -35,6 +35,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* Native controls - the audio player on a call, scrollbars, date pickers -
+       are painted by the browser, not by these tokens. Without color-scheme
+       the recording player renders as a white pill on the dark ground. */
+    color-scheme: dark;
     --ink: #eef1ee; --ink-2: #c3ccc6; --sub: #8b978f;
     --line: #262d31; --line-soft: #1d2327; --bg: #0d1114; --card: #141a1e;
     --raise: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.28);
@@ -45,6 +49,7 @@
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --ink: #eef1ee; --ink-2: #c3ccc6; --sub: #8b978f;
   --line: #262d31; --line-soft: #1d2327; --bg: #0d1114; --card: #141a1e;
   --raise: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.28);
@@ -54,6 +59,7 @@
   --calm: #9db3bd; --calm-wash: #17222a;
 }
 :root[data-theme="light"] {
+  color-scheme: light;
   --ink: #11161b; --ink-2: #2a3239; --sub: #67736d;
   --line: #e3e2db; --line-soft: #eeede7; --bg: #f6f5f0; --card: #ffffff;
   --raise: 0 1px 2px rgba(17,22,27,.04), 0 8px 24px rgba(17,22,27,.05);
@@ -379,6 +385,51 @@ tbody tr:hover { background: var(--line-soft); }
 .portal .card h3 { font-size: 17px; padding: 17px 20px 3px; }
 .portal .card.highlight p { font-size: 16px; line-height: 1.55; padding: 20px; }
 .portal th, .portal td { padding: 13px 16px; }
+
+/* -------------------------------------------------------------------------
+   A call the phone agent answered, opened up inside the leads table.
+   The recording is the point: a client who can press play stops wondering
+   whether the lead was real.
+   ------------------------------------------------------------------------- */
+.linkbtn {
+  background: none; border: 0; padding: 3px 0; margin-top: 3px;
+  display: block; color: var(--accent); font-size: 13px; font-weight: 600;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.linkbtn:hover { color: var(--ink); }
+
+.detailrow > td { background: var(--line-soft); padding: 0 !important; }
+.calldetail { padding: 18px 20px 20px; }
+
+.callaudio {
+  width: 100%; max-width: 480px; height: 38px; display: block;
+  margin-bottom: 14px;
+}
+.callsummary {
+  margin: 0 0 14px; font-size: 15px; line-height: 1.55; color: var(--ink);
+  max-width: 62ch;
+}
+
+/* Long calls should scroll inside the row rather than pushing the rest of the
+   page down - an owner is skimming, not reading a script. */
+.calltranscript {
+  max-height: 260px; overflow-y: auto; padding-right: 8px;
+  border-left: 2px solid var(--line); padding-left: 14px;
+}
+.calltranscript p {
+  margin: 0 0 9px; font-size: 13.5px; line-height: 1.5; max-width: 70ch;
+}
+.calltranscript .who {
+  display: inline-block; min-width: 52px; font-weight: 700; font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: .07em; color: var(--sub);
+}
+.calltranscript .agent .who { color: var(--accent); }
+.calltranscript .them { color: var(--ink); }
+
+@media (max-width: 760px) {
+  .calldetail { padding: 14px 16px 16px; }
+  .calltranscript .who { display: block; min-width: 0; margin-bottom: 1px; }
+}
 
 @media (max-width: 760px) {
   th.hide-m, td.hide-m { display: none; }

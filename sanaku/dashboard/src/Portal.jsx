@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import AddOns from './AddOns.jsx';
 
@@ -7,12 +7,26 @@ const day = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day
 const time = (d) => new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const startOfMonth = (offset = 0) => { const d = new Date(); d.setMonth(d.getMonth() + offset, 1); d.setHours(0, 0, 0, 0); return d; };
 
+// Exactly the columns sanaku_my_client exposes. Staff previewing a portal read
+// sanaku_clients directly - RLS lets them - so this list is the only thing
+// standing between a preview and the retainer being on screen during a demo.
+// Keep it identical to the view in migration-004.
+const PORTAL_COLUMNS =
+  'id, company_name, vertical, status, onboarded_at, brand_name, brand_logo_url, ' +
+  'brand_primary_color, brand_accent_color, sending_number, workflow_enabled';
+
 /**
  * What a client sees. Reads sanaku_my_client (a filtered view - the clients
  * table itself is staff-only, so retainer/per-lead pricing never reaches the
  * browser) plus their own leads, requests and statements, all scoped by RLS.
+ *
+ * `previewClientId` renders someone else's portal for staff - so a client's
+ * dashboard can be shown on a sales call without a second login, and so the
+ * demo client can be filmed. A client never passes it: their session cannot
+ * read another client's rows regardless. Everything RLS would have scoped is
+ * scoped by hand in that mode, because staff policies do not scope anything.
  */
-export default function Portal({ onSignOut }) {
+export default function Portal({ onSignOut, previewClientId, onExitPreview }) {
   const [client, setClient] = useState(null);
   const [leads, setLeads] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -23,11 +37,16 @@ export default function Portal({ onSignOut }) {
   async function load() {
     setLoading(true);
     const since = startOfMonth(-2).toISOString();
+    // Staff RLS returns EVERY client's leads, so a preview has to filter by
+    // hand. Without this, previewing one client shows you all of them.
+    const scope = (q) => (previewClientId ? q.eq('client_id', previewClientId) : q);
     const [c, l, r, b] = await Promise.all([
-      supabase.from('sanaku_my_client').select('*').limit(1),
-      supabase.from('sanaku_client_leads').select('*').gte('captured_at', since).order('captured_at', { ascending: false }),
-      supabase.from('sanaku_change_requests').select('*').order('submitted_at', { ascending: false }),
-      supabase.from('sanaku_billing').select('*').order('period_start', { ascending: false }).limit(12),
+      previewClientId
+        ? supabase.from('sanaku_clients').select(PORTAL_COLUMNS).eq('id', previewClientId).limit(1)
+        : supabase.from('sanaku_my_client').select('*').limit(1),
+      scope(supabase.from('sanaku_client_leads').select('*').gte('captured_at', since)).order('captured_at', { ascending: false }),
+      scope(supabase.from('sanaku_change_requests').select('*')).order('submitted_at', { ascending: false }),
+      scope(supabase.from('sanaku_billing').select('*')).order('period_start', { ascending: false }).limit(12),
     ]);
     setClient((c.data || [])[0] || null);
     setLeads(l.data || []);
@@ -35,7 +54,7 @@ export default function Portal({ onSignOut }) {
     setInvoices(b.data || []);
     setLoading(false);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [previewClientId]);
 
   const stats = useMemo(() => {
     const thisMonth = startOfMonth().getTime();
@@ -63,9 +82,13 @@ export default function Portal({ onSignOut }) {
     return (
       <div className="page">
         <div className="card"><div className="empty">
-          Your account isn't linked to a business yet. Contact us and we'll sort it out.
+          {previewClientId
+            ? "That client's row could not be read — it may have been deleted."
+            : "Your account isn't linked to a business yet. Contact us and we'll sort it out."}
         </div></div>
-        <button className="rowbtn" onClick={onSignOut}>Sign out</button>
+        <button className="rowbtn" onClick={previewClientId ? onExitPreview : onSignOut}>
+          {previewClientId ? 'Close preview' : 'Sign out'}
+        </button>
       </div>
     );
   }
@@ -85,7 +108,9 @@ export default function Portal({ onSignOut }) {
           ))}
         </nav>
         <span className="spacer" />
-        <button className="signout" onClick={onSignOut}>Sign out</button>
+        {previewClientId
+          ? <button className="signout" onClick={onExitPreview}>Close preview</button>
+          : <button className="signout" onClick={onSignOut}>Sign out</button>}
       </div>
 
       <div className="page">
@@ -129,9 +154,9 @@ export default function Portal({ onSignOut }) {
           </div>
         )}
 
-        {tab === 'addons' && <AddOns client={client} />}
+        {tab === 'addons' && <AddOns client={client} preview={!!previewClientId} />}
 
-        {tab === 'requests' && <Requests client={client} requests={requests} onSaved={load} />}
+        {tab === 'requests' && <Requests client={client} requests={requests} onSaved={load} preview={!!previewClientId} />}
 
         {tab === 'billing' && (
           <div className="card">
@@ -160,10 +185,49 @@ export default function Portal({ onSignOut }) {
   );
 }
 
+const mmss = (s) => {
+  if (s == null) return null;
+  return Math.floor(s / 60) + 'm ' + String(Math.round(s % 60)).padStart(2, '0') + 's';
+};
+
+// What the phone agent left behind: the recording, its own summary, and the
+// conversation. Worth showing in full - a client who can listen to the call
+// stops wondering whether the lead was real, which is the whole argument for
+// the add-on.
+function CallDetail({ lead }) {
+  const turns = Array.isArray(lead.transcript) ? lead.transcript : [];
+  return (
+    <div className="calldetail">
+      {lead.recording_url && (
+        <audio controls preload="none" src={lead.recording_url} className="callaudio">
+          Your browser can't play this recording.{' '}
+          <a href={lead.recording_url}>Download it instead.</a>
+        </audio>
+      )}
+      {lead.call_summary && <p className="callsummary">{lead.call_summary}</p>}
+      {turns.length > 0 && (
+        <div className="calltranscript">
+          {turns.map((t, i) => (
+            <p key={i} className={t.role === 'user' ? 'them' : 'agent'}>
+              <span className="who">{t.role === 'user' ? 'Caller' : 'Agent'}</span>
+              {t.message}
+            </p>
+          ))}
+        </div>
+      )}
+      {!lead.recording_url && turns.length === 0 && !lead.call_summary && (
+        <p className="muted">No recording was kept for this call.</p>
+      )}
+    </div>
+  );
+}
+
 function LeadTable({ leads, full }) {
+  const [open, setOpen] = useState(null);
   if (leads.length === 0) {
     return <div className="empty">No leads captured yet. They'll appear here the moment one comes in.</div>;
   }
+  const cols = full ? 5 : 4;
   return (
     <table>
       <thead>
@@ -173,30 +237,54 @@ function LeadTable({ leads, full }) {
         </tr>
       </thead>
       <tbody>
-        {leads.map((l) => (
-          <tr key={l.id}>
-            <td>
-              {time(l.captured_at)}
-              {l.after_hours && <div className="muted">after hours</div>}
-            </td>
-            <td>
-              {l.name || 'Unknown'}
-              <div className="muted">
-                {l.phone ? <a href={`tel:${String(l.phone).replace(/[^\d+]/g, '')}`}>{l.phone}</a> : ''}
-                {l.email ? ` · ${l.email}` : ''}
-              </div>
-            </td>
-            <td className="hide-m">{(l.channel || '').replace('_', ' ')}</td>
-            <td>{l.qualified ? <span className="pill t1">yes</span> : <span className="pill t3">—</span>}</td>
-            {full && <td className="hide-m muted">{l.outcome || '—'}</td>}
-          </tr>
-        ))}
+        {leads.map((l) => {
+          const isCall = l.channel === 'voice';
+          const expanded = open === l.id;
+          return (
+            <Fragment key={l.id}>
+              <tr>
+                <td>
+                  {time(l.captured_at)}
+                  {l.after_hours && <div className="muted">after hours</div>}
+                </td>
+                <td>
+                  {l.name || 'Unknown'}
+                  <div className="muted">
+                    {l.phone ? <a href={`tel:${String(l.phone).replace(/[^\d+]/g, '')}`}>{l.phone}</a> : ''}
+                    {l.email ? ` · ${l.email}` : ''}
+                  </div>
+                  {/* Deliberately in this column and not under "How": that one
+                      is hidden on phones, and a phone is where an owner checks
+                      this. */}
+                  {isCall && (
+                    <button className="linkbtn" onClick={() => setOpen(expanded ? null : l.id)}>
+                      {expanded ? 'Hide the call' : 'Listen to the call'}
+                    </button>
+                  )}
+                </td>
+                <td className="hide-m">
+                  {isCall ? 'phone call' : (l.channel || '').replace('_', ' ')}
+                  {isCall && mmss(l.duration_seconds) && (
+                    <div className="muted">{mmss(l.duration_seconds)}</div>
+                  )}
+                </td>
+                <td>{l.qualified ? <span className="pill t1">yes</span> : <span className="pill t3">—</span>}</td>
+                {full && <td className="hide-m muted">{l.outcome || '—'}</td>}
+              </tr>
+              {isCall && expanded && (
+                <tr className="detailrow">
+                  <td colSpan={cols}><CallDetail lead={l} /></td>
+                </tr>
+              )}
+            </Fragment>
+          );
+        })}
       </tbody>
     </table>
   );
 }
 
-function Requests({ client, requests, onSaved }) {
+function Requests({ client, requests, onSaved, preview }) {
   const [text, setText] = useState('');
   const [priority, setPriority] = useState('normal');
   const [busy, setBusy] = useState(false);
@@ -205,6 +293,9 @@ function Requests({ client, requests, onSaved }) {
   async function submit(e) {
     e.preventDefault();
     if (!text.trim()) return;
+    // Staff RLS would happily insert this, putting a request you typed during
+    // a demo into your own queue as though the client had asked for it.
+    if (preview) return setErr('Preview only — this would file a real request against them.');
     setBusy(true); setErr('');
     // status/submitted_at are forced server-side; sending them would be ignored.
     const { error } = await supabase.from('sanaku_change_requests').insert({

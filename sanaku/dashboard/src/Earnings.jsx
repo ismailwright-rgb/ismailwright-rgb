@@ -18,7 +18,10 @@ export default function Earnings() {
     setLoading(true);
     const from = monthStart().toISOString();
     const [c, l] = await Promise.all([
-      supabase.from('sanaku_clients').select('*').eq('status', 'active').order('company_name'),
+      // is_demo excluded: the demo client used for sales calls has a retainer
+      // on it so the portal looks real, and counting it here would quote you
+      // revenue from a company that does not exist.
+      supabase.from('sanaku_clients').select('*').eq('status', 'active').eq('is_demo', false).order('company_name'),
       supabase.from('sanaku_client_leads').select('client_id, qualified, after_hours, billable, reported_value, captured_at').gte('captured_at', from),
     ]);
     const leads = l.data || [];

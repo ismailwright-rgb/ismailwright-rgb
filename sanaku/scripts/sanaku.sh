@@ -546,7 +546,9 @@ cmd_migrate() {
     | tar xz -C "$_work" --strip-components=1
 
   head1 "Applying SQL to project $_ref"
-  for _f in "$_work"/sanaku/supabase/RUN-THIS-NOW.sql "$_work"/sanaku/supabase/ADDONS-RUN-THIS.sql; do
+  for _f in "$_work"/sanaku/supabase/RUN-THIS-NOW.sql \
+            "$_work"/sanaku/supabase/ADDONS-RUN-THIS.sql \
+            "$_work"/sanaku/supabase/VOICE-RUN-THIS.sql; do
     [ -f "$_f" ] || continue
     printf '  %s ... ' "$(basename "$_f")"
 
@@ -584,6 +586,175 @@ cmd_migrate() {
   cmd_authurl
   say ""
   ok "database is up to date"
+}
+
+# Run SQL read from stdin against Supabase. Same transport cmd_migrate uses -
+# split out so the demo commands do not each reimplement it. Leaves the
+# response body at $SQL_RESP and returns non-zero on anything but a 2xx.
+supabase_sql() {
+  ensure_config SUPABASE_URL SUPABASE_PAT
+  need_cmd python3
+  _ref=$(printf '%s' "$SUPABASE_URL" | sed 's|^https\{0,1\}://||; s|\.supabase\.co.*$||')
+  [ -n "$_ref" ] || { warn "could not read the project ref out of SUPABASE_URL"; return 1; }
+
+  _sq="$HOME/.sanaku-sql"; rm -rf "$_sq"; mkdir -p "$_sq"
+  cat > "$_sq/q.sql"
+  SQL_FILE="$_sq/q.sql" python3 -c 'import json,os,sys; sys.stdout.write(json.dumps({"query": open(os.environ["SQL_FILE"], encoding="utf-8").read()}))' > "$_sq/body.json"
+
+  SQL_RESP="$_sq/resp.txt"
+  _code=$(curl -sS -o "$SQL_RESP" -w '%{http_code}' -m 120 -X POST \
+    "https://api.supabase.com/v1/projects/$_ref/database/query" \
+    -H "Authorization: Bearer $SUPABASE_PAT" \
+    -H "Content-Type: application/json" \
+    --data-binary "@$_sq/body.json" 2>/dev/null) || _code="000"
+
+  case "$_code" in
+    2*) return 0 ;;
+    000) warn "could not reach Supabase"; return 1 ;;
+    401|403)
+      warn "the Supabase token was rejected"
+      say "    New one at supabase.com/dashboard/account/tokens, then:"
+      say "      sh ~/sanaku.sh set SUPABASE_PAT sbp_..."
+      return 1 ;;
+    *)
+      warn "Supabase answered HTTP $_code"
+      cut -c1-400 "$SQL_RESP" 2>/dev/null | sed 's/^/    /'
+      return 1 ;;
+  esac
+}
+
+DEMO_COMPANY="Delgado Plumbing & Rooter"
+
+# A throwaway client to film, and to demo on a sales call.
+#
+# It exists so a demo never touches a paying client's data and never needs a
+# second login. is_demo keeps it out of Active clients, Monthly retainers and
+# every statement, so a prop company can carry a $750 retainer and still not
+# turn up in what you are owed.
+cmd_demo() {
+  case "${1:-status}" in
+    seed)
+      _num="${2:-}"
+      if [ -z "$_num" ]; then
+        say "Usage: sh ~/sanaku.sh demo seed +17145551234"
+        say ""
+        say "That number is the one your VAPI assistant answers on. The workflow"
+        say "finds the client by it, so it has to match exactly, in E.164."
+        return 1
+      fi
+      case "$_num" in
+        +[0-9]*) ;;
+        *) warn "the number must be E.164, starting with + and a country code"; return 1 ;;
+      esac
+
+      head1 "Creating the demo client"
+      _q=$(printf '%s' "$_num" | sed "s/'/''/g")
+      supabase_sql <<SQL || return 1
+update sanaku_clients set
+  inbound_number = '$_q', status = 'active', workflow_enabled = true, is_demo = true,
+  brand_name = '$DEMO_COMPANY', brand_primary_color = '#1d4ed8',
+  timezone = 'America/Los_Angeles',
+  business_hours = '{"mon":["07:00","17:00"],"tue":["07:00","17:00"],"wed":["07:00","17:00"],"thu":["07:00","17:00"],"fri":["07:00","17:00"],"sat":null,"sun":null}'::jsonb,
+  notes = 'Demo client. Fictional. Used for sales calls and the demo video.'
+where is_demo and company_name = '$DEMO_COMPANY';
+
+insert into sanaku_clients (
+  company_name, vertical, status, is_demo, onboarded_at, brand_name,
+  brand_primary_color, inbound_number, timezone, business_hours,
+  pricing_model, monthly_retainer, per_lead_fee, qualified_definition, notes)
+select '$DEMO_COMPANY', 'home_services', 'active', true, current_date - 47,
+  '$DEMO_COMPANY', '#1d4ed8', '$_q', 'America/Los_Angeles',
+  '{"mon":["07:00","17:00"],"tue":["07:00","17:00"],"wed":["07:00","17:00"],"thu":["07:00","17:00"],"fri":["07:00","17:00"],"sat":null,"sun":null}'::jsonb,
+  'retainer_plus_per_lead', 750, 45,
+  'A homeowner who described a job we can do and left a number we can reach them on.',
+  'Demo client. Fictional. Used for sales calls and the demo video.'
+where not exists (select 1 from sanaku_clients
+                  where is_demo and company_name = '$DEMO_COMPANY');
+
+select id::text from sanaku_clients where is_demo and company_name = '$DEMO_COMPANY';
+SQL
+      ok "$DEMO_COMPANY answers on $_num"
+      say ""
+      say "Business hours are 7am-5pm Mon-Fri, so any call you make in the evening"
+      say "lands as 'after hours' - which is the number the whole pitch turns on."
+      say ""
+      say "To film it: Command center > Clients > the Portal button on that row."
+      say "That opens their portal full-screen with no operator chrome in the shot,"
+      say "so you do not need a second login."
+      say ""
+      say "Between takes:  sh ~/sanaku.sh demo reset"
+      ;;
+
+    reset)
+      head1 "Clearing the demo client's leads"
+      supabase_sql <<SQL || return 1
+delete from sanaku_client_leads
+where client_id in (select id from sanaku_clients
+                    where is_demo and company_name = '$DEMO_COMPANY');
+SQL
+      ok "leads cleared - the portal is empty again, ready for another take"
+      ;;
+
+    nuke)
+      head1 "Removing the demo client entirely"
+      supabase_sql <<SQL || return 1
+delete from sanaku_clients where is_demo and company_name = '$DEMO_COMPANY';
+SQL
+      ok "gone (its leads went with it - they were props)"
+      ;;
+
+    status|'')
+      head1 "Demo client"
+      supabase_sql <<SQL || return 1
+select c.company_name, c.inbound_number, count(l.id) as leads
+from sanaku_clients c
+left join sanaku_client_leads l on l.client_id = c.id
+where c.is_demo
+group by c.company_name, c.inbound_number;
+SQL
+      cut -c1-600 "$SQL_RESP" | sed 's/^/  /'
+      say ""
+      say "  seed:  sh ~/sanaku.sh demo seed +1714...   (the VAPI number)"
+      say "  reset: sh ~/sanaku.sh demo reset           (between takes)"
+      say "  nuke:  sh ~/sanaku.sh demo nuke            (when you are done)"
+      ;;
+
+    *)
+      say "Usage: sh ~/sanaku.sh demo [status|seed <number>|reset|nuke]"
+      return 1 ;;
+  esac
+}
+
+# Install the voice workflow and print what VAPI needs pointed at it.
+cmd_voice() {
+  cmd_import t2-voice-agent || return 1
+
+  ensure_config N8N_URL
+  head1 "Now wire VAPI to it"
+  say "1. Import the client's number:  dashboard.vapi.ai > Phone Numbers"
+  say "   It must equal inbound_number on their row, or T2 cannot tell whose"
+  say "   call it was."
+  say ""
+  say "2. Create the assistant from sanaku/vapi/assistant-home-services.json"
+  say ""
+  say "3. On that assistant, set:"
+  say "     Server URL       $N8N_URL/webhook/t2-voice-report"
+  say "     Server messages  end-of-call-report   (only that one)"
+  say "     Recording        on"
+  say "     Summary          on"
+  say "     Structured data  on, with the schema from that same file"
+  say ""
+  say "4. Assign the number to the assistant, then call it."
+  say ""
+  case "$N8N_URL" in
+    http://*)
+      warn "that URL is plain HTTP, so call transcripts cross the internet in the clear"
+      say "    VAPI will still reach it. Fix when you can:  sh ~/sanaku.sh secure"
+      say "" ;;
+  esac
+  say "The owner-alert text needs a Twilio credential picked by hand in n8n"
+  say "(Alert The Owner). Without it the lead still lands in the portal - the"
+  say "node is set to carry on rather than fail the run."
 }
 
 # Everything, in the right order, in one command.
@@ -981,6 +1152,8 @@ sanaku - control script
   sh ~/sanaku.sh logs        show what the last scraper run did, node by node
   sh ~/sanaku.sh scrape      run the prospect scraper now
   sh ~/sanaku.sh import NAME  install a workflow into n8n (see list below)
+  sh ~/sanaku.sh voice       install the AI phone agent + how to wire VAPI
+  sh ~/sanaku.sh demo        a throwaway client to film and to demo on calls
   sh ~/sanaku.sh dashboard   deploy the internal command center
   sh ~/sanaku.sh site        deploy the public landing page
   sh ~/sanaku.sh secure      how to put n8n behind HTTPS (needed for Invite)
@@ -993,6 +1166,8 @@ Workflow names for 'import' (the .json suffix is optional):
   invite-client-user     let a client sign in to their portal
   t1-missed-call-textback  the missed-call product
   t1-reply-handler       replies to those texts
+  t2-voice-agent         the AI phone agent (use 'voice' instead - it also
+                         prints the VAPI setup)
   w2-outreach-sequencer  cold outreach
   w2b-reply-handler      classifies prospect replies
   w3-demo-booking        booking page + calendar
@@ -1028,6 +1203,8 @@ case "${1:-}" in
   next)      cmd_next ;;
   scrape)    cmd_scrape ;;
   import)    shift; cmd_import "$@" ;;
+  voice)     cmd_voice ;;
+  demo)      shift; cmd_demo "$@" ;;
   dashboard) cmd_dashboard ;;
   site)      cmd_site ;;
   secure)    cmd_secure ;;

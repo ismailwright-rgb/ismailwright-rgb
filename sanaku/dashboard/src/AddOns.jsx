@@ -12,7 +12,7 @@ const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFract
  * cannot carry a price: the database overwrites every commercial field on
  * insert, so a hand-crafted POST cannot arrive pre-approved or priced at zero.
  */
-export default function AddOns({ client }) {
+export default function AddOns({ client, preview }) {
   const [catalog, setCatalog] = useState([]);
   const [mine, setMine] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,15 +24,22 @@ export default function AddOns({ client }) {
 
   async function load() {
     setLoading(true);
-    const [c, m] = await Promise.all([
-      supabase.from('sanaku_addons').select('*').eq('active', true).order('sort'),
-      supabase.from('sanaku_client_addons').select('*'),
-    ]);
+    // Staff previewing a portal are not filtered by RLS: without these two
+    // narrowings they would see every vertical's catalog and every client's
+    // subscriptions inside one client's portal. A client's own session is
+    // scoped by policy either way, so this only ever tightens.
+    let cq = supabase.from('sanaku_addons').select('*').eq('active', true).order('sort');
+    let mq = supabase.from('sanaku_client_addons').select('*');
+    if (preview) {
+      if (client.vertical) cq = cq.contains('allowed_verticals', [client.vertical]);
+      mq = mq.eq('client_id', client.id);
+    }
+    const [c, m] = await Promise.all([cq, mq]);
     setCatalog(c.data || []);
     setMine(m.data || []);
     setLoading(false);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [preview, client.id, client.vertical]);
 
   const statusOf = (c) => mine.find((m) => m.addon_code === c)?.status || null;
   const selected = useMemo(() => catalog.find((a) => a.code === code) || null, [catalog, code]);
@@ -40,6 +47,9 @@ export default function AddOns({ client }) {
 
   async function request() {
     if (!selected) return;
+    // In a preview the insert would succeed under staff RLS and drop a real
+    // request into your own queue, from a demo you were only showing someone.
+    if (preview) return setErr('Preview only — a request from here would land in your own queue.');
     setBusy(true);
     setErr('');
     const { error } = await supabase.from('sanaku_client_addons').insert({

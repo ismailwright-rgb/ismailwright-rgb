@@ -36,6 +36,7 @@ export default function App() {
   const [session, setSession] = useState(undefined); // undefined = still loading
   const [isStaff, setIsStaff] = useState(null);      // null = not yet resolved
   const [page, setPage] = useState('pipeline');
+  const [preview, setPreview] = useState(null);   // client id, when previewing their portal
   // An invite or reset link signs the person in and drops a type= marker in
   // the URL fragment. Both have to end at "choose a password", or an invited
   // client never has one and cannot return.
@@ -75,6 +76,19 @@ export default function App() {
   if (isStaff === null) return null;
   if (!isStaff) return <Portal onSignOut={signOut} />;
 
+  // Staff looking at a client's own portal - for a sales call, or to film the
+  // demo client. Takes over the whole screen, because half of the point is
+  // that the operator chrome is not in the shot.
+  if (preview) {
+    return (
+      <Portal
+        previewClientId={preview}
+        onSignOut={signOut}
+        onExitPreview={() => setPreview(null)}
+      />
+    );
+  }
+
   return (
     <>
       <div className="topbar">
@@ -95,7 +109,7 @@ export default function App() {
         <button className="signout" onClick={signOut}>Sign out</button>
       </div>
       <div className="page">
-        {page === 'pipeline' ? <Pipeline /> : page === 'clients' ? <Clients /> : <Earnings />}
+        {page === 'pipeline' ? <Pipeline /> : page === 'clients' ? <Clients onPreview={setPreview} /> : <Earnings />}
       </div>
     </>
   );

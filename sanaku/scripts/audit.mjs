@@ -153,14 +153,28 @@ if (problems === before5) ok(`all ${migs.length} migrations appear in a paste-in
 head('Client-facing safety');
 const before6 = problems;
 const portal = ['Portal.jsx', 'AddOns.jsx'].map((f) => join(R, 'dashboard', 'src', f)).filter(existsSync);
+// What a client pays for a catalog add-on (setup_fee, per_lead_fee on
+// sanaku_addons) is quoted to them on purpose. What YOU make on them - the
+// retainer, the rev share, the cap - never appears on their screen.
+const MARGIN = ['monthly_retainer', 'rev_share_pct', 'per_lead_monthly_cap'];
 for (const f of portal) {
   const t = readFileSync(f, 'utf8');
-  for (const m of t.matchAll(/\.from\(['"]([a-z0-9_]+)['"]\)/g)) {
-    if (m[1] === 'sanaku_clients') {
-      bad(f, 'reads sanaku_clients directly — that table carries your retainer and per-lead pricing; use sanaku_my_client');
+  for (const m of t.matchAll(/\.from\(['"]([a-z0-9_]+)['"]\)([\s\S]{0,200})/g)) {
+    if (m[1] !== 'sanaku_clients') continue;
+    // Staff previewing a client's portal read the table directly - RLS lets
+    // them, and the view is scoped to the signed-in client so it returns
+    // nothing. That is only safe with an explicit column list: `select('*')`
+    // on this table is how the retainer ends up on a projector.
+    const sel = m[2].match(/\.select\(\s*([A-Za-z_$][\w$]*|['"][^'"]*['"])/);
+    const arg = sel && sel[1];
+    const isConst = arg && /^[A-Z_][A-Z0-9_]*$/.test(arg);        // a named column list
+    const literal = arg && /^['"]/.test(arg) ? arg.slice(1, -1) : null;
+    const explicit = isConst || (literal && literal !== '*' && !literal.includes('*'));
+    if (!explicit) {
+      bad(f, 'reads sanaku_clients without an explicit column list — that table carries your retainer and per-lead pricing; use sanaku_my_client');
     }
   }
-  for (const c of ['monthly_retainer', 'rev_share_pct', 'per_lead_monthly_cap']) {
+  for (const c of MARGIN) {
     if (t.includes(c)) bad(f, `mentions ${c}, which a client must never see`);
   }
 }

@@ -41,7 +41,9 @@ export default function Statements() {
   async function load() {
     setLoading(true);
     const [c, l, a, b] = await Promise.all([
-      supabase.from('sanaku_clients').select('*').eq('status', 'active').order('company_name'),
+      // No statement is ever drafted for a demo client - it would sit in
+      // sanaku_billing looking exactly like a real one.
+      supabase.from('sanaku_clients').select('*').eq('status', 'active').eq('is_demo', false).order('company_name'),
       supabase.from('sanaku_client_leads')
         .select('client_id, qualified, billable, captured_at')
         .gte('captured_at', p.start.toISOString())

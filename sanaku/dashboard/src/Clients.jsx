@@ -53,7 +53,7 @@ const fmtMoney = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-
 // Page 2 v1: roster, this-month lead performance, and the kill switch.
 // Billing statements + change-request queue + health alerts land after
 // client #1 exists (per the build order - "everything else can wait").
-export default function Clients() {
+export default function Clients({ onPreview }) {
   const [clients, setClients] = useState([]);
   const [leadStats, setLeadStats] = useState({});
   const [loading, setLoading] = useState(true);
@@ -182,9 +182,14 @@ export default function Clients() {
   }
 
   const totals = useMemo(() => {
-    const active = clients.filter((c) => c.status === 'active');
+    // The demo client stays visible in the roster - you have to be able to
+    // reset it - but it is a prop, so it counts toward nothing.
+    const demo = new Set(clients.filter((c) => c.is_demo).map((c) => c.id));
+    const active = clients.filter((c) => c.status === 'active' && !c.is_demo);
     const retainers = active.reduce((s, c) => s + Number(c.monthly_retainer || 0), 0);
-    const leads = Object.values(leadStats).reduce((s, x) => s + x.total, 0);
+    const leads = Object.entries(leadStats)
+      .filter(([id]) => !demo.has(id))
+      .reduce((s, [, x]) => s + x.total, 0);
     return { active: active.length, retainers, leads };
   }, [clients, leadStats]);
 
@@ -266,6 +271,7 @@ export default function Clients() {
                         />
                         {c.company_name}
                       </b>
+                      {c.is_demo && <span className="pill t2" style={{ marginLeft: 8 }}>demo</span>}
                       <div className="muted">{c.vertical} · since {c.onboarded_at || '—'}</div>
                     </td>
                     <td className="hide-m">
@@ -288,6 +294,9 @@ export default function Clients() {
                         {c.workflow_enabled ? 'Pause' : 'Enable'}
                       </button>
                       <button className="rowbtn" onClick={() => inviteToPortal(c)}>Invite</button>
+                      {/* Shows exactly what they see - no second login needed,
+                          which is also how the demo client gets filmed. */}
+                      <button className="rowbtn" onClick={() => onPreview?.(c.id)}>Portal</button>
                       <button className="rowbtn" onClick={() => setBranding(c)}>Branding</button>
                       <button className="rowbtn" onClick={() => endClient(c)}>
                         {c.status === 'churned' ? 'Reactivate' : 'Close out'}
