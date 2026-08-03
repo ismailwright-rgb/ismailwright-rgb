@@ -766,10 +766,18 @@ print(f"  {len(a)} services, {len(m)} package links")' || return 1
     say "    Fix the prices above, then run this again."; return 1; }
   python3 "$_work/sanaku/scripts/sellsheet_xlsx.py" "$_work/catalog.json" \
     "$_out/sanaku-services.xlsx" || return 1
+  node "$_work/sanaku/scripts/emailpages.mjs" "$_work/catalog.json" "$_out/email" || return 1
 
   head1 "Done"
   say "  $_out/sell-sheet.html      open in a browser, then print to PDF"
   say "  $_out/sanaku-services.xlsx every figure a formula off the first tab"
+  say "  $_out/email/               one sell page per vertical, ready to email"
+  say ""
+  say "To send one: open the .html, select all, copy, paste into your email."
+  say "A .txt twin sits beside each for anyone who reads mail as plain text."
+  say ""
+  say "Only services that can actually be delivered are offered for sale on"
+  say "those pages. Anything still in build is listed as coming, not sold."
   say ""
   say "Prices come from the catalog. Change one in Supabase and run this again."
 }

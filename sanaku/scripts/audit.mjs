@@ -274,12 +274,13 @@ if (!existsSync(catalogPath)) {
     ]),
   };
 
+  // Recursive: the per-vertical sell pages live in docs/email/, and a flat
+  // listing skipped them entirely - the documents most likely to be pasted
+  // straight into a prospect's inbox were the ones not being checked.
   const docs = [];
   for (const d of ['site', 'docs']) {
-    const dir = join(R, d);
-    if (!existsSync(dir)) continue;
-    for (const f of readdirSync(dir)) {
-      if (/\.(html|md)$/.test(f) && !MOCKUPS.has(f)) docs.push(join(dir, f));
+    for (const f of walk(join(R, d))) {
+      if (/\.(html|md|txt)$/.test(f) && !MOCKUPS.has(f.split('/').pop())) docs.push(f);
     }
   }
   let drift = 0;
