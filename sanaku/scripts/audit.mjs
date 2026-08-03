@@ -7,9 +7,14 @@
  * app calls that was never defined. The build passes on every one of these.
  */
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const R = 'sanaku';
+// Resolved from this file, not from the working directory. Run from anywhere
+// but the repo root, a cwd-relative 'sanaku' resolved to nothing and the first
+// sections reported "0 tables ... ok" - a clean pass over an empty file list,
+// which is the worst possible failure for a checker.
+const R = join(dirname(fileURLToPath(import.meta.url)), '..');
 let problems = 0;
 const bad = (where, msg) => { console.log(`  FAIL  ${where}: ${msg}`); problems++; };
 const ok = (msg) => console.log(`  ok    ${msg}`);
