@@ -9,6 +9,7 @@
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { clientValueFigures } from './leak-figures.mjs';
 
 // Resolved from this file, not from the working directory. Run from anywhere
 // but the repo root, a cwd-relative 'sanaku' resolved to nothing and the first
@@ -218,6 +219,7 @@ if (!dangling) ok('every table is read or written by something');
 //    makes tomorrow's fail here instead of reaching a prospect.
 // ---------------------------------------------------------------------------
 head('Prices → catalog');
+const clientValue = clientValueFigures();
 const catalogPath = join(R, 'docs', 'catalog.json');
 if (!existsSync(catalogPath)) {
   console.log('  WARN  docs/catalog.json missing - run: sh ~/sanaku.sh sellsheet');
@@ -255,6 +257,11 @@ if (!existsSync(catalogPath)) {
     49, 168, 249, 284, 325, 468, 542,
   ]);
 
+  // What the gap is worth to a CLIENT, read from the same table the sell
+  // sheets print from - so changing a leak figure never makes the audit start
+  // reporting the sheets as quoting a price that does not exist.
+  for (const n of clientValue) known.add(n);
+
   // A UI mockup showing what the client portal looks like. Every figure in it
   // is fabricated sample data for a fictional company, not an offer.
   const MOCKUPS = new Set(['portal-preview.html']);
@@ -272,6 +279,9 @@ if (!existsSync(catalogPath)) {
     'pricing-rationale.md': new Set([
       18, 75, 199, 293, 542, 1500, 3000, 5000, 15000,
     ]),
+    // The call guide quotes what one job / case / patient is worth to the
+    // CLIENT - the figures the prospect is meant to multiply. Not our prices.
+    'call-guide.md': new Set([75, 200, 300, 2000, 3000, 5000]),
   };
 
   // Recursive: the per-vertical sell pages live in docs/email/, and a flat

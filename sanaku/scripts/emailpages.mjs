@@ -23,6 +23,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { LEAK, NO_RESPONSE_RATE } from './leak-figures.mjs';
 
 // ESM ignores NODE_PATH, so a globally installed playwright is not importable
 // by name. Same approach make-pdf.mjs already takes.
@@ -118,6 +119,7 @@ function page(v) {
   const soon = mine.filter((s) => s.build_status !== 'live' && s.category !== 'bundle')
     .sort((a, b) => a.sort - b.sort);
   const notes = [...new Set(live.map((s) => s.compliance_note).filter(Boolean))];
+  const leak = LEAK[v.key];
 
   // A COMPLETE document, not a fragment. Written as a bare <div> first, these
   // opened as mojibake or not at all: no charset declaration meant a browser
@@ -152,9 +154,27 @@ function page(v) {
         <tr><td style="font:400 13.5px/1.5 ${SANS};color:${SUB};padding:9px 0 0;">
           We answer the calls and enquiries you are currently losing — after hours, at lunch,
           while your team is with a customer — under <b style="color:${INK};">your</b> name and
-          your number. ${esc(v.story)}</td></tr>
+          your number.</td></tr>
 
         <tr><td style="padding:16px 0 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                 style="background:#fdf6e3;border-radius:8px;border-left:3px solid #8f6409;">
+            <tr><td style="padding:12px 14px;font:400 13px/1.5 ${SANS};color:#6d4d07;">
+              <b style="font-size:14px;color:#5a3f06;">What the gap is worth, roughly.</b><br>
+              About <b>a quarter of inbound leads at a typical local business get no timely
+              response</b>, and 78% of customers buy from whoever answers first.
+              At ${leak.calls} calls a month that is roughly <b>${Math.round(leak.calls * NO_RESPONSE_RATE)}
+              missed</b>. Recover even <b>two</b> of them, at ${money(leak.value)} for
+              ${leak.unit === 'signed case' ? 'a' : 'one'} ${leak.unit}
+              (typically ${leak.worth}), and that is
+              <b>${money(2 * leak.value)} a month</b> the phone was already earning you.<br>
+              <span style="font-size:11.5px;color:#8a6516;">Industry averages, not a claim about
+              your business — put your own two numbers in and the arithmetic is the same.</span>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:12px 0 0;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
                  style="background:${WASH};border-radius:8px;">
             <tr><td style="padding:12px 14px;font:400 13px/1.5 ${SANS};color:${ACCENT_2};">
@@ -189,9 +209,11 @@ function page(v) {
         ${soon.length ? `
         <tr><td style="font:400 11.5px/1.5 ${SANS};color:${SUB};padding:13px 0 0;
                        border-top:1px solid ${LINE};margin-top:20px;">
-          <b style="color:${INK};">In development, not yet available:</b>
-          ${esc([...new Set(soon.map((s) => s.name))].join(', '))}.
-          Listed so you can plan, not so it can be sold to you today.
+          <b style="color:${INK};">Also in development:</b>
+          ${esc([...new Set(soon.map((s) => s.name))].slice(0, 3).join(', '))}${
+            [...new Set(soon.map((s) => s.name))].length > 3
+              ? ` and ${[...new Set(soon.map((s) => s.name))].length - 3} more` : ''}.
+          Not yet available — mentioned so you can plan, not sold to you today.
         </td></tr>` : ''}
 
         <tr><td style="padding:16px 0 0;">
@@ -231,6 +253,16 @@ function plain(v) {
   L.push('We answer the calls and enquiries you are currently losing - after hours,');
   L.push('at lunch, while your team is with a customer - under YOUR name and number.');
   L.push(v.story);
+  L.push('');
+  const leak = LEAK[v.key];
+  L.push('WHAT THE GAP IS WORTH, ROUGHLY');
+  L.push('About a quarter of inbound leads at a typical local business get no');
+  L.push('timely response, and 78% of customers buy from whoever answers first.');
+  L.push(`At ${leak.calls} calls a month that is roughly ${Math.round(leak.calls * NO_RESPONSE_RATE)} missed.`);
+  L.push(`Recover even two, at ${money(leak.value)} for one ${leak.unit} (typically ${leak.worth}),`);
+  L.push(`and that is ${money(2 * leak.value)} a month the phone was already earning you.`);
+  L.push('Industry averages, not a claim about your business - put your own two');
+  L.push('numbers in and the arithmetic is the same.');
   L.push('');
   L.push('TRY IT FOR 30 DAYS BEFORE YOU PAY A MONTHLY FEE');
   L.push(`You pay the setup fee to have it built - never more than ${money(CAP)} up front -`);
