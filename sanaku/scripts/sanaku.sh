@@ -666,7 +666,7 @@ insert into sanaku_clients (
 select '$DEMO_COMPANY', 'home_services', 'active', true, current_date - 47,
   '$DEMO_COMPANY', '#1d4ed8', '$_q', 'America/Los_Angeles',
   '{"mon":["07:00","17:00"],"tue":["07:00","17:00"],"wed":["07:00","17:00"],"thu":["07:00","17:00"],"fri":["07:00","17:00"],"sat":null,"sun":null}'::jsonb,
-  'retainer_plus_per_lead', 750, 45,
+  'retainer_plus_per_lead', 750, 50,
   'A homeowner who described a job we can do and left a number we can reach them on.',
   'Demo client. Fictional. Used for sales calls and the demo video.'
 where not exists (select 1 from sanaku_clients

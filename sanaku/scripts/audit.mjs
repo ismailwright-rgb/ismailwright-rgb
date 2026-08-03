@@ -293,7 +293,24 @@ if (!existsSync(catalogPath)) {
       }
     }
   }
-  if (!drift) ok(`${docs.length} documents quote only catalog prices`);
+  // The demo client is not a document, but its own seed comment says it is
+  // "used for sales calls and the demo video" - so its rate is on screen in
+  // front of prospects exactly like a price list. It was seeded at $45 while
+  // every document said $50, and that $45 is legible in the demo video now on
+  // the site. Nothing else would ever have caught it.
+  const seed = /'retainer_plus_per_lead',\s*(\d+),\s*(\d+)/.exec(sh);
+  if (seed) {
+    const rate = Number(seed[2]);
+    const rates = new Set(cat.services.map((s) => Number(s.per_lead_fee)).filter(Boolean));
+    if (!rates.has(rate)) {
+      bad('sanaku.sh', `seeds the demo client at $${rate}/lead, which is not a catalog rate ` +
+                       `(${[...rates].sort((a, b) => a - b).map((r) => '$' + r).join(', ')}) ` +
+                       `- it shows on sales calls and in the demo video`);
+      drift++;
+    }
+  }
+
+  if (!drift) ok(`${docs.length} documents and the demo seed quote only catalog prices`);
 }
 
 console.log(problems ? `\n${problems} problem(s) found.\n` : '\nNothing broken. Every reference resolves.\n');
