@@ -147,17 +147,32 @@
   .cat .roi b { color: var(--green); }
 
   /* ---- proof ---- */
+  /* Single column since the screenshot placeholder became the demo video below.
+     Left as a two-column grid it rendered with an empty right half. */
   .proof-card {
-    display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center;
+    display: grid; grid-template-columns: 1fr; gap: 40px; align-items: center;
     background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 44px;
   }
-  @media (max-width: 840px) { .proof-card { grid-template-columns: 1fr; padding: 30px; } }
+  @media (max-width: 840px) { .proof-card { padding: 30px; } }
   .proof-figure { font-family: "Fraunces", serif; font-size: clamp(40px, 5vw, 56px); line-height: 1.05; }
   .proof-figure em { font-style: italic; color: var(--green); }
   .proof-shot {
     border: 1.5px dashed var(--line); border-radius: 10px; min-height: 210px;
     display: flex; align-items: center; justify-content: center; text-align: center;
     color: var(--ink-soft); font-size: 13.5px; padding: 20px; background: var(--paper);
+  }
+
+  /* ---- demo video ----
+     preload="none" so a 5.7 MB file never touches a first page load; the poster
+     carries the section until someone chooses to watch. Not autoplay and not
+     muted: this is a VOICE agent, so a silent autoplay would demo nothing. */
+  .demo { margin: 26px 0 0; }
+  .demo video {
+    width: 100%; height: auto; display: block; border-radius: var(--radius);
+    border: 1px solid var(--line); background: #0d1114;
+  }
+  .demo figcaption {
+    font-size: 13.5px; color: var(--ink-soft); margin-top: 12px; max-width: 70ch;
   }
 
   /* ---- pricing ---- */
@@ -373,8 +388,25 @@
         <div class="proof-figure">8 appointments<br>booked in <em>6 days.</em></div>
         <p style="margin-top:18px; color:var(--ink-soft);">That's this same machinery running outbound for another business — real conversations, real bookings, on the calendar within the first week. We don't sell software. We sell the result, and we happen to use software to get it.</p>
       </div>
-      <div class="proof-shot">Redacted screenshot of the actual booking thread goes here — outbound message → reply → confirmed appointment.</div>
     </div>
+
+    <figure class="demo reveal">
+      <video
+        controls
+        preload="none"
+        playsinline
+        poster="media/sanaku-voice-demo-poster.jpg"
+        width="1440" height="788">
+        <source src="media/sanaku-voice-demo.mp4" type="video/mp4">
+        Your browser cannot play this video. It shows the agent answering a live call,
+        qualifying the caller, and writing the lead into the dashboard.
+      </video>
+      <figcaption>
+        The agent answering a live call — qualifying the caller, taking the address, and
+        writing the lead into the dashboard on the left. Unedited, 3 min 20 sec.
+        <b>Turn the sound on</b> — the voice is the product.
+      </figcaption>
+    </figure>
   </div>
 </section>
 
