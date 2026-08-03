@@ -36,7 +36,10 @@ PATTERNS = [
     (r"SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)", "sum"),
     (r"([A-Z]+\d+)-([A-Z]+\d+)", "sub"),
     (r"([A-Z]+\d+)\*([A-Z]+\d+)", "mul"),
-    (r"([A-Z]+\d+)\+\(([A-Z]+\d+)\*12\)", "year1"),
+    # X+(Y*n) covers both the scenario year-one (n=12) and the trial year-one
+    # (n=11, because month one is free).
+    (r"([A-Z]+\d+)\+\(([A-Z]+\d+)\*(\d+)\)", "plusmul"),
+    (r"([A-Z]+\d+)", "same"),
     (r"IF\(([A-Z]+\d+)=0,0,\(([A-Z]+\d+)-([A-Z]+\d+)\)/([A-Z]+\d+)\)", "pct"),
 ]
 
@@ -63,8 +66,10 @@ def val(sheet, coord, depth=0):
             return (val(sheet, g[0], depth + 1) or 0) - (val(sheet, g[1], depth + 1) or 0)
         if kind == "mul":
             return (val(sheet, g[0], depth + 1) or 0) * (val(sheet, g[1], depth + 1) or 0)
-        if kind == "year1":
-            return (val(sheet, g[0], depth + 1) or 0) + (val(sheet, g[1], depth + 1) or 0) * 12
+        if kind == "plusmul":
+            return (val(sheet, g[0], depth + 1) or 0) + (val(sheet, g[1], depth + 1) or 0) * int(g[2])
+        if kind == "same":
+            return val(sheet, g[0], depth + 1)
         if kind == "pct":
             d = val(sheet, g[0], depth + 1) or 0
             if d == 0:
@@ -124,6 +129,30 @@ for r in range(5, sc.max_row + 1):
     setup, monthly = val("Scenarios", f"C{r}"), val("Scenarios", f"D{r}")
     if abs(y1 - (setup + monthly * 12)) > 0.51:
         bad.append(f"Scenarios r{r}: year one is {y1}, not {setup} + 12x{monthly}")
+
+# The trial tab. Year one on trial is the starting fee plus eleven billed
+# months, because month one is free - getting that wrong by a month is the
+# easiest way for this sheet to overstate what the offer earns.
+tr = wb["Trial"]
+for r in range(5, tr.max_row + 1):
+    name = tr.cell(row=r, column=1).value
+    if not name or str(name).startswith("Total") or str(name).startswith("'Given"):
+        continue
+    setup = val("Trial", f"B{r}")
+    start = val("Trial", f"C{r}")
+    monthly = val("Trial", f"E{r}")
+    for coord, expect, what in (
+        (f"D{r}", setup - start, "setup given up"),
+        (f"F{r}", monthly, "free month cost"),
+        (f"G{r}", start + monthly * 11, "year one on trial"),
+        (f"H{r}", setup + monthly * 12, "year one paid up front"),
+    ):
+        checked += 1
+        got = val("Trial", coord)
+        if abs((got or 0) - expect) > 0.51:
+            bad.append(f"Trial {coord} ({what}) for {name}: gives {got}, expected {expect}")
+    if start > setup:
+        bad.append(f"Trial r{r}: starting fee {start} exceeds normal setup {setup}")
 
 print(f"resolved {checked} formula results across {len(wb.sheetnames)} tabs")
 if bad:

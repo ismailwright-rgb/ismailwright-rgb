@@ -15,6 +15,7 @@
             "per_lead_fee": 15,
             "requires_baa": false,
             "compliance_note": "Contact only people who contacted you, opt-out honoured immediately, quiet hours respected, and every automated caller told it is automated.",
+            "trial_setup_fee": null,
             "included_minutes": 700,
             "allowed_verticals": [
                 "home_services"
@@ -36,6 +37,7 @@
             "per_lead_fee": 35,
             "requires_baa": false,
             "compliance_note": "No advice, no fee quotes, no case-outcome claims. Per-lead is per intake delivered, never per case signed. Solicitation rules vary by state and every sequence is reviewed against yours before it runs.",
+            "trial_setup_fee": null,
             "included_minutes": 700,
             "allowed_verticals": [
                 "law_firm"
@@ -57,6 +59,7 @@
             "per_lead_fee": null,
             "requires_baa": true,
             "compliance_note": "Requires a signed BAA covering every vendor in the path before go-live. Flat fee only - per-patient compensation can implicate anti-kickback and fee-splitting rules. Anything clinical routes to your staff; emergencies are directed to 911.",
+            "trial_setup_fee": null,
             "included_minutes": 400,
             "allowed_verticals": [
                 "medical"
@@ -78,6 +81,7 @@
             "per_lead_fee": 20,
             "requires_baa": false,
             "compliance_note": "Callers are told they are speaking with an automated assistant and that the call is recorded. Callbacks go only to people who just contacted you, about the thing they contacted you about.",
+            "trial_setup_fee": null,
             "included_minutes": 700,
             "allowed_verticals": [
                 "home_services"
@@ -99,6 +103,7 @@
             "per_lead_fee": 35,
             "requires_baa": false,
             "compliance_note": "The agent states it is not a lawyer and gives no legal advice or fee quotes. Per-lead is per intake delivered, never per case signed - a share of fees would be fee-splitting with a non-lawyer.",
+            "trial_setup_fee": null,
             "included_minutes": 700,
             "allowed_verticals": [
                 "law_firm"
@@ -120,6 +125,7 @@
             "per_lead_fee": 15,
             "requires_baa": false,
             "compliance_note": "Same rules as each part: contact only people who contacted you, opt-out honoured immediately, quiet hours respected.",
+            "trial_setup_fee": null,
             "included_minutes": 500,
             "allowed_verticals": [
                 "home_services"
@@ -141,6 +147,7 @@
             "per_lead_fee": 35,
             "requires_baa": false,
             "compliance_note": "No advice, no fee quotes, no case-outcome claims. Per-lead is per intake delivered, never per case signed.",
+            "trial_setup_fee": null,
             "included_minutes": 500,
             "allowed_verticals": [
                 "law_firm"
@@ -162,6 +169,7 @@
             "per_lead_fee": null,
             "requires_baa": true,
             "compliance_note": "Requires a signed BAA covering every vendor in the path. Flat fee only.",
+            "trial_setup_fee": null,
             "included_minutes": 500,
             "allowed_verticals": [
                 "medical"
@@ -183,6 +191,7 @@
             "per_lead_fee": null,
             "requires_baa": false,
             "compliance_note": "Callers are told they are speaking with an automated assistant, and that the call is recorded, before anything else is asked.",
+            "trial_setup_fee": 400,
             "included_minutes": 400,
             "allowed_verticals": [
                 "home_services"
@@ -204,6 +213,7 @@
             "per_lead_fee": 35,
             "requires_baa": false,
             "compliance_note": "The agent states it is not a lawyer and cannot give legal advice. Per-lead pricing is per intake DELIVERED, never per case signed - a share of fees or recoveries would be fee-splitting with a non-lawyer.",
+            "trial_setup_fee": 750,
             "included_minutes": 400,
             "allowed_verticals": [
                 "law_firm"
@@ -225,6 +235,7 @@
             "per_lead_fee": null,
             "requires_baa": true,
             "compliance_note": "Requires a signed BAA with every vendor in the call path before go-live. Flat fee only - per-patient compensation can implicate anti-kickback and fee-splitting rules.",
+            "trial_setup_fee": 750,
             "included_minutes": 400,
             "allowed_verticals": [
                 "medical"
@@ -246,6 +257,7 @@
             "per_lead_fee": 20,
             "requires_baa": false,
             "compliance_note": "Only calls people who just contacted YOU, about the thing they contacted you about. No cold outbound - an AI voice is an artificial voice under the TCPA, and calling a mobile without prior express written consent carries $500-$1,500 per call.",
+            "trial_setup_fee": 250,
             "included_minutes": 300,
             "allowed_verticals": [
                 "home_services"
@@ -267,6 +279,7 @@
             "per_lead_fee": 35,
             "requires_baa": false,
             "compliance_note": "Only calls people who just contacted you. Per-lead pricing is per intake delivered, never per case signed.",
+            "trial_setup_fee": 500,
             "included_minutes": 300,
             "allowed_verticals": [
                 "law_firm"
@@ -288,6 +301,7 @@
             "per_lead_fee": null,
             "requires_baa": false,
             "compliance_note": "Callers are told they are speaking with an automated assistant and that the call is recorded.",
+            "trial_setup_fee": 250,
             "included_minutes": 150,
             "allowed_verticals": [
                 "home_services",
@@ -311,6 +325,7 @@
             "per_lead_fee": null,
             "requires_baa": false,
             "compliance_note": null,
+            "trial_setup_fee": 250,
             "included_minutes": null,
             "allowed_verticals": [
                 "home_services",
@@ -334,6 +349,7 @@
             "per_lead_fee": null,
             "requires_baa": false,
             "compliance_note": "Texts go only to customers you have served, and every message carries opt-out instructions that are honoured immediately. Reviews are never incentivised or filtered by rating.",
+            "trial_setup_fee": 250,
             "included_minutes": null,
             "allowed_verticals": [
                 "home_services",
@@ -356,6 +372,7 @@
             "per_lead_fee": 15,
             "requires_baa": false,
             "compliance_note": "Texts reply only to people who just called you, carry your business name, and honour STOP immediately. Requires A2P 10DLC registration of your number, which we handle.",
+            "trial_setup_fee": 250,
             "included_minutes": 500,
             "allowed_verticals": [
                 "home_services"
@@ -377,6 +394,7 @@
             "per_lead_fee": 35,
             "requires_baa": false,
             "compliance_note": "No legal advice and no fee quotes are ever sent. Per-lead is per intake delivered, never per case signed. Honours STOP immediately.",
+            "trial_setup_fee": 450,
             "included_minutes": 500,
             "allowed_verticals": [
                 "law_firm"
@@ -398,6 +416,7 @@
             "per_lead_fee": null,
             "requires_baa": true,
             "compliance_note": "Requires a signed BAA before go-live. Messages carry no clinical detail. Flat fee only - per-patient compensation can implicate anti-kickback rules.",
+            "trial_setup_fee": 350,
             "included_minutes": 500,
             "allowed_verticals": [
                 "medical"
@@ -419,6 +438,7 @@
             "per_lead_fee": 15,
             "requires_baa": false,
             "compliance_note": "Escalation rules and quiet hours are yours to set. No message goes out between 9pm and 8am local time unless you have marked it urgent.",
+            "trial_setup_fee": 250,
             "included_minutes": null,
             "allowed_verticals": [
                 "home_services"
@@ -440,6 +460,7 @@
             "per_lead_fee": 35,
             "requires_baa": false,
             "compliance_note": "No legal advice, no fee quotes, no relationship formed. Per-lead is per intake delivered.",
+            "trial_setup_fee": 400,
             "included_minutes": null,
             "allowed_verticals": [
                 "law_firm"
@@ -461,6 +482,7 @@
             "per_lead_fee": null,
             "requires_baa": true,
             "compliance_note": "Requires a signed BAA. Collects the minimum necessary and never asks for clinical detail.",
+            "trial_setup_fee": 300,
             "included_minutes": null,
             "allowed_verticals": [
                 "medical"
@@ -482,6 +504,7 @@
             "per_lead_fee": 15,
             "requires_baa": false,
             "compliance_note": "Only contacts people who enquired with you. Every email carries your postal address and a working unsubscribe; every text honours STOP. Anyone who replies is taken out of the sequence immediately.",
+            "trial_setup_fee": 250,
             "included_minutes": null,
             "allowed_verticals": [
                 "home_services"
@@ -503,6 +526,7 @@
             "per_lead_fee": 35,
             "requires_baa": false,
             "compliance_note": "No advice, no case-outcome claims, no urgency pressure. Solicitation rules vary by state and the sequence is reviewed against yours before it runs.",
+            "trial_setup_fee": 450,
             "included_minutes": null,
             "allowed_verticals": [
                 "law_firm"
@@ -524,6 +548,7 @@
             "per_lead_fee": null,
             "requires_baa": true,
             "compliance_note": "Requires a signed BAA. Content is limited to the fact that an appointment is due. Flat fee only.",
+            "trial_setup_fee": 250,
             "included_minutes": null,
             "allowed_verticals": [
                 "medical"
@@ -545,6 +570,7 @@
             "per_lead_fee": null,
             "requires_baa": false,
             "compliance_note": "Reminders are transactional and go only to booked customers. Opt-out is honoured immediately.",
+            "trial_setup_fee": 250,
             "included_minutes": null,
             "allowed_verticals": [
                 "home_services"
@@ -566,6 +592,7 @@
             "per_lead_fee": null,
             "requires_baa": false,
             "compliance_note": "Reminders go only to people with a booked appointment, and carry no matter detail.",
+            "trial_setup_fee": 300,
             "included_minutes": null,
             "allowed_verticals": [
                 "law_firm"
@@ -587,6 +614,7 @@
             "per_lead_fee": null,
             "requires_baa": true,
             "compliance_note": "Requires a signed BAA. Appointment reminders are permitted patient communication, and these carry date, time and location only - no clinical detail.",
+            "trial_setup_fee": 250,
             "included_minutes": null,
             "allowed_verticals": [
                 "medical"
@@ -756,5 +784,5 @@
             "member_code": "voice_spanish"
         }
     ],
-    "generated_from": "sanaku_addons via the migration chain (007, 008, 011, 012)"
+    "generated_from": "sanaku_addons via the migration chain (007, 008, 011, 012, 013)"
 }

@@ -77,6 +77,9 @@ for (const b of services.filter((s) => s.category === 'bundle')) {
   if (m.savesSetup <= 0 || m.savesMonthly <= 0) {
     problems.push(`${b.code}: costs more than its parts`);
   }
+  if (b.trial_setup_fee != null) {
+    problems.push(`${b.code}: bundles are not offered on trial - thirty free days of a package is thousands of dollars per prospect`);
+  }
   // Selling the phone agent and the after-hours-only phone agent together
   // charges twice for one product.
   const codes = m.parts.map((p) => p.code);
@@ -84,6 +87,18 @@ for (const b of services.filter((s) => s.category === 'bundle')) {
     problems.push(`${b.code}: contains both after-hours answering and the full phone agent`);
   }
 }
+// A trial price with no ongoing price beside it is the one thing this sheet
+// must never print: it is how someone signs up for $250 without being told what
+// month two costs.
+for (const s of services) {
+  if (s.trial_setup_fee != null && !Number(s.monthly_fee)) {
+    problems.push(`${s.code}: has a trial price but no monthly fee to state alongside it`);
+  }
+  if (s.trial_setup_fee != null && Number(s.trial_setup_fee) > Number(s.setup_fee)) {
+    problems.push(`${s.code}: trial price is higher than the normal setup fee`);
+  }
+}
+
 if (problems.length) {
   console.error('Refusing to generate - the catalog does not add up:\n');
   for (const p of problems) console.error('  ' + p);
@@ -114,11 +129,19 @@ function priceLine(s) {
 function serviceRow(s) {
   const [label, cls] = STATUS[s.build_status] || STATUS.planned;
   const extra = priceLine(s);
+  // The ongoing figure is written into the same cell as the trial figure, on
+  // purpose. Split across columns it can be read as "$250" and skimmed past;
+  // in one sentence it cannot.
+  const trial = s.trial_setup_fee != null
+    ? `<div class="trial"><b>${money(s.trial_setup_fee)}</b> to start, then
+         <b>${money(s.monthly_fee)}/month</b> from day 31</div>`
+    : '';
   return `
         <tr>
           <td>
             <div class="svc">${esc(s.name)}</div>
             <div class="blurb">${esc(s.blurb)}</div>
+            ${trial}
             ${extra ? `<div class="meta">${esc(extra)}</div>` : ''}
           </td>
           <td class="num">${money(s.setup_fee)}</td>
@@ -258,6 +281,13 @@ const html = `<title>Sanaku — Services & Pricing</title>
     color:var(--sub); font-weight:600; }
   .how dd { margin:5px 0 0; font-size:13.5px; color:var(--ink-2); }
 
+  /* ---- the trial offer ---- */
+  .tryit { margin:26px 0 0; padding:20px 22px; border-radius:var(--r);
+    background:var(--accent-wash); border:1px solid var(--accent-wash); }
+  .tryit h2 { font-size:20px; color:var(--accent-2); }
+  .tryit p { margin:8px 0 0; color:var(--ink-2); max-width:68ch; font-size:14px; }
+  .tryit .small { font-size:12.5px; color:var(--calm); }
+
   /* ---- vertical sections ---- */
   .vert { margin-top:46px; }
   .vhead h2 { font-size:26px; }
@@ -302,6 +332,9 @@ const html = `<title>Sanaku — Services & Pricing</title>
   td.num { font-family:"Fraunces", Georgia, serif; font-size:16px; font-weight:600; }
   .svc { font-weight:600; }
   .meta { margin:5px 0 0; font-size:12.5px; color:var(--calm); }
+  .trial { margin:7px 0 0; font-size:12.5px; color:var(--accent-2);
+    background:var(--accent-wash); border-radius:var(--r-s); padding:6px 10px;
+    display:inline-block; font-variant-numeric:tabular-nums; }
 
   /* ---- status ---- */
   .chip { display:inline-block; font-size:11.5px; font-weight:600; white-space:nowrap;
@@ -351,6 +384,19 @@ const html = `<title>Sanaku — Services & Pricing</title>
     <div><dt>Per qualified lead</dt><dd>Only where shown, and only for a lead that met the definition you set. Never charged for spam or wrong numbers.</dd></div>
     <div><dt>Healthcare</dt><dd>Flat fee only, by design. Per-patient compensation can implicate anti-kickback rules, so it is not offered.</dd></div>
   </dl>
+
+  <section class="tryit">
+    <h2>Try one service first</h2>
+    <p>Pick a single service, pay its starting fee, and run it for 30 days before
+      any monthly charge begins. The starting fee is shown against each service
+      below, next to what it costs from day 31 — so there is no surprise in
+      month two.</p>
+    <p class="small">The 30 days begins the day your service actually starts
+      working, not the day you sign. Text-based services need your number
+      registered with the mobile carriers first, which we handle and which takes
+      a few days; the phone agent starts the same day. Packages are not offered
+      on trial — try a service, then bundle.</p>
+  </section>
 
   ${VERTICALS.map(verticalSection).join('\n')}
 

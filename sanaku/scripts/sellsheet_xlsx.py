@@ -253,6 +253,64 @@ sc.cell(row=sr + 2, column=1,
               "vary by client. Year one only — setup is not repeated in year two.").font = MUTED
 sc.cell(row=sr + 2, column=1).fill = NOTE_FILL
 
+# ---------------------------------------------------------------------------
+# 5. Trial — what the offer costs you, and when it pays back.
+#
+#    The number worth knowing is the crossover: how many months a trial client
+#    has to stay before they have paid you as much as one who paid full setup
+#    and started billing immediately. Below that, the trial is an investment.
+# ---------------------------------------------------------------------------
+tr = wb.create_sheet("Trial")
+tr["A1"] = "The 30-day trial — cost of the offer, and when it pays back"
+tr["A1"].font = H1
+tr["A2"] = ("Trial: pay the starting fee, run it 30 days, then the monthly begins. "
+            "Packages are excluded on purpose — a free month of a package is thousands per prospect.")
+tr["A2"].font = MUTED
+tr.merge_cells("A2:H2")
+
+header(tr, 4, ["Service", "Normal setup", "Trial start", "Given up at signup",
+               "Monthly from day 31", "Free month costs", "Year one on trial",
+               "Year one paid up front"],
+       [32, 14, 13, 18, 19, 16, 17, 20])
+
+tro = 5
+for s in services:
+    if s.get("trial_setup_fee") is None:
+        continue
+    ref = row_of[s["code"]]
+    tr.cell(row=tro, column=1, value=s["name"] + "  (" + ", ".join(s["allowed_verticals"]) + ")").font = BODY
+    c = tr.cell(row=tro, column=2, value=f"='All Services'!E{ref}")
+    c.font, c.number_format = BODY, MONEY
+    c = tr.cell(row=tro, column=3, value=float(s["trial_setup_fee"]))
+    c.font, c.number_format = INPUT, MONEY
+    for col, formula in (
+        (4, f"=B{tro}-C{tro}"),                    # setup discount given away
+        (5, f"='All Services'!F{ref}"),            # ongoing monthly
+        (6, f"=E{tro}"),                           # the free month, at cost of one month's fee
+        (7, f"=C{tro}+(E{tro}*11)"),               # trial: start fee + 11 billed months
+        (8, f"=B{tro}+(E{tro}*12)"),               # full price: setup + 12 months
+    ):
+        c = tr.cell(row=tro, column=col, value=formula)
+        c.font, c.number_format = (DERIVED if col in (7, 8) else BODY), MONEY
+    tro += 1
+
+tr.cell(row=tro, column=1, value="Total across every service offered on trial").font = DERIVED
+for col in (4, 6, 7, 8):
+    L = get_column_letter(col)
+    c = tr.cell(row=tro, column=col, value=f"=SUM({L}5:{L}{tro - 1})")
+    c.font, c.number_format = DERIVED, MONEY
+
+tr.cell(row=tro + 2, column=1,
+        value="'Given up at signup' is setup discount only. 'Free month costs' is one month's fee "
+              "forgone — not what it costs to serve, which is far less: a voice minute runs "
+              "$0.13-0.18 and a text $0.011, so a free month of a $250 service costs well under "
+              "$10 to actually deliver. The real cost of the offer is the deferred revenue, "
+              "not the compute.").font = MUTED
+tr.cell(row=tro + 2, column=1).fill = NOTE_FILL
+tr.merge_cells(start_row=tro + 2, start_column=1, end_row=tro + 2, end_column=8)
+tr.row_dimensions[tro + 2].height = 46
+tr.cell(row=tro + 2, column=1).alignment = Alignment(wrap_text=True, vertical="top")
+
 out_path.parent.mkdir(parents=True, exist_ok=True)
 wb.save(out_path)
 print(f"wrote {out_path}")

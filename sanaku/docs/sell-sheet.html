@@ -69,6 +69,13 @@
     color:var(--sub); font-weight:600; }
   .how dd { margin:5px 0 0; font-size:13.5px; color:var(--ink-2); }
 
+  /* ---- the trial offer ---- */
+  .tryit { margin:26px 0 0; padding:20px 22px; border-radius:var(--r);
+    background:var(--accent-wash); border:1px solid var(--accent-wash); }
+  .tryit h2 { font-size:20px; color:var(--accent-2); }
+  .tryit p { margin:8px 0 0; color:var(--ink-2); max-width:68ch; font-size:14px; }
+  .tryit .small { font-size:12.5px; color:var(--calm); }
+
   /* ---- vertical sections ---- */
   .vert { margin-top:46px; }
   .vhead h2 { font-size:26px; }
@@ -113,6 +120,9 @@
   td.num { font-family:"Fraunces", Georgia, serif; font-size:16px; font-weight:600; }
   .svc { font-weight:600; }
   .meta { margin:5px 0 0; font-size:12.5px; color:var(--calm); }
+  .trial { margin:7px 0 0; font-size:12.5px; color:var(--accent-2);
+    background:var(--accent-wash); border-radius:var(--r-s); padding:6px 10px;
+    display:inline-block; font-variant-numeric:tabular-nums; }
 
   /* ---- status ---- */
   .chip { display:inline-block; font-size:11.5px; font-weight:600; white-space:nowrap;
@@ -162,6 +172,19 @@
     <div><dt>Per qualified lead</dt><dd>Only where shown, and only for a lead that met the definition you set. Never charged for spam or wrong numbers.</dd></div>
     <div><dt>Healthcare</dt><dd>Flat fee only, by design. Per-patient compensation can implicate anti-kickback rules, so it is not offered.</dd></div>
   </dl>
+
+  <section class="tryit">
+    <h2>Try one service first</h2>
+    <p>Pick a single service, pay its starting fee, and run it for 30 days before
+      any monthly charge begins. The starting fee is shown against each service
+      below, next to what it costs from day 31 — so there is no surprise in
+      month two.</p>
+    <p class="small">The 30 days begins the day your service actually starts
+      working, not the day you sign. Text-based services need your number
+      registered with the mobile carriers first, which we handle and which takes
+      a few days; the phone agent starts the same day. Packages are not offered
+      on trial — try a service, then bundle.</p>
+  </section>
 
   
     <section class="vert" id="home_services">
@@ -253,6 +276,8 @@
           <td>
             <div class="svc">AI Phone Agent</div>
             <div class="blurb">Answers every call you miss, qualifies the caller, and books the job.</div>
+            <div class="trial"><b>$400</b> to start, then
+         <b>$350/month</b> from day 31</div>
             <div class="meta">400 min included · then $0.45 per min</div>
           </td>
           <td class="num">$750</td>
@@ -263,6 +288,8 @@
           <td>
             <div class="svc">Instant Lead Callback</div>
             <div class="blurb">Calls a web enquiry back within 60 seconds, while they are still on your site.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$250/month</b> from day 31</div>
             <div class="meta">300 min included · then $0.45 per min · $20 per qualified lead</div>
           </td>
           <td class="num">$500</td>
@@ -273,6 +300,8 @@
           <td>
             <div class="svc">After-Hours Answering</div>
             <div class="blurb">The phone agent, but only outside your opening hours.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$175/month</b> from day 31</div>
             <div class="meta">150 min included · then $0.45 per min</div>
           </td>
           <td class="num">$350</td>
@@ -283,6 +312,8 @@
           <td>
             <div class="svc">Spanish-Speaking Agent</div>
             <div class="blurb">Your agent handles Spanish callers in Spanish.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$100/month</b> from day 31</div>
             
           </td>
           <td class="num">$250</td>
@@ -293,6 +324,8 @@
           <td>
             <div class="svc">Review Requests</div>
             <div class="blurb">Texts a review link after every completed job.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$100/month</b> from day 31</div>
             
           </td>
           <td class="num">$250</td>
@@ -303,6 +336,8 @@
           <td>
             <div class="svc">Missed-Call Text-Back</div>
             <div class="blurb">A call goes unanswered and the caller gets a text from your number within seconds.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$250/month</b> from day 31</div>
             <div class="meta">500 texts included · then $0.05 per text · $15 per qualified lead</div>
           </td>
           <td class="num">$500</td>
@@ -313,6 +348,8 @@
           <td>
             <div class="svc">After-Hours Intake</div>
             <div class="blurb">When you are closed, the three questions that qualify a lead get asked anyway.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$200/month</b> from day 31</div>
             <div class="meta">$15 per qualified lead</div>
           </td>
           <td class="num">$400</td>
@@ -323,6 +360,8 @@
           <td>
             <div class="svc">Lead Nurture Sequences</div>
             <div class="blurb">Five-touch follow-up for everyone who enquired and went quiet.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$225/month</b> from day 31</div>
             <div class="meta">$15 per qualified lead</div>
           </td>
           <td class="num">$500</td>
@@ -333,6 +372,8 @@
           <td>
             <div class="svc">Reminders &amp; No-Show Recovery</div>
             <div class="blurb">Confirmations at booking, reminders at 24h and 1h, and a rebook offer after a no-show.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$175/month</b> from day 31</div>
             
           </td>
           <td class="num">$350</td>
@@ -445,6 +486,8 @@
           <td>
             <div class="svc">AI Intake Agent</div>
             <div class="blurb">Answers every call you miss and runs a first-pass intake.</div>
+            <div class="trial"><b>$750</b> to start, then
+         <b>$650/month</b> from day 31</div>
             <div class="meta">400 min included · then $0.55 per min · $35 per qualified lead</div>
           </td>
           <td class="num">$1,500</td>
@@ -455,6 +498,8 @@
           <td>
             <div class="svc">Instant Lead Callback</div>
             <div class="blurb">Calls a web enquiry back within 60 seconds and runs intake.</div>
+            <div class="trial"><b>$500</b> to start, then
+         <b>$450/month</b> from day 31</div>
             <div class="meta">300 min included · then $0.55 per min · $35 per qualified lead</div>
           </td>
           <td class="num">$1,000</td>
@@ -465,6 +510,8 @@
           <td>
             <div class="svc">After-Hours Answering</div>
             <div class="blurb">The phone agent, but only outside your opening hours.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$175/month</b> from day 31</div>
             <div class="meta">150 min included · then $0.45 per min</div>
           </td>
           <td class="num">$350</td>
@@ -475,6 +522,8 @@
           <td>
             <div class="svc">Spanish-Speaking Agent</div>
             <div class="blurb">Your agent handles Spanish callers in Spanish.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$100/month</b> from day 31</div>
             
           </td>
           <td class="num">$250</td>
@@ -485,6 +534,8 @@
           <td>
             <div class="svc">Review Requests</div>
             <div class="blurb">Texts a review link after every completed job.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$100/month</b> from day 31</div>
             
           </td>
           <td class="num">$250</td>
@@ -495,6 +546,8 @@
           <td>
             <div class="svc">Missed-Call Text-Back</div>
             <div class="blurb">A missed call gets an immediate text from your number, and the reply becomes an intake.</div>
+            <div class="trial"><b>$450</b> to start, then
+         <b>$450/month</b> from day 31</div>
             <div class="meta">500 texts included · then $0.07 per text · $35 per qualified lead</div>
           </td>
           <td class="num">$900</td>
@@ -505,6 +558,8 @@
           <td>
             <div class="svc">After-Hours Intake</div>
             <div class="blurb">Out-of-hours enquiries get a real intake instead of a voicemail box.</div>
+            <div class="trial"><b>$400</b> to start, then
+         <b>$350/month</b> from day 31</div>
             <div class="meta">$35 per qualified lead</div>
           </td>
           <td class="num">$750</td>
@@ -515,6 +570,8 @@
           <td>
             <div class="svc">Lead Nurture Sequences</div>
             <div class="blurb">Five-touch follow-up for enquiries that went quiet before signing.</div>
+            <div class="trial"><b>$450</b> to start, then
+         <b>$400/month</b> from day 31</div>
             <div class="meta">$35 per qualified lead</div>
           </td>
           <td class="num">$900</td>
@@ -525,6 +582,8 @@
           <td>
             <div class="svc">Reminders &amp; No-Show Recovery</div>
             <div class="blurb">Consultation confirmations, reminders, and an automatic rebook offer.</div>
+            <div class="trial"><b>$300</b> to start, then
+         <b>$300/month</b> from day 31</div>
             
           </td>
           <td class="num">$600</td>
@@ -613,6 +672,8 @@
           <td>
             <div class="svc">AI Front-Desk Agent</div>
             <div class="blurb">Answers overflow and after-hours calls, and takes appointment requests.</div>
+            <div class="trial"><b>$750</b> to start, then
+         <b>$650/month</b> from day 31</div>
             <div class="meta">400 min included · then $0.55 per min</div>
           </td>
           <td class="num">$1,500</td>
@@ -623,6 +684,8 @@
           <td>
             <div class="svc">After-Hours Answering</div>
             <div class="blurb">The phone agent, but only outside your opening hours.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$175/month</b> from day 31</div>
             <div class="meta">150 min included · then $0.45 per min</div>
           </td>
           <td class="num">$350</td>
@@ -633,6 +696,8 @@
           <td>
             <div class="svc">Spanish-Speaking Agent</div>
             <div class="blurb">Your agent handles Spanish callers in Spanish.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$100/month</b> from day 31</div>
             
           </td>
           <td class="num">$250</td>
@@ -643,6 +708,8 @@
           <td>
             <div class="svc">Missed-Call Text-Back</div>
             <div class="blurb">A missed call gets an immediate text offering to book or route the caller.</div>
+            <div class="trial"><b>$350</b> to start, then
+         <b>$325/month</b> from day 31</div>
             <div class="meta">500 texts included · then $0.07 per text</div>
           </td>
           <td class="num">$650</td>
@@ -653,6 +720,8 @@
           <td>
             <div class="svc">After-Hours Intake</div>
             <div class="blurb">Out-of-hours patients can request an appointment instead of waiting for morning.</div>
+            <div class="trial"><b>$300</b> to start, then
+         <b>$275/month</b> from day 31</div>
             
           </td>
           <td class="num">$550</td>
@@ -663,6 +732,8 @@
           <td>
             <div class="svc">Recall &amp; Reactivation</div>
             <div class="blurb">Brings back patients who have not been seen in a while.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$250/month</b> from day 31</div>
             
           </td>
           <td class="num">$500</td>
@@ -673,6 +744,8 @@
           <td>
             <div class="svc">Reminders &amp; No-Show Recovery</div>
             <div class="blurb">Appointment confirmations, reminders, and same-week rebooking after a no-show.</div>
+            <div class="trial"><b>$250</b> to start, then
+         <b>$225/month</b> from day 31</div>
             
           </td>
           <td class="num">$450</td>
