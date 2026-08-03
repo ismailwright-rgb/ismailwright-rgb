@@ -1,0 +1,706 @@
+<title>Sanaku — Services & Pricing</title>
+<style>
+  /* Tokens lifted from dashboard/src/styles.css so the sheet and the product
+     are the same object. Fraunces carries the numbers that matter; Instrument
+     Sans does the working. Both fall back to Georgia / system sans when the
+     font CDN is unreachable, which is a chosen stack, not an accident. */
+  :root {
+    --ink:#11161b; --ink-2:#2a3239; --sub:#67736d; --line:#e3e2db; --line-soft:#eeede7;
+    --bg:#f6f5f0; --card:#ffffff;
+    --accent:#0d6b42; --accent-2:#0a5434; --accent-wash:#e8f3ed;
+    --signal:#8f6409; --signal-wash:#fdf6e3; --calm:#4a6572; --calm-wash:#eef2f4;
+    --raise:0 1px 2px rgba(17,22,27,.04), 0 8px 24px rgba(17,22,27,.05);
+    --r:10px; --r-s:7px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme:dark;
+      --ink:#eef1ee; --ink-2:#c3ccc6; --sub:#8b978f; --line:#262d31; --line-soft:#1d2327;
+      --bg:#0d1114; --card:#141a1e;
+      --accent:#45d195; --accent-2:#6fdcae; --accent-wash:#12271f;
+      --signal:#e0ab3c; --signal-wash:#2a2110; --calm:#9db3bd; --calm-wash:#17222a;
+      --raise:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme:dark;
+    --ink:#eef1ee; --ink-2:#c3ccc6; --sub:#8b978f; --line:#262d31; --line-soft:#1d2327;
+    --bg:#0d1114; --card:#141a1e;
+    --accent:#45d195; --accent-2:#6fdcae; --accent-wash:#12271f;
+    --signal:#e0ab3c; --signal-wash:#2a2110; --calm:#9db3bd; --calm-wash:#17222a;
+    --raise:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.28);
+  }
+  :root[data-theme="light"] {
+    color-scheme:light;
+    --ink:#11161b; --ink-2:#2a3239; --sub:#67736d; --line:#e3e2db; --line-soft:#eeede7;
+    --bg:#f6f5f0; --card:#ffffff;
+    --accent:#0d6b42; --accent-2:#0a5434; --accent-wash:#e8f3ed;
+    --signal:#8f6409; --signal-wash:#fdf6e3; --calm:#4a6572; --calm-wash:#eef2f4;
+    --raise:0 1px 2px rgba(17,22,27,.04), 0 8px 24px rgba(17,22,27,.05);
+  }
+
+  * { box-sizing:border-box; }
+  body {
+    margin:0; padding:0 20px 72px;
+    background:var(--bg); color:var(--ink);
+    font-family:"Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .shell { max-width:980px; margin:0 auto; }
+  h1,h2,h3 { font-family:"Fraunces", Georgia, serif; font-weight:600; margin:0; text-wrap:balance; }
+  .num, dd, td.num, th.num { font-variant-numeric:tabular-nums; }
+
+  /* ---- masthead ---- */
+  header.top { display:flex; flex-wrap:wrap; gap:20px; align-items:flex-end;
+    justify-content:space-between; padding:52px 0 24px; border-bottom:2px solid var(--ink); }
+  .word { font-family:"Fraunces", Georgia, serif; font-size:34px; font-weight:600; letter-spacing:-.01em; }
+  .word span { color:var(--accent); }
+  .tag { color:var(--sub); max-width:46ch; margin:6px 0 0; }
+  .stamp { text-align:right; color:var(--sub); font-size:12.5px; line-height:1.7; }
+  .stamp b { color:var(--ink-2); font-weight:600; }
+
+  /* ---- how pricing works ---- */
+  .how { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+    margin:26px 0 8px; }
+  .how div { background:var(--card); border:1px solid var(--line); border-radius:var(--r);
+    padding:14px 16px; box-shadow:var(--raise); }
+  .how dt { font-size:11.5px; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--sub); font-weight:600; }
+  .how dd { margin:5px 0 0; font-size:13.5px; color:var(--ink-2); }
+
+  /* ---- vertical sections ---- */
+  .vert { margin-top:46px; }
+  .vhead h2 { font-size:26px; }
+  .vhead p { margin:4px 0 0; color:var(--sub); font-size:14px; }
+  h4.rule { font-size:11.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--sub);
+    font-weight:600; font-family:inherit; margin:28px 0 12px;
+    padding-bottom:7px; border-bottom:1px solid var(--line); }
+
+  /* ---- bundles ---- */
+  .bundles { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .bundle { background:var(--card); border:1px solid var(--line); border-radius:var(--r);
+    padding:20px; box-shadow:var(--raise); break-inside:avoid; }
+  .bundle header { display:flex; gap:12px; justify-content:space-between; align-items:flex-start;
+    border:0; padding:0; }
+  .bundle h3 { font-size:19px; }
+  .blurb { margin:4px 0 0; color:var(--sub); font-size:13.5px; }
+  .figures { display:flex; gap:22px; flex-wrap:wrap; margin:16px 0 14px;
+    padding:14px 0; border-top:1px solid var(--line-soft); border-bottom:1px solid var(--line-soft); }
+  .figures dt { font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--sub); font-weight:600; }
+  .figures dd { margin:3px 0 0; font-family:"Fraunces", Georgia, serif; font-size:22px; font-weight:600; }
+  .figures .was { font-family:inherit; font-size:12px; font-weight:400; color:var(--sub);
+    text-decoration:line-through; text-decoration-color:var(--line); }
+  .figures .save dd:first-of-type { color:var(--accent); }
+  .figures .save .was { text-decoration:none; color:var(--accent-2); }
+  .pct { font-family:inherit; font-size:12.5px; font-weight:600; background:var(--accent-wash);
+    color:var(--accent-2); padding:2px 7px; border-radius:99px; vertical-align:middle; }
+  .parts { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+  .parts li { display:flex; justify-content:space-between; gap:12px; font-size:13px;
+    color:var(--ink-2); padding-bottom:6px; border-bottom:1px dashed var(--line-soft); }
+  .parts li:last-child { border-bottom:0; }
+  .ala { color:var(--sub); font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+  /* ---- table ---- */
+  .tablewrap { overflow-x:auto; background:var(--card); border:1px solid var(--line);
+    border-radius:var(--r); box-shadow:var(--raise); }
+  table { width:100%; border-collapse:collapse; min-width:560px; }
+  th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--sub); font-weight:600; padding:12px 16px; border-bottom:1px solid var(--line); }
+  td { padding:14px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+  tr:last-child td { border-bottom:0; }
+  td.num, th.num { text-align:right; white-space:nowrap; }
+  td.num { font-family:"Fraunces", Georgia, serif; font-size:16px; font-weight:600; }
+  .svc { font-weight:600; }
+  .meta { margin:5px 0 0; font-size:12.5px; color:var(--calm); }
+
+  /* ---- status ---- */
+  .chip { display:inline-block; font-size:11.5px; font-weight:600; white-space:nowrap;
+    padding:3px 9px; border-radius:99px; border:1px solid transparent; }
+  .chip.ok  { background:var(--accent-wash); color:var(--accent-2); border-color:var(--accent-wash); }
+  .chip.wip { background:var(--signal-wash); color:var(--signal); border-color:var(--signal-wash); }
+
+  /* ---- compliance ---- */
+  .compliance { margin-top:16px; background:var(--calm-wash); border-radius:var(--r-s); padding:12px 16px; }
+  .compliance summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--calm); }
+  .compliance summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:3px; }
+  .compliance ul { margin:10px 0 2px; padding-left:18px; display:grid; gap:7px; }
+  .compliance li { font-size:12.5px; color:var(--ink-2); }
+
+  footer { margin-top:52px; padding-top:20px; border-top:1px solid var(--line);
+    color:var(--sub); font-size:12.5px; display:grid; gap:8px; }
+  footer b { color:var(--ink-2); }
+
+  @media print {
+    body { background:#fff; padding:0; font-size:11pt; }
+    .bundle, .tablewrap, .how div { box-shadow:none; }
+    .vert { break-before:page; }
+    .vert:first-of-type { break-before:auto; }
+    .compliance[open] summary { list-style:none; }
+    .compliance { break-inside:avoid; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+</style>
+
+<div class="shell">
+  <header class="top">
+    <div>
+      <div class="word">Sanaku<span>.</span></div>
+      <p class="tag">Answering, texting back, and following up on the enquiries a
+        local business would otherwise lose — automatically, in their name.</p>
+    </div>
+    <div class="stamp">
+      <b>Services &amp; pricing</b><br>
+      28 services · 7 available today<br>
+      Generated 2026-08-03
+    </div>
+  </header>
+
+  <dl class="how">
+    <div><dt>Setup</dt><dd>One-off. Covers number provisioning, script writing, and testing against your real calls before anything goes live.</dd></div>
+    <div><dt>Monthly</dt><dd>Flat. Includes the allowance shown against each service; anything beyond it is billed at the stated rate.</dd></div>
+    <div><dt>Per qualified lead</dt><dd>Only where shown, and only for a lead that met the definition you set. Never charged for spam or wrong numbers.</dd></div>
+    <div><dt>Healthcare</dt><dd>Flat fee only, by design. Per-patient compensation can implicate anti-kickback rules, so it is not offered.</dd></div>
+  </dl>
+
+  
+    <section class="vert" id="home_services">
+      <div class="vhead">
+        <h2>Home services</h2>
+        <p>Plumbers, electricians, HVAC, roofing, restoration.</p>
+      </div>
+
+      <h4 class="rule">Packages</h4>
+      <div class="bundles">
+      <article class="bundle">
+        <header>
+          <div>
+            <h3>The Whole System</h3>
+            <p class="blurb">Nothing that rings, texts, or fills in a form gets missed.</p>
+          </div>
+          <span class="chip wip">In development</span>
+        </header>
+        <div class="figures">
+          <div><dt>Setup</dt><dd>$2,500</dd><dd class="was">was $3,500</dd></div>
+          <div><dt>Monthly</dt><dd>$1,250</dd><dd class="was">was $1,650</dd></div>
+          <div class="save"><dt>You save</dt><dd>$1,000 <span class="pct">29%</span></dd>
+            <dd class="was">$400/mo · 24%</dd></div>
+        </div>
+        <ul class="parts">
+          <li><span>AI Phone Agent</span><span class="ala">$750 + $350/mo</span></li>
+          <li><span>Instant Lead Callback</span><span class="ala">$500 + $250/mo</span></li>
+          <li><span>Spanish-Speaking Agent</span><span class="ala">$250 + $100/mo</span></li>
+          <li><span>Review Requests</span><span class="ala">$250 + $100/mo</span></li>
+          <li><span>Missed-Call Text-Back</span><span class="ala">$500 + $250/mo</span></li>
+          <li><span>After-Hours Intake</span><span class="ala">$400 + $200/mo</span></li>
+          <li><span>Lead Nurture Sequences</span><span class="ala">$500 + $225/mo</span></li>
+          <li><span>Reminders &amp; No-Show Recovery</span><span class="ala">$350 + $175/mo</span></li>
+        </ul>
+        <p class="meta">700 minutes included · then $0.45 per minute · $15 per qualified lead</p>
+      </article>
+
+      <article class="bundle">
+        <header>
+          <div>
+            <h3>Complete Phone Cover</h3>
+            <p class="blurb">Every call answered, every web enquiry called back, in English or Spanish.</p>
+          </div>
+          <span class="chip wip">In development</span>
+        </header>
+        <div class="figures">
+          <div><dt>Setup</dt><dd>$1,100</dd><dd class="was">was $1,500</dd></div>
+          <div><dt>Monthly</dt><dd>$550</dd><dd class="was">was $700</dd></div>
+          <div class="save"><dt>You save</dt><dd>$400 <span class="pct">27%</span></dd>
+            <dd class="was">$150/mo · 21%</dd></div>
+        </div>
+        <ul class="parts">
+          <li><span>AI Phone Agent</span><span class="ala">$750 + $350/mo</span></li>
+          <li><span>Instant Lead Callback</span><span class="ala">$500 + $250/mo</span></li>
+          <li><span>Spanish-Speaking Agent</span><span class="ala">$250 + $100/mo</span></li>
+        </ul>
+        <p class="meta">700 minutes included · then $0.45 per minute · $20 per qualified lead</p>
+      </article>
+
+      <article class="bundle">
+        <header>
+          <div>
+            <h3>Complete Lead Recovery</h3>
+            <p class="blurb">All four recovery workflows, set up together.</p>
+          </div>
+          <span class="chip wip">In development</span>
+        </header>
+        <div class="figures">
+          <div><dt>Setup</dt><dd>$1,200</dd><dd class="was">was $1,750</dd></div>
+          <div><dt>Monthly</dt><dd>$650</dd><dd class="was">was $850</dd></div>
+          <div class="save"><dt>You save</dt><dd>$550 <span class="pct">31%</span></dd>
+            <dd class="was">$200/mo · 24%</dd></div>
+        </div>
+        <ul class="parts">
+          <li><span>Missed-Call Text-Back</span><span class="ala">$500 + $250/mo</span></li>
+          <li><span>After-Hours Intake</span><span class="ala">$400 + $200/mo</span></li>
+          <li><span>Lead Nurture Sequences</span><span class="ala">$500 + $225/mo</span></li>
+          <li><span>Reminders &amp; No-Show Recovery</span><span class="ala">$350 + $175/mo</span></li>
+        </ul>
+        <p class="meta">500 texts included · then $0.05 per text · $15 per qualified lead</p>
+      </article></div>
+
+      <h4 class="rule">Individually</h4>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Service</th><th class="num">Setup</th><th class="num">Monthly</th><th>Status</th></tr></thead>
+          <tbody>
+        <tr>
+          <td>
+            <div class="svc">AI Phone Agent</div>
+            <div class="blurb">Answers every call you miss, qualifies the caller, and books the job.</div>
+            <div class="meta">400 min included · then $0.45 per min</div>
+          </td>
+          <td class="num">$750</td>
+          <td class="num">$350</td>
+          <td><span class="chip ok">Available now</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Instant Lead Callback</div>
+            <div class="blurb">Calls a web enquiry back within 60 seconds, while they are still on your site.</div>
+            <div class="meta">300 min included · then $0.45 per min · $20 per qualified lead</div>
+          </td>
+          <td class="num">$500</td>
+          <td class="num">$250</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">After-Hours Answering</div>
+            <div class="blurb">The phone agent, but only outside your opening hours.</div>
+            <div class="meta">150 min included · then $0.45 per min</div>
+          </td>
+          <td class="num">$350</td>
+          <td class="num">$175</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Spanish-Speaking Agent</div>
+            <div class="blurb">Your agent handles Spanish callers in Spanish.</div>
+            
+          </td>
+          <td class="num">$250</td>
+          <td class="num">$100</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Review Requests</div>
+            <div class="blurb">Texts a review link after every completed job.</div>
+            
+          </td>
+          <td class="num">$250</td>
+          <td class="num">$100</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Missed-Call Text-Back</div>
+            <div class="blurb">A call goes unanswered and the caller gets a text from your number within seconds.</div>
+            <div class="meta">500 texts included · then $0.05 per text · $15 per qualified lead</div>
+          </td>
+          <td class="num">$500</td>
+          <td class="num">$250</td>
+          <td><span class="chip ok">Available now</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">After-Hours Intake</div>
+            <div class="blurb">When you are closed, the three questions that qualify a lead get asked anyway.</div>
+            <div class="meta">$15 per qualified lead</div>
+          </td>
+          <td class="num">$400</td>
+          <td class="num">$200</td>
+          <td><span class="chip ok">Available now</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Lead Nurture Sequences</div>
+            <div class="blurb">Five-touch follow-up for everyone who enquired and went quiet.</div>
+            <div class="meta">$15 per qualified lead</div>
+          </td>
+          <td class="num">$500</td>
+          <td class="num">$225</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Reminders &amp; No-Show Recovery</div>
+            <div class="blurb">Confirmations at booking, reminders at 24h and 1h, and a rebook offer after a no-show.</div>
+            
+          </td>
+          <td class="num">$350</td>
+          <td class="num">$175</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details class="compliance">
+        <summary>What we will and will not do — home services</summary>
+        <ul><li>Callers are told they are speaking with an automated assistant, and that the call is recorded, before anything else is asked.</li>
+            <li>Only calls people who just contacted YOU, about the thing they contacted you about. No cold outbound - an AI voice is an artificial voice under the TCPA, and calling a mobile without prior express written consent carries $500-$1,500 per call.</li>
+            <li>Callers are told they are speaking with an automated assistant and that the call is recorded.</li>
+            <li>Texts go only to customers you have served, and every message carries opt-out instructions that are honoured immediately. Reviews are never incentivised or filtered by rating.</li>
+            <li>Texts reply only to people who just called you, carry your business name, and honour STOP immediately. Requires A2P 10DLC registration of your number, which we handle.</li>
+            <li>Escalation rules and quiet hours are yours to set. No message goes out between 9pm and 8am local time unless you have marked it urgent.</li>
+            <li>Only contacts people who enquired with you. Every email carries your postal address and a working unsubscribe; every text honours STOP. Anyone who replies is taken out of the sequence immediately.</li>
+            <li>Reminders are transactional and go only to booked customers. Opt-out is honoured immediately.</li></ul>
+      </details>
+    </section>
+
+    <section class="vert" id="law_firm">
+      <div class="vhead">
+        <h2>Law firms</h2>
+        <p>Personal injury, family, criminal, immigration.</p>
+      </div>
+
+      <h4 class="rule">Packages</h4>
+      <div class="bundles">
+      <article class="bundle">
+        <header>
+          <div>
+            <h3>The Whole System</h3>
+            <p class="blurb">Every enquiry captured, followed up, and turned into an intake.</p>
+          </div>
+          <span class="chip wip">In development</span>
+        </header>
+        <div class="figures">
+          <div><dt>Setup</dt><dd>$4,450</dd><dd class="was">was $6,150</dd></div>
+          <div><dt>Monthly</dt><dd>$2,150</dd><dd class="was">was $2,800</dd></div>
+          <div class="save"><dt>You save</dt><dd>$1,700 <span class="pct">28%</span></dd>
+            <dd class="was">$650/mo · 23%</dd></div>
+        </div>
+        <ul class="parts">
+          <li><span>AI Intake Agent</span><span class="ala">$1,500 + $650/mo</span></li>
+          <li><span>Instant Lead Callback</span><span class="ala">$1,000 + $450/mo</span></li>
+          <li><span>Spanish-Speaking Agent</span><span class="ala">$250 + $100/mo</span></li>
+          <li><span>Review Requests</span><span class="ala">$250 + $100/mo</span></li>
+          <li><span>Missed-Call Text-Back</span><span class="ala">$900 + $450/mo</span></li>
+          <li><span>After-Hours Intake</span><span class="ala">$750 + $350/mo</span></li>
+          <li><span>Lead Nurture Sequences</span><span class="ala">$900 + $400/mo</span></li>
+          <li><span>Reminders &amp; No-Show Recovery</span><span class="ala">$600 + $300/mo</span></li>
+        </ul>
+        <p class="meta">700 minutes included · then $0.55 per minute · $35 per qualified lead</p>
+      </article>
+
+      <article class="bundle">
+        <header>
+          <div>
+            <h3>Complete Phone Cover</h3>
+            <p class="blurb">Every call answered and every web enquiry called back, with first-pass intake.</p>
+          </div>
+          <span class="chip wip">In development</span>
+        </header>
+        <div class="figures">
+          <div><dt>Setup</dt><dd>$2,000</dd><dd class="was">was $2,750</dd></div>
+          <div><dt>Monthly</dt><dd>$900</dd><dd class="was">was $1,200</dd></div>
+          <div class="save"><dt>You save</dt><dd>$750 <span class="pct">27%</span></dd>
+            <dd class="was">$300/mo · 25%</dd></div>
+        </div>
+        <ul class="parts">
+          <li><span>AI Intake Agent</span><span class="ala">$1,500 + $650/mo</span></li>
+          <li><span>Instant Lead Callback</span><span class="ala">$1,000 + $450/mo</span></li>
+          <li><span>Spanish-Speaking Agent</span><span class="ala">$250 + $100/mo</span></li>
+        </ul>
+        <p class="meta">700 minutes included · then $0.55 per minute · $35 per qualified lead</p>
+      </article>
+
+      <article class="bundle">
+        <header>
+          <div>
+            <h3>Complete Lead Recovery</h3>
+            <p class="blurb">All four recovery workflows, set up together.</p>
+          </div>
+          <span class="chip wip">In development</span>
+        </header>
+        <div class="figures">
+          <div><dt>Setup</dt><dd>$2,200</dd><dd class="was">was $3,150</dd></div>
+          <div><dt>Monthly</dt><dd>$1,100</dd><dd class="was">was $1,500</dd></div>
+          <div class="save"><dt>You save</dt><dd>$950 <span class="pct">30%</span></dd>
+            <dd class="was">$400/mo · 27%</dd></div>
+        </div>
+        <ul class="parts">
+          <li><span>Missed-Call Text-Back</span><span class="ala">$900 + $450/mo</span></li>
+          <li><span>After-Hours Intake</span><span class="ala">$750 + $350/mo</span></li>
+          <li><span>Lead Nurture Sequences</span><span class="ala">$900 + $400/mo</span></li>
+          <li><span>Reminders &amp; No-Show Recovery</span><span class="ala">$600 + $300/mo</span></li>
+        </ul>
+        <p class="meta">500 texts included · then $0.07 per text · $35 per qualified lead</p>
+      </article></div>
+
+      <h4 class="rule">Individually</h4>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Service</th><th class="num">Setup</th><th class="num">Monthly</th><th>Status</th></tr></thead>
+          <tbody>
+        <tr>
+          <td>
+            <div class="svc">AI Intake Agent</div>
+            <div class="blurb">Answers every call you miss and runs a first-pass intake.</div>
+            <div class="meta">400 min included · then $0.55 per min · $35 per qualified lead</div>
+          </td>
+          <td class="num">$1,500</td>
+          <td class="num">$650</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Instant Lead Callback</div>
+            <div class="blurb">Calls a web enquiry back within 60 seconds and runs intake.</div>
+            <div class="meta">300 min included · then $0.55 per min · $35 per qualified lead</div>
+          </td>
+          <td class="num">$1,000</td>
+          <td class="num">$450</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">After-Hours Answering</div>
+            <div class="blurb">The phone agent, but only outside your opening hours.</div>
+            <div class="meta">150 min included · then $0.45 per min</div>
+          </td>
+          <td class="num">$350</td>
+          <td class="num">$175</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Spanish-Speaking Agent</div>
+            <div class="blurb">Your agent handles Spanish callers in Spanish.</div>
+            
+          </td>
+          <td class="num">$250</td>
+          <td class="num">$100</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Review Requests</div>
+            <div class="blurb">Texts a review link after every completed job.</div>
+            
+          </td>
+          <td class="num">$250</td>
+          <td class="num">$100</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Missed-Call Text-Back</div>
+            <div class="blurb">A missed call gets an immediate text from your number, and the reply becomes an intake.</div>
+            <div class="meta">500 texts included · then $0.07 per text · $35 per qualified lead</div>
+          </td>
+          <td class="num">$900</td>
+          <td class="num">$450</td>
+          <td><span class="chip ok">Available now</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">After-Hours Intake</div>
+            <div class="blurb">Out-of-hours enquiries get a real intake instead of a voicemail box.</div>
+            <div class="meta">$35 per qualified lead</div>
+          </td>
+          <td class="num">$750</td>
+          <td class="num">$350</td>
+          <td><span class="chip ok">Available now</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Lead Nurture Sequences</div>
+            <div class="blurb">Five-touch follow-up for enquiries that went quiet before signing.</div>
+            <div class="meta">$35 per qualified lead</div>
+          </td>
+          <td class="num">$900</td>
+          <td class="num">$400</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Reminders &amp; No-Show Recovery</div>
+            <div class="blurb">Consultation confirmations, reminders, and an automatic rebook offer.</div>
+            
+          </td>
+          <td class="num">$600</td>
+          <td class="num">$300</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details class="compliance">
+        <summary>What we will and will not do — law firms</summary>
+        <ul><li>The agent states it is not a lawyer and cannot give legal advice. Per-lead pricing is per intake DELIVERED, never per case signed - a share of fees or recoveries would be fee-splitting with a non-lawyer.</li>
+            <li>Only calls people who just contacted you. Per-lead pricing is per intake delivered, never per case signed.</li>
+            <li>Callers are told they are speaking with an automated assistant and that the call is recorded.</li>
+            <li>Texts go only to customers you have served, and every message carries opt-out instructions that are honoured immediately. Reviews are never incentivised or filtered by rating.</li>
+            <li>No legal advice and no fee quotes are ever sent. Per-lead is per intake delivered, never per case signed. Honours STOP immediately.</li>
+            <li>No legal advice, no fee quotes, no relationship formed. Per-lead is per intake delivered.</li>
+            <li>No advice, no case-outcome claims, no urgency pressure. Solicitation rules vary by state and the sequence is reviewed against yours before it runs.</li>
+            <li>Reminders go only to people with a booked appointment, and carry no matter detail.</li></ul>
+      </details>
+    </section>
+
+    <section class="vert" id="medical">
+      <div class="vhead">
+        <h2>Medical &amp; dental practices</h2>
+        <p>Every service here requires a signed BAA before go-live.</p>
+      </div>
+
+      <h4 class="rule">Packages</h4>
+      <div class="bundles">
+      <article class="bundle">
+        <header>
+          <div>
+            <h3>The Whole System</h3>
+            <p class="blurb">Every call, message and no-show handled, without touching clinical detail.</p>
+          </div>
+          <span class="chip wip">In development</span>
+        </header>
+        <div class="figures">
+          <div><dt>Setup</dt><dd>$2,800</dd><dd class="was">was $3,900</dd></div>
+          <div><dt>Monthly</dt><dd>$1,400</dd><dd class="was">was $1,825</dd></div>
+          <div class="save"><dt>You save</dt><dd>$1,100 <span class="pct">28%</span></dd>
+            <dd class="was">$425/mo · 23%</dd></div>
+        </div>
+        <ul class="parts">
+          <li><span>AI Front-Desk Agent</span><span class="ala">$1,500 + $650/mo</span></li>
+          <li><span>Spanish-Speaking Agent</span><span class="ala">$250 + $100/mo</span></li>
+          <li><span>Missed-Call Text-Back</span><span class="ala">$650 + $325/mo</span></li>
+          <li><span>After-Hours Intake</span><span class="ala">$550 + $275/mo</span></li>
+          <li><span>Recall &amp; Reactivation</span><span class="ala">$500 + $250/mo</span></li>
+          <li><span>Reminders &amp; No-Show Recovery</span><span class="ala">$450 + $225/mo</span></li>
+        </ul>
+        <p class="meta">400 minutes included · then $0.55 per minute</p>
+      </article>
+
+      <article class="bundle">
+        <header>
+          <div>
+            <h3>Complete Lead Recovery</h3>
+            <p class="blurb">All four recovery workflows, set up together.</p>
+          </div>
+          <span class="chip wip">In development</span>
+        </header>
+        <div class="figures">
+          <div><dt>Setup</dt><dd>$1,600</dd><dd class="was">was $2,150</dd></div>
+          <div><dt>Monthly</dt><dd>$850</dd><dd class="was">was $1,075</dd></div>
+          <div class="save"><dt>You save</dt><dd>$550 <span class="pct">26%</span></dd>
+            <dd class="was">$225/mo · 21%</dd></div>
+        </div>
+        <ul class="parts">
+          <li><span>Missed-Call Text-Back</span><span class="ala">$650 + $325/mo</span></li>
+          <li><span>After-Hours Intake</span><span class="ala">$550 + $275/mo</span></li>
+          <li><span>Recall &amp; Reactivation</span><span class="ala">$500 + $250/mo</span></li>
+          <li><span>Reminders &amp; No-Show Recovery</span><span class="ala">$450 + $225/mo</span></li>
+        </ul>
+        <p class="meta">500 texts included · then $0.07 per text</p>
+      </article></div>
+
+      <h4 class="rule">Individually</h4>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Service</th><th class="num">Setup</th><th class="num">Monthly</th><th>Status</th></tr></thead>
+          <tbody>
+        <tr>
+          <td>
+            <div class="svc">AI Front-Desk Agent</div>
+            <div class="blurb">Answers overflow and after-hours calls, and takes appointment requests.</div>
+            <div class="meta">400 min included · then $0.55 per min</div>
+          </td>
+          <td class="num">$1,500</td>
+          <td class="num">$650</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">After-Hours Answering</div>
+            <div class="blurb">The phone agent, but only outside your opening hours.</div>
+            <div class="meta">150 min included · then $0.45 per min</div>
+          </td>
+          <td class="num">$350</td>
+          <td class="num">$175</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Spanish-Speaking Agent</div>
+            <div class="blurb">Your agent handles Spanish callers in Spanish.</div>
+            
+          </td>
+          <td class="num">$250</td>
+          <td class="num">$100</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Missed-Call Text-Back</div>
+            <div class="blurb">A missed call gets an immediate text offering to book or route the caller.</div>
+            <div class="meta">500 texts included · then $0.07 per text</div>
+          </td>
+          <td class="num">$650</td>
+          <td class="num">$325</td>
+          <td><span class="chip ok">Available now</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">After-Hours Intake</div>
+            <div class="blurb">Out-of-hours patients can request an appointment instead of waiting for morning.</div>
+            
+          </td>
+          <td class="num">$550</td>
+          <td class="num">$275</td>
+          <td><span class="chip ok">Available now</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Recall &amp; Reactivation</div>
+            <div class="blurb">Brings back patients who have not been seen in a while.</div>
+            
+          </td>
+          <td class="num">$500</td>
+          <td class="num">$250</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="svc">Reminders &amp; No-Show Recovery</div>
+            <div class="blurb">Appointment confirmations, reminders, and same-week rebooking after a no-show.</div>
+            
+          </td>
+          <td class="num">$450</td>
+          <td class="num">$225</td>
+          <td><span class="chip wip">In development</span></td>
+        </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details class="compliance">
+        <summary>What we will and will not do — medical &amp; dental practices</summary>
+        <ul><li>Requires a signed BAA with every vendor in the call path before go-live. Flat fee only - per-patient compensation can implicate anti-kickback and fee-splitting rules.</li>
+            <li>Callers are told they are speaking with an automated assistant and that the call is recorded.</li>
+            <li>Requires a signed BAA before go-live. Messages carry no clinical detail. Flat fee only - per-patient compensation can implicate anti-kickback rules.</li>
+            <li>Requires a signed BAA. Collects the minimum necessary and never asks for clinical detail.</li>
+            <li>Requires a signed BAA. Content is limited to the fact that an appointment is due. Flat fee only.</li>
+            <li>Requires a signed BAA. Appointment reminders are permitted patient communication, and these carry date, time and location only - no clinical detail.</li></ul>
+      </details>
+    </section>
+
+  <footer>
+    <div><b>Status.</b> “Available now” means the software exists and can be switched on for you.
+      “In development” means it is being built and is not yet deliverable — it is listed so you can
+      plan, not so it can be sold to you today.</div>
+    <div><b>Packages</b> are priced off the individual prices shown, never off another package, so a
+      discount is never applied twice.</div>
+    <div><b>Every price on this page is read from the live catalog</b> when the sheet is generated.
+      If a figure here disagrees with what is billed, this sheet is stale — regenerate it.</div>
+  </footer>
+</div>

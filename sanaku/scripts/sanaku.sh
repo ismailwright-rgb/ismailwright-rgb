@@ -727,6 +727,53 @@ SQL
 }
 
 # Install the voice workflow and print what VAPI needs pointed at it.
+cmd_sellsheet() {
+  # Print the services sheet from the LIVE catalog.
+  #
+  # The prices live in sanaku_addons. A sheet typed by hand drifts from that
+  # table the first time a price changes, and the drifted copy is the one that
+  # gets handed to a prospect - so this reads the catalog every time.
+  need_cmd node
+  need_cmd python3
+  ensure_config SUPABASE_URL SUPABASE_SERVICE_KEY
+
+  _work="$HOME/.sanaku-sellsheet"
+  _out="$HOME/sanaku-sellsheet"
+  rm -rf "$_work"; mkdir -p "$_work" "$_out"
+
+  head1 "Reading the catalog"
+  sb "sanaku_addons?select=*&order=sort" > "$_work/addons.json" || {
+    err "could not read sanaku_addons"; return 1; }
+  sb "sanaku_addon_bundle_members?select=bundle_code,member_code" > "$_work/members.json" || {
+    err "could not read sanaku_addon_bundle_members"
+    say "    Run the migrations first:  sh ~/sanaku.sh migrate"; return 1; }
+
+  ADDONS="$_work/addons.json" MEMBERS="$_work/members.json" OUT="$_work/catalog.json" \
+  python3 -c 'import json,os
+a=json.load(open(os.environ["ADDONS"]));m=json.load(open(os.environ["MEMBERS"]))
+json.dump({"generated_from":"live Supabase catalog","services":a,"bundle_members":m},
+          open(os.environ["OUT"],"w"))
+print(f"  {len(a)} services, {len(m)} package links")' || return 1
+
+  curl -fsSL "https://github.com/ismailwright-rgb/ismailwright-rgb/archive/refs/heads/${BRANCH}.tar.gz" \
+    | tar xz -C "$_work" --strip-components=1 || { err "could not fetch the generator"; return 1; }
+
+  head1 "Generating"
+  # The generator refuses to print a sheet whose bundle arithmetic does not
+  # hold, so a failure here means the catalog disagrees with itself.
+  node "$_work/sanaku/scripts/sellsheet.mjs" "$_work/catalog.json" "$_out" || {
+    err "the catalog does not add up - nothing was written"
+    say "    Fix the prices above, then run this again."; return 1; }
+  python3 "$_work/sanaku/scripts/sellsheet_xlsx.py" "$_work/catalog.json" \
+    "$_out/sanaku-services.xlsx" || return 1
+
+  head1 "Done"
+  say "  $_out/sell-sheet.html      open in a browser, then print to PDF"
+  say "  $_out/sanaku-services.xlsx every figure a formula off the first tab"
+  say ""
+  say "Prices come from the catalog. Change one in Supabase and run this again."
+}
+
 cmd_voice() {
   cmd_import t2-voice-agent || return 1
 
@@ -1155,6 +1202,7 @@ sanaku - control script
   sh ~/sanaku.sh import NAME  install a workflow into n8n (see list below)
   sh ~/sanaku.sh voice       install the AI phone agent + how to wire VAPI
   sh ~/sanaku.sh demo        a throwaway client to film and to demo on calls
+  sh ~/sanaku.sh sellsheet   print services + pricing from the live catalog
   sh ~/sanaku.sh dashboard   deploy the internal command center
   sh ~/sanaku.sh site        deploy the public landing page
   sh ~/sanaku.sh secure      how to put n8n behind HTTPS (needed for Invite)
@@ -1205,6 +1253,7 @@ case "${1:-}" in
   scrape)    cmd_scrape ;;
   import)    shift; cmd_import "$@" ;;
   voice)     cmd_voice ;;
+  sellsheet) cmd_sellsheet ;;
   demo)      shift; cmd_demo "$@" ;;
   dashboard) cmd_dashboard ;;
   site)      cmd_site ;;

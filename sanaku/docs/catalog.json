@@ -1,0 +1,760 @@
+{
+    "services": [
+        {
+            "code": "bundle_complete_home",
+            "name": "The Whole System",
+            "sort": 3,
+            "blurb": "Nothing that rings, texts, or fills in a form gets missed.",
+            "active": true,
+            "detail": "Missed-call text-back, after-hours intake, five-touch nurture, reminders with no-show recovery, the AI phone agent, instant callback, the Spanish-speaking agent, and review requests. Bought separately these are $3,500 setup and $1,650/month. Includes 700 voice minutes and 500 texts a month.",
+            "category": "bundle",
+            "setup_fee": 2500,
+            "unit_label": "minutes",
+            "monthly_fee": 1250,
+            "build_status": "in_build",
+            "per_lead_fee": 15,
+            "requires_baa": false,
+            "compliance_note": "Contact only people who contacted you, opt-out honoured immediately, quiet hours respected, and every automated caller told it is automated.",
+            "included_minutes": 700,
+            "allowed_verticals": [
+                "home_services"
+            ],
+            "overage_per_minute": 0.45
+        },
+        {
+            "code": "bundle_complete_law",
+            "name": "The Whole System",
+            "sort": 3,
+            "blurb": "Every enquiry captured, followed up, and turned into an intake.",
+            "active": true,
+            "detail": "Missed-call text-back, after-hours intake, five-touch nurture, reminders, the AI intake agent, instant callback, the Spanish-speaking agent, and review requests. Bought separately these are $6,150 setup and $2,800/month. Includes 700 voice minutes and 500 texts a month.",
+            "category": "bundle",
+            "setup_fee": 4450,
+            "unit_label": "minutes",
+            "monthly_fee": 2150,
+            "build_status": "in_build",
+            "per_lead_fee": 35,
+            "requires_baa": false,
+            "compliance_note": "No advice, no fee quotes, no case-outcome claims. Per-lead is per intake delivered, never per case signed. Solicitation rules vary by state and every sequence is reviewed against yours before it runs.",
+            "included_minutes": 700,
+            "allowed_verticals": [
+                "law_firm"
+            ],
+            "overage_per_minute": 0.55
+        },
+        {
+            "code": "bundle_complete_medical",
+            "name": "The Whole System",
+            "sort": 3,
+            "blurb": "Every call, message and no-show handled, without touching clinical detail.",
+            "active": true,
+            "detail": "Missed-call text-back, after-hours intake, recall and reactivation, reminders with no-show recovery, the AI front-desk agent, and the Spanish-speaking agent. Bought separately these are $3,900 setup and $1,825/month. Includes 400 voice minutes and 500 texts a month. There is no instant-callback product for healthcare.",
+            "category": "bundle",
+            "setup_fee": 2800,
+            "unit_label": "minutes",
+            "monthly_fee": 1400,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": true,
+            "compliance_note": "Requires a signed BAA covering every vendor in the path before go-live. Flat fee only - per-patient compensation can implicate anti-kickback and fee-splitting rules. Anything clinical routes to your staff; emergencies are directed to 911.",
+            "included_minutes": 400,
+            "allowed_verticals": [
+                "medical"
+            ],
+            "overage_per_minute": 0.55
+        },
+        {
+            "code": "bundle_voice_home",
+            "name": "Complete Phone Cover",
+            "sort": 4,
+            "blurb": "Every call answered, every web enquiry called back, in English or Spanish.",
+            "active": true,
+            "detail": "The AI phone agent, instant lead callback, and the Spanish-speaking agent, set up together. Bought separately these are $1,500 setup and $700/month.",
+            "category": "bundle",
+            "setup_fee": 1100,
+            "unit_label": "minutes",
+            "monthly_fee": 550,
+            "build_status": "in_build",
+            "per_lead_fee": 20,
+            "requires_baa": false,
+            "compliance_note": "Callers are told they are speaking with an automated assistant and that the call is recorded. Callbacks go only to people who just contacted you, about the thing they contacted you about.",
+            "included_minutes": 700,
+            "allowed_verticals": [
+                "home_services"
+            ],
+            "overage_per_minute": 0.45
+        },
+        {
+            "code": "bundle_voice_law",
+            "name": "Complete Phone Cover",
+            "sort": 4,
+            "blurb": "Every call answered and every web enquiry called back, with first-pass intake.",
+            "active": true,
+            "detail": "The AI intake agent, instant lead callback, and the Spanish-speaking agent, set up together. Bought separately these are $2,750 setup and $1,200/month.",
+            "category": "bundle",
+            "setup_fee": 2000,
+            "unit_label": "minutes",
+            "monthly_fee": 900,
+            "build_status": "in_build",
+            "per_lead_fee": 35,
+            "requires_baa": false,
+            "compliance_note": "The agent states it is not a lawyer and gives no legal advice or fee quotes. Per-lead is per intake delivered, never per case signed - a share of fees would be fee-splitting with a non-lawyer.",
+            "included_minutes": 700,
+            "allowed_verticals": [
+                "law_firm"
+            ],
+            "overage_per_minute": 0.55
+        },
+        {
+            "code": "bundle_recovery_home",
+            "name": "Complete Lead Recovery",
+            "sort": 5,
+            "blurb": "All four recovery workflows, set up together.",
+            "active": true,
+            "detail": "Missed-call text-back, after-hours intake, five-touch nurture, and reminders with no-show recovery. Bought separately these are $1,750 setup and $850/month.",
+            "category": "bundle",
+            "setup_fee": 1200,
+            "unit_label": "texts",
+            "monthly_fee": 650,
+            "build_status": "in_build",
+            "per_lead_fee": 15,
+            "requires_baa": false,
+            "compliance_note": "Same rules as each part: contact only people who contacted you, opt-out honoured immediately, quiet hours respected.",
+            "included_minutes": 500,
+            "allowed_verticals": [
+                "home_services"
+            ],
+            "overage_per_minute": 0.05
+        },
+        {
+            "code": "bundle_recovery_law",
+            "name": "Complete Lead Recovery",
+            "sort": 5,
+            "blurb": "All four recovery workflows, set up together.",
+            "active": true,
+            "detail": "Missed-call text-back, after-hours intake, five-touch nurture, and reminders with no-show recovery. Bought separately these are $3,150 setup and $1,500/month.",
+            "category": "bundle",
+            "setup_fee": 2200,
+            "unit_label": "texts",
+            "monthly_fee": 1100,
+            "build_status": "in_build",
+            "per_lead_fee": 35,
+            "requires_baa": false,
+            "compliance_note": "No advice, no fee quotes, no case-outcome claims. Per-lead is per intake delivered, never per case signed.",
+            "included_minutes": 500,
+            "allowed_verticals": [
+                "law_firm"
+            ],
+            "overage_per_minute": 0.07
+        },
+        {
+            "code": "bundle_recovery_medical",
+            "name": "Complete Lead Recovery",
+            "sort": 5,
+            "blurb": "All four recovery workflows, set up together.",
+            "active": true,
+            "detail": "Missed-call text-back, after-hours intake, recall and reactivation, and reminders with no-show recovery. Bought separately these are $2,150 setup and $1,075/month.",
+            "category": "bundle",
+            "setup_fee": 1600,
+            "unit_label": "texts",
+            "monthly_fee": 850,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": true,
+            "compliance_note": "Requires a signed BAA covering every vendor in the path. Flat fee only.",
+            "included_minutes": 500,
+            "allowed_verticals": [
+                "medical"
+            ],
+            "overage_per_minute": 0.07
+        },
+        {
+            "code": "voice_reception_home",
+            "name": "AI Phone Agent",
+            "sort": 10,
+            "blurb": "Answers every call you miss, qualifies the caller, and books the job.",
+            "active": true,
+            "detail": "Picks up on the second ring, 24/7. Asks what the job is, where they are, and when they need someone. Books straight into your calendar and texts you a summary. Callers who are not a fit get handled politely instead of clogging your voicemail.",
+            "category": "voice",
+            "setup_fee": 750,
+            "unit_label": "min",
+            "monthly_fee": 350,
+            "build_status": "live",
+            "per_lead_fee": null,
+            "requires_baa": false,
+            "compliance_note": "Callers are told they are speaking with an automated assistant, and that the call is recorded, before anything else is asked.",
+            "included_minutes": 400,
+            "allowed_verticals": [
+                "home_services"
+            ],
+            "overage_per_minute": 0.45
+        },
+        {
+            "code": "voice_reception_law",
+            "name": "AI Intake Agent",
+            "sort": 10,
+            "blurb": "Answers every call you miss and runs a first-pass intake.",
+            "active": true,
+            "detail": "Collects name, contact, incident date, and a short description, then flags conflicts-of-interest keywords for your review. Never gives legal advice, never quotes fees, never forms a relationship - it takes the intake and hands it to you.",
+            "category": "voice",
+            "setup_fee": 1500,
+            "unit_label": "min",
+            "monthly_fee": 650,
+            "build_status": "in_build",
+            "per_lead_fee": 35,
+            "requires_baa": false,
+            "compliance_note": "The agent states it is not a lawyer and cannot give legal advice. Per-lead pricing is per intake DELIVERED, never per case signed - a share of fees or recoveries would be fee-splitting with a non-lawyer.",
+            "included_minutes": 400,
+            "allowed_verticals": [
+                "law_firm"
+            ],
+            "overage_per_minute": 0.55
+        },
+        {
+            "code": "voice_reception_medical",
+            "name": "AI Front-Desk Agent",
+            "sort": 10,
+            "blurb": "Answers overflow and after-hours calls, and takes appointment requests.",
+            "active": true,
+            "detail": "Handles scheduling requests, directions, and hours. Anything clinical is routed to your staff, not answered. Emergencies are directed to call 911.",
+            "category": "voice",
+            "setup_fee": 1500,
+            "unit_label": "min",
+            "monthly_fee": 650,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": true,
+            "compliance_note": "Requires a signed BAA with every vendor in the call path before go-live. Flat fee only - per-patient compensation can implicate anti-kickback and fee-splitting rules.",
+            "included_minutes": 400,
+            "allowed_verticals": [
+                "medical"
+            ],
+            "overage_per_minute": 0.55
+        },
+        {
+            "code": "voice_callback_home",
+            "name": "Instant Lead Callback",
+            "sort": 20,
+            "blurb": "Calls a web enquiry back within 60 seconds, while they are still on your site.",
+            "active": true,
+            "detail": "The first business to call back usually wins the job. When a form is submitted the agent rings them straight away, confirms the work, and books it.",
+            "category": "voice",
+            "setup_fee": 500,
+            "unit_label": "min",
+            "monthly_fee": 250,
+            "build_status": "in_build",
+            "per_lead_fee": 20,
+            "requires_baa": false,
+            "compliance_note": "Only calls people who just contacted YOU, about the thing they contacted you about. No cold outbound - an AI voice is an artificial voice under the TCPA, and calling a mobile without prior express written consent carries $500-$1,500 per call.",
+            "included_minutes": 300,
+            "allowed_verticals": [
+                "home_services"
+            ],
+            "overage_per_minute": 0.45
+        },
+        {
+            "code": "voice_callback_law",
+            "name": "Instant Lead Callback",
+            "sort": 20,
+            "blurb": "Calls a web enquiry back within 60 seconds and runs intake.",
+            "active": true,
+            "detail": "Rings a form submitter immediately, takes the intake, and books a consultation. The difference between a signed matter and a voicemail is usually minutes.",
+            "category": "voice",
+            "setup_fee": 1000,
+            "unit_label": "min",
+            "monthly_fee": 450,
+            "build_status": "in_build",
+            "per_lead_fee": 35,
+            "requires_baa": false,
+            "compliance_note": "Only calls people who just contacted you. Per-lead pricing is per intake delivered, never per case signed.",
+            "included_minutes": 300,
+            "allowed_verticals": [
+                "law_firm"
+            ],
+            "overage_per_minute": 0.55
+        },
+        {
+            "code": "voice_afterhours",
+            "name": "After-Hours Answering",
+            "sort": 30,
+            "blurb": "The phone agent, but only outside your opening hours.",
+            "active": true,
+            "detail": "The cheapest way in. Same agent, running only when you are closed - which is when most of the calls you lose actually arrive.",
+            "category": "voice",
+            "setup_fee": 350,
+            "unit_label": "min",
+            "monthly_fee": 175,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": false,
+            "compliance_note": "Callers are told they are speaking with an automated assistant and that the call is recorded.",
+            "included_minutes": 150,
+            "allowed_verticals": [
+                "home_services",
+                "law_firm",
+                "medical"
+            ],
+            "overage_per_minute": 0.45
+        },
+        {
+            "code": "voice_spanish",
+            "name": "Spanish-Speaking Agent",
+            "sort": 40,
+            "blurb": "Your agent handles Spanish callers in Spanish.",
+            "active": true,
+            "detail": "Detects the caller's language and switches. Added to any voice add-on above.",
+            "category": "voice",
+            "setup_fee": 250,
+            "unit_label": "min",
+            "monthly_fee": 100,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": false,
+            "compliance_note": null,
+            "included_minutes": null,
+            "allowed_verticals": [
+                "home_services",
+                "law_firm",
+                "medical"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "sms_reviews",
+            "name": "Review Requests",
+            "sort": 50,
+            "blurb": "Texts a review link after every completed job.",
+            "active": true,
+            "detail": "Sends once, a day after the work is marked done, and never chases. Replies come to you, not to a robot.",
+            "category": "messaging",
+            "setup_fee": 250,
+            "unit_label": "min",
+            "monthly_fee": 100,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": false,
+            "compliance_note": "Texts go only to customers you have served, and every message carries opt-out instructions that are honoured immediately. Reviews are never incentivised or filtered by rating.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "home_services",
+                "law_firm"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "recover_missed_call_home",
+            "name": "Missed-Call Text-Back",
+            "sort": 60,
+            "blurb": "A call goes unanswered and the caller gets a text from your number within seconds.",
+            "active": true,
+            "detail": "\"Sorry we missed you - what do you need help with?\" The reply is captured, qualified, and you are alerted. A plumber missing 6 calls a week who recovers just 2 jobs has already paid for the service.",
+            "category": "messaging",
+            "setup_fee": 500,
+            "unit_label": "texts",
+            "monthly_fee": 250,
+            "build_status": "live",
+            "per_lead_fee": 15,
+            "requires_baa": false,
+            "compliance_note": "Texts reply only to people who just called you, carry your business name, and honour STOP immediately. Requires A2P 10DLC registration of your number, which we handle.",
+            "included_minutes": 500,
+            "allowed_verticals": [
+                "home_services"
+            ],
+            "overage_per_minute": 0.05
+        },
+        {
+            "code": "recover_missed_call_law",
+            "name": "Missed-Call Text-Back",
+            "sort": 60,
+            "blurb": "A missed call gets an immediate text from your number, and the reply becomes an intake.",
+            "active": true,
+            "detail": "The caller is asked what happened and when. Nothing is advised, nothing is promised - the reply is captured and flagged for you.",
+            "category": "messaging",
+            "setup_fee": 900,
+            "unit_label": "texts",
+            "monthly_fee": 450,
+            "build_status": "live",
+            "per_lead_fee": 35,
+            "requires_baa": false,
+            "compliance_note": "No legal advice and no fee quotes are ever sent. Per-lead is per intake delivered, never per case signed. Honours STOP immediately.",
+            "included_minutes": 500,
+            "allowed_verticals": [
+                "law_firm"
+            ],
+            "overage_per_minute": 0.07
+        },
+        {
+            "code": "recover_missed_call_medical",
+            "name": "Missed-Call Text-Back",
+            "sort": 60,
+            "blurb": "A missed call gets an immediate text offering to book or route the caller.",
+            "active": true,
+            "detail": "Handles scheduling and general enquiries. Anything clinical routes to your staff rather than being answered, and urgent callers are directed to call 911.",
+            "category": "messaging",
+            "setup_fee": 650,
+            "unit_label": "texts",
+            "monthly_fee": 325,
+            "build_status": "live",
+            "per_lead_fee": null,
+            "requires_baa": true,
+            "compliance_note": "Requires a signed BAA before go-live. Messages carry no clinical detail. Flat fee only - per-patient compensation can implicate anti-kickback rules.",
+            "included_minutes": 500,
+            "allowed_verticals": [
+                "medical"
+            ],
+            "overage_per_minute": 0.07
+        },
+        {
+            "code": "after_hours_intake_home",
+            "name": "After-Hours Intake",
+            "sort": 61,
+            "blurb": "When you are closed, the three questions that qualify a lead get asked anyway.",
+            "active": true,
+            "detail": "A smart form or chat qualifies the enquiry, books the appointment, or escalates genuinely urgent work to your on-call phone. Typically 30-45% of captured leads arrive when the office is closed.",
+            "category": "messaging",
+            "setup_fee": 400,
+            "unit_label": "texts",
+            "monthly_fee": 200,
+            "build_status": "live",
+            "per_lead_fee": 15,
+            "requires_baa": false,
+            "compliance_note": "Escalation rules and quiet hours are yours to set. No message goes out between 9pm and 8am local time unless you have marked it urgent.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "home_services"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "after_hours_intake_law",
+            "name": "After-Hours Intake",
+            "sort": 61,
+            "blurb": "Out-of-hours enquiries get a real intake instead of a voicemail box.",
+            "active": true,
+            "detail": "Collects name, contact, incident date and a short description, flags conflict keywords, and books a consultation slot. Urgent matters escalate to your phone.",
+            "category": "messaging",
+            "setup_fee": 750,
+            "unit_label": "texts",
+            "monthly_fee": 350,
+            "build_status": "live",
+            "per_lead_fee": 35,
+            "requires_baa": false,
+            "compliance_note": "No legal advice, no fee quotes, no relationship formed. Per-lead is per intake delivered.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "law_firm"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "after_hours_intake_medical",
+            "name": "After-Hours Intake",
+            "sort": 61,
+            "blurb": "Out-of-hours patients can request an appointment instead of waiting for morning.",
+            "active": true,
+            "detail": "Takes appointment requests and general enquiries, routes anything clinical to your staff, and directs emergencies to call 911.",
+            "category": "messaging",
+            "setup_fee": 550,
+            "unit_label": "texts",
+            "monthly_fee": 275,
+            "build_status": "live",
+            "per_lead_fee": null,
+            "requires_baa": true,
+            "compliance_note": "Requires a signed BAA. Collects the minimum necessary and never asks for clinical detail.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "medical"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "nurture_home",
+            "name": "Lead Nurture Sequences",
+            "sort": 62,
+            "blurb": "Five-touch follow-up for everyone who enquired and went quiet.",
+            "active": true,
+            "detail": "Most businesses follow up once and stop. The sale usually happens on touch three or four. This re-engages the 60%+ of enquiries that never got a second touch.",
+            "category": "messaging",
+            "setup_fee": 500,
+            "unit_label": "texts",
+            "monthly_fee": 225,
+            "build_status": "in_build",
+            "per_lead_fee": 15,
+            "requires_baa": false,
+            "compliance_note": "Only contacts people who enquired with you. Every email carries your postal address and a working unsubscribe; every text honours STOP. Anyone who replies is taken out of the sequence immediately.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "home_services"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "nurture_law",
+            "name": "Lead Nurture Sequences",
+            "sort": 62,
+            "blurb": "Five-touch follow-up for enquiries that went quiet before signing.",
+            "active": true,
+            "detail": "Written to stay useful rather than pushy - what to expect, what to gather, how long things take. Anyone who replies drops out of the sequence and comes to you.",
+            "category": "messaging",
+            "setup_fee": 900,
+            "unit_label": "texts",
+            "monthly_fee": 400,
+            "build_status": "in_build",
+            "per_lead_fee": 35,
+            "requires_baa": false,
+            "compliance_note": "No advice, no case-outcome claims, no urgency pressure. Solicitation rules vary by state and the sequence is reviewed against yours before it runs.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "law_firm"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "nurture_medical",
+            "name": "Recall & Reactivation",
+            "sort": 62,
+            "blurb": "Brings back patients who have not been seen in a while.",
+            "active": true,
+            "detail": "A short, plain reminder that they are due - no diagnosis, no treatment detail, no history.",
+            "category": "messaging",
+            "setup_fee": 500,
+            "unit_label": "texts",
+            "monthly_fee": 250,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": true,
+            "compliance_note": "Requires a signed BAA. Content is limited to the fact that an appointment is due. Flat fee only.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "medical"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "reminders_home",
+            "name": "Reminders & No-Show Recovery",
+            "sort": 63,
+            "blurb": "Confirmations at booking, reminders at 24h and 1h, and a rebook offer after a no-show.",
+            "active": true,
+            "detail": "Plus an automatic \"life happens - want to rebook?\" the morning after. Cutting no-shows from 20% to 10% recovers thousands a month.",
+            "category": "messaging",
+            "setup_fee": 350,
+            "unit_label": "texts",
+            "monthly_fee": 175,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": false,
+            "compliance_note": "Reminders are transactional and go only to booked customers. Opt-out is honoured immediately.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "home_services"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "reminders_law",
+            "name": "Reminders & No-Show Recovery",
+            "sort": 63,
+            "blurb": "Consultation confirmations, reminders, and an automatic rebook offer.",
+            "active": true,
+            "detail": "A missed consultation is usually a missed matter. Confirm at booking, remind at 24h and 1h, and offer a new slot the next morning.",
+            "category": "messaging",
+            "setup_fee": 600,
+            "unit_label": "texts",
+            "monthly_fee": 300,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": false,
+            "compliance_note": "Reminders go only to people with a booked appointment, and carry no matter detail.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "law_firm"
+            ],
+            "overage_per_minute": null
+        },
+        {
+            "code": "reminders_medical",
+            "name": "Reminders & No-Show Recovery",
+            "sort": 63,
+            "blurb": "Appointment confirmations, reminders, and same-week rebooking after a no-show.",
+            "active": true,
+            "detail": "Cutting no-shows from 20% to 10% at a practice recovers thousands per month, and the chair does not sit empty.",
+            "category": "messaging",
+            "setup_fee": 450,
+            "unit_label": "texts",
+            "monthly_fee": 225,
+            "build_status": "in_build",
+            "per_lead_fee": null,
+            "requires_baa": true,
+            "compliance_note": "Requires a signed BAA. Appointment reminders are permitted patient communication, and these carry date, time and location only - no clinical detail.",
+            "included_minutes": null,
+            "allowed_verticals": [
+                "medical"
+            ],
+            "overage_per_minute": null
+        }
+    ],
+    "bundle_members": [
+        {
+            "bundle_code": "bundle_complete_home",
+            "member_code": "after_hours_intake_home"
+        },
+        {
+            "bundle_code": "bundle_complete_home",
+            "member_code": "nurture_home"
+        },
+        {
+            "bundle_code": "bundle_complete_home",
+            "member_code": "recover_missed_call_home"
+        },
+        {
+            "bundle_code": "bundle_complete_home",
+            "member_code": "reminders_home"
+        },
+        {
+            "bundle_code": "bundle_complete_home",
+            "member_code": "sms_reviews"
+        },
+        {
+            "bundle_code": "bundle_complete_home",
+            "member_code": "voice_callback_home"
+        },
+        {
+            "bundle_code": "bundle_complete_home",
+            "member_code": "voice_reception_home"
+        },
+        {
+            "bundle_code": "bundle_complete_home",
+            "member_code": "voice_spanish"
+        },
+        {
+            "bundle_code": "bundle_complete_law",
+            "member_code": "after_hours_intake_law"
+        },
+        {
+            "bundle_code": "bundle_complete_law",
+            "member_code": "nurture_law"
+        },
+        {
+            "bundle_code": "bundle_complete_law",
+            "member_code": "recover_missed_call_law"
+        },
+        {
+            "bundle_code": "bundle_complete_law",
+            "member_code": "reminders_law"
+        },
+        {
+            "bundle_code": "bundle_complete_law",
+            "member_code": "sms_reviews"
+        },
+        {
+            "bundle_code": "bundle_complete_law",
+            "member_code": "voice_callback_law"
+        },
+        {
+            "bundle_code": "bundle_complete_law",
+            "member_code": "voice_reception_law"
+        },
+        {
+            "bundle_code": "bundle_complete_law",
+            "member_code": "voice_spanish"
+        },
+        {
+            "bundle_code": "bundle_complete_medical",
+            "member_code": "after_hours_intake_medical"
+        },
+        {
+            "bundle_code": "bundle_complete_medical",
+            "member_code": "nurture_medical"
+        },
+        {
+            "bundle_code": "bundle_complete_medical",
+            "member_code": "recover_missed_call_medical"
+        },
+        {
+            "bundle_code": "bundle_complete_medical",
+            "member_code": "reminders_medical"
+        },
+        {
+            "bundle_code": "bundle_complete_medical",
+            "member_code": "voice_reception_medical"
+        },
+        {
+            "bundle_code": "bundle_complete_medical",
+            "member_code": "voice_spanish"
+        },
+        {
+            "bundle_code": "bundle_recovery_home",
+            "member_code": "after_hours_intake_home"
+        },
+        {
+            "bundle_code": "bundle_recovery_home",
+            "member_code": "nurture_home"
+        },
+        {
+            "bundle_code": "bundle_recovery_home",
+            "member_code": "recover_missed_call_home"
+        },
+        {
+            "bundle_code": "bundle_recovery_home",
+            "member_code": "reminders_home"
+        },
+        {
+            "bundle_code": "bundle_recovery_law",
+            "member_code": "after_hours_intake_law"
+        },
+        {
+            "bundle_code": "bundle_recovery_law",
+            "member_code": "nurture_law"
+        },
+        {
+            "bundle_code": "bundle_recovery_law",
+            "member_code": "recover_missed_call_law"
+        },
+        {
+            "bundle_code": "bundle_recovery_law",
+            "member_code": "reminders_law"
+        },
+        {
+            "bundle_code": "bundle_recovery_medical",
+            "member_code": "after_hours_intake_medical"
+        },
+        {
+            "bundle_code": "bundle_recovery_medical",
+            "member_code": "nurture_medical"
+        },
+        {
+            "bundle_code": "bundle_recovery_medical",
+            "member_code": "recover_missed_call_medical"
+        },
+        {
+            "bundle_code": "bundle_recovery_medical",
+            "member_code": "reminders_medical"
+        },
+        {
+            "bundle_code": "bundle_voice_home",
+            "member_code": "voice_callback_home"
+        },
+        {
+            "bundle_code": "bundle_voice_home",
+            "member_code": "voice_reception_home"
+        },
+        {
+            "bundle_code": "bundle_voice_home",
+            "member_code": "voice_spanish"
+        },
+        {
+            "bundle_code": "bundle_voice_law",
+            "member_code": "voice_callback_law"
+        },
+        {
+            "bundle_code": "bundle_voice_law",
+            "member_code": "voice_reception_law"
+        },
+        {
+            "bundle_code": "bundle_voice_law",
+            "member_code": "voice_spanish"
+        }
+    ],
+    "generated_from": "sanaku_addons via the migration chain (007, 008, 011, 012)"
+}
