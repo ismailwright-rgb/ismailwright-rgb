@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { timingSafeEqual } from 'node:crypto';
@@ -10,8 +11,61 @@ import { runAnalysis } from './analyze.js';
 import { buildTradePlan, evaluateTrade, clientOrderId } from './guard.js';
 import { resolveSession } from './session.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+/**
+ * Locate the static files under both module systems.
+ *
+ * Netlify's esbuild bundles these ES modules into CommonJS, where `import.meta`
+ * is replaced with an empty object - so deriving a directory from
+ * `import.meta.url` throws at import time and takes the whole function with it.
+ * Try each layout in turn and pick the one that actually has the page in it.
+ */
+function resolvePublicDir() {
+  // Bundling also moves the code: on Netlify everything collapses into
+  // netlify/functions/api.js, so "../public" no longer means what it does in
+  // source. Walk up from each plausible anchor instead of assuming a layout.
+  const walkUp = (start, levels = 5) => {
+    const dirs = [];
+    let dir = start;
+    for (let i = 0; i <= levels; i += 1) {
+      dirs.push(path.join(dir, 'public'));
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return dirs;
+  };
+
+  const candidates = [];
+
+  // Bundled to CommonJS: __dirname exists. `typeof` keeps this safe under ESM,
+  // where the identifier is not declared at all.
+  if (typeof __dirname !== 'undefined') candidates.push(...walkUp(__dirname));
+
+  // Plain ESM: Docker, or `node server/index.js`.
+  try {
+    const here = import.meta?.url;
+    if (here) candidates.push(...walkUp(path.dirname(fileURLToPath(here))));
+  } catch {
+    // import.meta is unavailable in a CommonJS bundle.
+  }
+
+  candidates.push(...walkUp(process.cwd()), path.resolve(process.cwd(), 'apace-dashboard', 'public'));
+
+  const found = candidates.find((dir) => {
+    try {
+      return fs.existsSync(path.join(dir, 'index.html'));
+    } catch {
+      return false;
+    }
+  });
+
+  if (!found) {
+    console.error('static files not found; looked in:\n  ' + candidates.join('\n  '));
+  }
+  return found ?? null;
+}
+
+export const PUBLIC_DIR = resolvePublicDir();
 
 /* --- helpers ---------------------------------------------------------------- */
 function safeEqual(a, b) {
@@ -281,7 +335,21 @@ export function createApp() {
     }),
   );
 
-  app.use(express.static(PUBLIC_DIR, { extensions: ['html'] }));
+  if (PUBLIC_DIR) {
+    app.use(express.static(PUBLIC_DIR, { extensions: ['html'] }));
+  } else {
+    // Better a clear message than a blank 404 nobody can diagnose.
+    app.use((req, res) =>
+      res
+        .status(500)
+        .type('text/plain')
+        .send(
+          'The dashboard files were not found on the server.\n' +
+            'On Netlify this means included_files in netlify.toml did not bundle public/**.\n' +
+            'The API itself is unaffected — try /api/health.',
+        ),
+    );
+  }
 
   return app;
 }
