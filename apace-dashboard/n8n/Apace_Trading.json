@@ -314,7 +314,7 @@
         "sendHeaders": false,
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  symbol: $json.symbol,\n  notional: $json.notional,\n  side: 'buy',\n  type: 'market',\n  time_in_force: $json.asset_class === 'crypto' ? 'gtc' : 'day',\n  client_order_id: 'agent-' + $json.symbol.replace('/', '') + '-' + $now.toISODate()\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  symbol: $json.symbol,\n  notional: $json.notional,\n  side: 'buy',\n  type: 'market',\n  time_in_force: $json.asset_class === 'crypto' ? 'gtc' : 'day',\n  client_order_id: 'agent-' + $json.symbol.replace('/', '') + '-' + $now.toISODate() + '-' + $execution.id\n}) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -331,7 +331,7 @@
           "name": "Alpaca"
         }
       },
-      "notes": "client_order_id is symbol + date, so a second run on the same day is rejected by Alpaca instead of doubling the position. Equity notional orders require time_in_force=day; crypto notional orders require gtc or ioc (day is invalid for crypto). NOTE: this workflow places entries only - it does not attach or manage a stop. Exits are handled by the Apace dashboard's exit loop, or by hand."
+      "notes": "client_order_id includes the execution id, so repeated good setups can each place an order instead of Alpaca rejecting the second run of the day with 'client_order_id must be unique'. The real duplicate-position guard is upstream, in Risk Guard: it calls get_positions and refuses to buy a symbol you already hold, so this node will not stack into an existing position - it just no longer blocks a legitimate second entry after the first has closed, or a distinct entry into a different symbol later the same day. Equity notional orders require time_in_force=day; crypto notional orders require gtc or ioc (day is invalid for crypto). NOTE: this workflow places entries only - it does not attach or manage a stop. Exits are handled by the Apace dashboard's exit loop, or by hand."
     },
     {
       "parameters": {},
