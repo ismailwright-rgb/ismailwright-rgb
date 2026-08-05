@@ -199,9 +199,16 @@ export async function tick({ refreshAnalysis, now = Date.now(), dryRun = false }
     return { action: 'skip', blockers };
   }
 
-  const held = new Set(positions.map((p) => p.symbol));
+  const held = new Set(positions.map((p) => alpaca.normaliseSymbol(p.symbol)));
   const ranked = (analysis?.candidates || [])
-    .filter((c) => c.action === 'TRADEABLE' && !held.has(c.symbol) && c.score >= config.autopilot.minScore)
+    .filter(
+      (c) =>
+        c.action === 'TRADEABLE' &&
+        !held.has(alpaca.normaliseSymbol(c.symbol)) &&
+        c.score >= config.autopilot.minScore &&
+        // Unattended crypto without a resting stop is a different risk entirely.
+        (c.group !== 'crypto' || config.cryptoTrading),
+    )
     .sort((a, b) => b.score - a.score);
 
   if (!ranked.length) {
@@ -216,12 +223,14 @@ export async function tick({ refreshAnalysis, now = Date.now(), dryRun = false }
   }
 
   const candidate = ranked[0];
-  const plan = buildTradePlan({
-    symbol: candidate.symbol,
-    entryPrice: candidate.ask || candidate.last,
-    atrValue: candidate.atr,
-    equity,
-  });
+  const plan = candidate.plan?.viable
+    ? candidate.plan
+    : buildTradePlan({
+        symbol: candidate.symbol,
+        entryPrice: candidate.ask || candidate.last,
+        atrValue: candidate.atr,
+        equity,
+      });
 
   const verdict = evaluateTrade({
     candidate,
@@ -260,14 +269,22 @@ export async function tick({ refreshAnalysis, now = Date.now(), dryRun = false }
     return { action: 'skip', symbol: candidate.symbol, blockers: verdict.blockers };
   }
 
-  const order = await alpaca.placeBracketOrder({
-    symbol: candidate.symbol,
-    qty: plan.qty,
-    entryType: 'market',
-    stopPrice: plan.stopPrice,
-    takeProfitPrice: plan.takeProfitPrice,
-    clientOrderId: clientOrderId(candidate.symbol, session.date),
-  });
+  const orderId = clientOrderId(alpaca.normaliseSymbol(candidate.symbol), session.date);
+  const order =
+    candidate.group === 'crypto'
+      ? await alpaca.placeCryptoOrder({
+          symbol: candidate.symbol,
+          notional: plan.notional,
+          clientOrderId: orderId,
+        })
+      : await alpaca.placeBracketOrder({
+          symbol: candidate.symbol,
+          qty: plan.qty,
+          entryType: 'market',
+          stopPrice: plan.stopPrice,
+          takeProfitPrice: plan.takeProfitPrice,
+          clientOrderId: orderId,
+        });
 
   day.tradesPlaced += 1;
   day.symbolsTraded = [...day.symbolsTraded, candidate.symbol];
@@ -357,7 +374,7 @@ export async function status() {
     trading: runtime.trading,
   });
 
-  const held = new Set(positions.map((p) => p.symbol));
+  const held = new Set(positions.map((p) => alpaca.normaliseSymbol(p.symbol)));
 
   // What it would take, in the order it would take them.
   const watching = (analysis?.candidates || [])

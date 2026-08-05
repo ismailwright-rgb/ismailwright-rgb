@@ -38,8 +38,8 @@ const checkAsync = async (name, fn) => {
 const analysis = await runAnalysis();
 
 check('defaults to the paper endpoint', () => assert.equal(analysis.mode, 'paper'));
-check('scores every watchlist symbol', () =>
-  assert.equal(analysis.candidates.length, config.watchlist.length));
+check('scores every watchlist symbol, equities and crypto', () =>
+  assert.equal(analysis.candidates.length, config.watchlist.length + config.cryptoWatchlist.length));
 check('resolves a trading session', () => assert.ok(analysis.session.date));
 check('computes the benchmark move', () => assert.notEqual(analysis.benchmark.changePct, null));
 
@@ -55,16 +55,53 @@ check('every score is in range with six explained factors', () => {
 });
 
 check('every viable plan is internally consistent', () => {
-  for (const { symbol, plan } of analysis.candidates) {
+  for (const { symbol, plan, group } of analysis.candidates) {
     if (!plan?.viable) continue;
     assert.ok(plan.stopPrice < plan.entryPrice, `${symbol} stop is not below entry`);
     assert.ok(plan.takeProfitPrice > plan.entryPrice, `${symbol} target is not above entry`);
-    assert.ok(plan.notional <= config.maxNotionalPerOrder + 0.01, `${symbol} exceeds the notional cap`);
-    assert.ok(plan.qty >= 1 && Number.isInteger(plan.qty), `${symbol} qty must be whole shares`);
+
+    if (group === 'crypto') {
+      // Fractional and separately capped, and no stop rests at the exchange.
+      assert.ok(plan.notional <= config.maxNotionalPerOrderCrypto + 0.01, `${symbol} exceeds the crypto cap`);
+      assert.ok(plan.qty > 0, `${symbol} qty must be positive`);
+      assert.equal(plan.restingStop, false, 'crypto cannot have a resting stop on Alpaca');
+      assert.ok(plan.stopDistancePct >= 1, `${symbol} crypto stop must be at least 1% wide`);
+    } else {
+      assert.ok(plan.notional <= config.maxNotionalPerOrder + 0.01, `${symbol} exceeds the notional cap`);
+      assert.ok(plan.qty >= 1 && Number.isInteger(plan.qty), `${symbol} qty must be whole shares`);
+    }
+
     const reward = plan.takeProfitPrice - plan.entryPrice;
     const risk = plan.entryPrice - plan.stopPrice;
     assert.ok(Math.abs(reward / risk - plan.rMultiple) < 0.05, `${symbol} R multiple is wrong`);
   }
+});
+
+check('crypto is scored on continuous-market factors, not session ones', () => {
+  const btc = analysis.candidates.find((c) => c.symbol === 'BTC/USD');
+  assert.ok(btc, 'BTC/USD was not scored');
+  assert.equal(btc.group, 'crypto');
+
+  const keys = btc.factors.map((f) => f.key);
+  assert.ok(keys.includes('rangeBreak'), 'crypto should use a 24h range break');
+  assert.ok(!keys.includes('openingRange'), 'there is no opening range on a 24/7 market');
+  assert.ok(btc.score >= 0 && btc.score <= 100);
+});
+
+check('crypto is refused until it is explicitly enabled', () => {
+  const btc = analysis.candidates.find((c) => c.symbol === 'BTC/USD');
+  const verdict = evaluateTrade({
+    candidate: { ...btc, score: 99, spreadBps: 4, dataQuality: {} },
+    plan: btc.plan,
+    account: baseAccount,
+    positions: [],
+    session: { isCurrent: false, minutesToClose: 0, date: '2026-08-05' },
+    analysisAgeSeconds: 5,
+  });
+  assert.equal(verdict.allowed, false);
+  assert.ok(verdict.blockers.some((b) => b.includes('Crypto trading is off')), verdict.blockers.join('; '));
+  // A closed equity market must not be a reason to refuse a 24/7 asset.
+  assert.ok(!verdict.blockers.some((b) => b.includes('market is closed')), 'crypto trades around the clock');
 });
 
 check('candidates are ranked by score', () => {

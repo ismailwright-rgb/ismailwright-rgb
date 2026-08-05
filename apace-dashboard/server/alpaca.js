@@ -94,6 +94,38 @@ export async function getDailyBars(symbols, { days = 30 } = {}) {
   return result?.bars || {};
 }
 
+/**
+ * Crypto lives on a different API version and, unlike equities, trades 24/7 -
+ * so there is no session to bound a request by.
+ */
+export async function getCryptoQuotes(symbols) {
+  if (!symbols.length) return {};
+  const params = new URLSearchParams({ symbols: symbols.join(',') });
+  const result = await data(`/v1beta3/crypto/us/latest/quotes?${params}`);
+  return result?.quotes || {};
+}
+
+export async function getCryptoBars(symbols, { timeframe = '5Min', hoursBack = 48 } = {}) {
+  if (!symbols.length) return {};
+
+  const start = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
+  const bars = {};
+  let pageToken = null;
+
+  do {
+    const params = new URLSearchParams({ symbols: symbols.join(','), timeframe, start, limit: '10000' });
+    if (pageToken) params.set('page_token', pageToken);
+
+    const page = await data(`/v1beta3/crypto/us/bars?${params}`);
+    for (const [symbol, list] of Object.entries(page?.bars || {})) {
+      bars[symbol] = (bars[symbol] || []).concat(list);
+    }
+    pageToken = page?.next_page_token || null;
+  } while (pageToken);
+
+  return bars;
+}
+
 export async function getNews(symbols, { limit = 50, hoursBack = 36 } = {}) {
   const start = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
   const params = new URLSearchParams({
@@ -136,6 +168,30 @@ export function placeBracketOrder({ symbol, qty, entryType, limitPrice, stopPric
 
   return trading('/v2/orders', { method: 'POST', body: JSON.stringify(body) });
 }
+
+/**
+ * Crypto entry. Alpaca does not accept bracket or OCO orders on crypto, so the
+ * stop cannot rest at the exchange - there is only a plain buy here, and the
+ * stop exists solely as a rule the exit loop enforces. That is a materially
+ * weaker guarantee than an equity bracket, and the caller has to know it.
+ */
+export function placeCryptoOrder({ symbol, notional, clientOrderId }) {
+  return trading('/v2/orders', {
+    method: 'POST',
+    body: JSON.stringify({
+      symbol,
+      notional: String(notional),
+      side: 'buy',
+      type: 'market',
+      time_in_force: 'gtc', // "day" is rejected for crypto
+      client_order_id: clientOrderId,
+    }),
+  });
+}
+
+/** Alpaca reports crypto positions without the slash; "BTC/USD" and "BTCUSD" are one position. */
+export const normaliseSymbol = (value) =>
+  String(value ?? '').toUpperCase().replace(/\s+/g, '').replace(/\//g, '');
 
 export const closePosition = (symbol) =>
   trading(`/v2/positions/${encodeURIComponent(symbol)}?cancel_orders=true`, { method: 'DELETE' });

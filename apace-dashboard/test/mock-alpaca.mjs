@@ -11,6 +11,8 @@ const PROFILES = {
   GRAB: { base: 4.85, drift: 0.00026, noise: 0.0045, volume: 1.7, spreadPct: 0.0011 },
   PLUG: { base: 2.35, drift: -0.00048, noise: 0.006, volume: 0.6, spreadPct: 0.0032 },
   SPY: { base: 566, drift: 0.00008, noise: 0.0012, volume: 1, spreadPct: 0.0002 },
+  'BTC/USD': { base: 94000, drift: 0.00035, noise: 0.006, volume: 1.4, spreadPct: 0.0006 },
+  'ETH/USD': { base: 3200, drift: 0.00015, noise: 0.008, volume: 1.1, spreadPct: 0.0009 },
 };
 const DEFAULT_PROFILE = { base: 60, drift: 0, noise: 0.0025, volume: 1, spreadPct: 0.0006 };
 
@@ -60,6 +62,34 @@ export function fiveMinuteBars(symbol) {
       n: 120,
     });
   }
+  return bars;
+}
+
+export function cryptoBars(symbol, hoursBack = 48) {
+  const { base, drift, noise, volume } = profileFor(symbol);
+  const rng = makeRng(seedOf(symbol) + 11);
+  const bars = [];
+
+  const start = Date.now() - hoursBack * 60 * 60 * 1000;
+  const steps = (hoursBack * 60) / 5;
+  let i = 0;
+
+  for (let t = start; t <= Date.now(); t += BAR_MS, i += 1) {
+    // Continuous drift - unlike equities there is no daily open to anchor to.
+    const wobble = Math.sin(t / (53 * 60 * 1000)) * noise * 1.4;
+    const price = Math.max(1, base * (1 + drift * i * 0.4 + wobble + (rng() - 0.5) * noise));
+    bars.push({
+      t: new Date(t).toISOString(),
+      o: Number((price * (1 - noise * 0.1)).toFixed(2)),
+      h: Number((price * (1 + rng() * noise * 0.4)).toFixed(2)),
+      l: Number((price * (1 - rng() * noise * 0.4)).toFixed(2)),
+      c: Number(price.toFixed(2)),
+      v: Number(((12 + rng() * 20) * volume).toFixed(4)),
+      vw: Number(price.toFixed(2)),
+      n: 400,
+    });
+  }
+  void steps;
   return bars;
 }
 
@@ -203,6 +233,30 @@ export function installMock({ positions = [], account = {} } = {}) {
         const bars = {};
         for (const symbol of searchParams.get('symbols').split(',')) {
           bars[symbol] = daily ? dailyBars(symbol) : fiveMinuteBars(symbol);
+        }
+        return json({ bars, next_page_token: null });
+      }
+
+      case '/v1beta3/crypto/us/latest/quotes': {
+        const quotes = {};
+        for (const symbol of searchParams.get('symbols').split(',')) {
+          const { spreadPct } = profileFor(symbol);
+          const series = cryptoBars(symbol);
+          const mid = series[series.length - 1]?.c ?? 1;
+          quotes[symbol] = {
+            bp: Number((mid * (1 - spreadPct / 2)).toFixed(2)),
+            ap: Number((mid * (1 + spreadPct / 2)).toFixed(2)),
+            bs: 1,
+            as: 1,
+          };
+        }
+        return json({ quotes });
+      }
+
+      case '/v1beta3/crypto/us/bars': {
+        const bars = {};
+        for (const symbol of searchParams.get('symbols').split(',')) {
+          bars[symbol] = cryptoBars(symbol);
         }
         return json({ bars, next_page_token: null });
       }

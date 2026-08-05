@@ -93,6 +93,60 @@ export function buildTradePlan({ symbol, entryPrice, atrValue, equity, requested
 }
 
 /**
+ * Sizing for crypto.
+ *
+ * Fractional, so it is sized in dollars rather than whole shares. The stop is
+ * wider - a 0.3% floor is noise on an asset that routinely moves 3% in an hour -
+ * and, critically, it is NOT a resting order: Alpaca will not attach a bracket
+ * to crypto, so the stop is only enforced while the exit loop is running.
+ */
+export function buildCryptoPlan({ symbol, entryPrice, atrValue, equity, requestedNotional = null }) {
+  if (!entryPrice || !Number.isFinite(entryPrice) || entryPrice <= 0) {
+    return { viable: false, reason: 'no usable entry price' };
+  }
+
+  const atrStop = Number.isFinite(atrValue) && atrValue > 0 ? atrValue * 1.5 : 0;
+  const stopDistance = Math.max(atrStop, entryPrice * 0.01); // 1% floor, not 0.3%
+  const stopPct = stopDistance / entryPrice;
+
+  const riskBudget = (equity * config.riskPctPerTrade) / 100;
+  const byRisk = riskBudget / stopPct;
+  const notional = Math.min(
+    Number.isFinite(requestedNotional) && requestedNotional > 0 ? requestedNotional : byRisk,
+    config.maxNotionalPerOrderCrypto,
+  );
+
+  if (notional < 1) {
+    return { viable: false, reason: 'position would be under one dollar' };
+  }
+
+  const riskDollars = round2(notional * stopPct);
+
+  return {
+    viable: true,
+    assetClass: 'crypto',
+    entryPrice: round2(entryPrice),
+    stopPrice: round2(entryPrice - stopDistance),
+    takeProfitPrice: round2(entryPrice + stopDistance * config.targetRMultiple),
+    notional: round2(notional),
+    qty: Number((notional / entryPrice).toFixed(8)),
+    riskDollars,
+    riskPct: equity > 0 ? round2((riskDollars / equity) * 100) : 0,
+    riskPerShare: round2(stopDistance),
+    rMultiple: config.targetRMultiple,
+    stopDistancePct: round2(stopPct * 100),
+    restingStop: false, // the whole point: nothing protects this at the exchange
+    custom: Number.isFinite(requestedNotional) && requestedNotional > 0,
+    suggestedNotional: round2(Math.min(byRisk, config.maxNotionalPerOrderCrypto)),
+    riskBudget: round2(riskBudget),
+    overRiskBudget: riskDollars > riskBudget,
+    maxRiskDollars: round2((equity * config.maxRiskPctPerTrade) / 100),
+    equity: round2(equity),
+    maxNotional: config.maxNotionalPerOrderCrypto,
+  };
+}
+
+/**
  * Every reason this trade must not happen. Runs server-side at execution time
  * against freshly fetched account state - the browser's payload is never trusted
  * for anything except which symbol was clicked.
@@ -110,7 +164,19 @@ export function evaluateTrade({ candidate, plan, account, positions, session, an
     return { allowed: false, blockers, warnings };
   }
 
-  if (!config.watchlist.includes(candidate.symbol)) {
+  const isCrypto = candidate.group === 'crypto';
+
+  if (isCrypto) {
+    if (!config.cryptoWatchlist.includes(candidate.symbol)) {
+      blockers.push(`${candidate.symbol} is not on the configured crypto watchlist.`);
+    }
+    if (!config.cryptoTrading) {
+      blockers.push(
+        'Crypto trading is off. Alpaca will not attach a stop to a crypto order, so the stop only exists ' +
+          'while this server is running. Set CRYPTO_TRADING=true if you accept that.',
+      );
+    }
+  } else if (!config.watchlist.includes(candidate.symbol)) {
     blockers.push(`${candidate.symbol} is not on the configured watchlist.`);
   }
 
@@ -122,7 +188,9 @@ export function evaluateTrade({ candidate, plan, account, positions, session, an
     );
   }
 
-  if (!session.isCurrent) {
+  if (isCrypto) {
+    // 24/7: no close to be flat by, and crypto does not count as a day trade.
+  } else if (!session.isCurrent) {
     blockers.push('The market is closed. This view is showing the last completed session.');
   } else if (session.minutesToClose < config.minMinutesToClose) {
     blockers.push(
@@ -154,7 +222,9 @@ export function evaluateTrade({ candidate, plan, account, positions, session, an
   // days restricts the account. Alpaca enforces this on paper accounts too.
   const equity = Number(account.equity);
   const dayTrades = Number(account.daytrade_count ?? 0);
-  if (equity < 25000 && dayTrades >= 3) {
+  if (isCrypto) {
+    // PDT applies to securities, not crypto.
+  } else if (equity < 25000 && dayTrades >= 3) {
     blockers.push(`PDT limit: ${dayTrades} day trades used in the last 5 sessions with equity under $25k.`);
   } else if (equity < 25000 && dayTrades === 2) {
     warnings.push('This would be your third day trade in five sessions - one away from the PDT limit.');
@@ -167,8 +237,9 @@ export function evaluateTrade({ candidate, plan, account, positions, session, an
     if (Number.isFinite(buyingPower) && plan.notional > buyingPower) {
       blockers.push(`Order notional ${plan.notional} exceeds buying power ${buyingPower}.`);
     }
-    if (plan.notional > config.maxNotionalPerOrder) {
-      blockers.push(`Order notional ${plan.notional} exceeds the ${config.maxNotionalPerOrder} cap.`);
+    const cap = isCrypto ? config.maxNotionalPerOrderCrypto : config.maxNotionalPerOrder;
+    if (plan.notional > cap) {
+      blockers.push(`Order notional ${plan.notional} exceeds the ${cap} cap.`);
     }
 
     // A hand-entered amount can imply far more risk than the default sizing.

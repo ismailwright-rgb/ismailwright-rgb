@@ -18,6 +18,10 @@ const INDEX = 'index';
 const EQUITY = 'equity';
 
 export const UNIVERSE = {
+  // Crypto. Trades continuously, so session-based measures do not apply.
+  'BTC/USD': { group: 'crypto', note: 'Bitcoin. Trades 24/7, so there is no opening range and no close to be flat by.' },
+  'ETH/USD': { group: 'crypto', note: 'Ethereum. Trades 24/7 and moves largely with Bitcoin - treat the pair as one exposure.' },
+
   // Currency ETFs - the closest tradeable proxies for the major pairs.
   UUP: { group: CURRENCY, note: 'US dollar index. Rises when the dollar strengthens against a basket - roughly the inverse of EUR/USD.' },
   FXE: { group: CURRENCY, note: 'Holds euros. A proxy for EUR/USD: up means the euro is strengthening against the dollar.' },
@@ -45,6 +49,7 @@ export const CORRELATED_GROUPS = [
   ['UUP', 'FXE', 'FXB'],
   ['GLD', 'SLV'],
   ['SPY', 'QQQ'],
+  ['BTC/USD', 'ETH/USD'],
 ];
 
 export function correlatedWith(symbol) {

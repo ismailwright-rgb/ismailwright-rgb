@@ -106,6 +106,78 @@ function liquidityFactor({ spread, maxSpreadBps }) {
   return { strength, detail: `${fmt(spread, 1)} bps spread - ${verdict}` };
 }
 
+/**
+ * Crypto has no opening range - there is no open. The equivalent question is
+ * whether price has broken the range it spent the previous day inside.
+ */
+function rangeBreakFactor({ priorHigh, priorLow, last }) {
+  if (!Number.isFinite(priorHigh) || !Number.isFinite(priorLow) || priorHigh <= priorLow) {
+    return { strength: 0, detail: 'Not enough history for a range', missing: true };
+  }
+
+  const width = priorHigh - priorLow;
+  if (last > priorHigh) {
+    const extension = (last - priorHigh) / width;
+    return {
+      strength: clamp(0.5 + extension * 0.8),
+      detail: `Broken above the prior 24h high (${fmt(priorHigh)}), extended ${fmt(extension, 2)}x the range`,
+    };
+  }
+  if (last < priorLow) {
+    const extension = (priorLow - last) / width;
+    return {
+      strength: clamp(-0.5 - extension * 0.8),
+      detail: `Broken below the prior 24h low (${fmt(priorLow)}) - wrong side for a long`,
+    };
+  }
+
+  // Inside the range: position within it is mildly informative.
+  const position = (last - priorLow) / width;
+  return {
+    strength: clamp((position - 0.5) * 0.6),
+    detail: `Inside the prior 24h range ${fmt(priorLow)}-${fmt(priorHigh)}, ${Math.round(position * 100)}% of the way up`,
+  };
+}
+
+const CRYPTO_FACTORS = [
+  { key: 'trend', label: 'Trend', weight: 25 },
+  { key: 'rangeBreak', label: '24h range break', weight: 20 },
+  { key: 'volume', label: 'Relative volume', weight: 20 },
+  { key: 'relativeStrength', label: 'Strength vs BTC', weight: 15 },
+  { key: 'momentum', label: 'Momentum (RSI)', weight: 10 },
+  { key: 'liquidity', label: 'Spread / liquidity', weight: 10 },
+];
+
+/**
+ * Same weights and the same meaning of a score, with the two session-bound
+ * factors swapped for their continuous-market equivalents. Deliberately not a
+ * separate scale: a 78 on BTC and a 78 on NVDA should mean the same strength of
+ * setup, even though the evidence differs.
+ */
+export function scoreCrypto(inputs) {
+  const results = {
+    trend: trendFactor(inputs),
+    rangeBreak: rangeBreakFactor(inputs),
+    volume: volumeFactor(inputs),
+    relativeStrength: relativeStrengthFactor(inputs),
+    momentum: momentumFactor(inputs),
+    liquidity: liquidityFactor(inputs),
+  };
+
+  let weighted = 0;
+  let totalWeight = 0;
+  const factors = CRYPTO_FACTORS.map(({ key, label, weight }) => {
+    const { strength, detail, missing } = results[key];
+    weighted += strength * weight;
+    totalWeight += weight;
+    return { key, label, weight, strength: Number(strength.toFixed(3)), detail, missing: Boolean(missing) };
+  });
+
+  const technicalScore = Math.round(((weighted / totalWeight) + 1) * 50);
+  const missingCount = factors.filter((f) => f.missing).length;
+  return { technicalScore, factors, confidence: missingCount === 0 ? 'full' : missingCount <= 2 ? 'partial' : 'poor' };
+}
+
 export function scoreSymbol(inputs) {
   const results = {
     trend: trendFactor(inputs),

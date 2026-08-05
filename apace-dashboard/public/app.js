@@ -126,8 +126,16 @@ function planBlock(candidate) {
 
   return `
     <div class="plan">
+      ${
+        plan.assetClass === 'crypto'
+          ? `<p class="banner banner--warn" style="margin:0;display:block">
+              <strong>No resting stop.</strong> Alpaca will not attach one to a crypto order, so the stop below is a
+              rule this dashboard enforces while it is running — not an order held at the exchange.
+            </p>`
+          : ''
+      }
       <div class="plan__grid">
-        <div class="plan__cell"><span class="label">Shares</span><span class="plan__v" data-qty="${candidate.symbol}">${plan.qty}</span></div>
+        <div class="plan__cell"><span class="label">${plan.assetClass === 'crypto' ? 'Units' : 'Shares'}</span><span class="plan__v" data-qty="${candidate.symbol}">${plan.assetClass === 'crypto' ? plan.qty.toFixed(6) : plan.qty}</span></div>
         <div class="plan__cell"><span class="label">Entry</span><span class="plan__v">${fixed(plan.entryPrice)}</span></div>
         <div class="plan__cell"><span class="label">Stop</span><span class="plan__v">${fixed(plan.stopPrice)}</span></div>
         <div class="plan__cell"><span class="label">Target</span><span class="plan__v">${fixed(plan.takeProfitPrice)}</span></div>

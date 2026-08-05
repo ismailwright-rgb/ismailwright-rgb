@@ -61,6 +61,17 @@ export const config = {
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),
 
+  // Crypto is a separate list: it trades 24/7, has no opening range and no
+  // session, and Alpaca will not attach a bracket to it.
+  cryptoWatchlist: (process.env.CRYPTO_WATCHLIST ?? 'BTC/USD,ETH/USD')
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean),
+  maxNotionalPerOrderCrypto: num('MAX_NOTIONAL_PER_ORDER_CRYPTO', 150),
+  // Off by default: without a resting stop, a crypto position is only protected
+  // while this server is running. See placeCryptoOrder.
+  cryptoTrading: process.env.CRYPTO_TRADING === 'true',
+
   riskPctPerTrade: num('RISK_PCT_PER_TRADE', 0.5),
   // Hard ceiling for a manually chosen dollar amount. The default sizing targets
   // riskPctPerTrade; this is the most a hand-entered amount may risk before the
