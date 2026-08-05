@@ -17,5 +17,25 @@ services:
       timeout: 4s
       retries: 3
 
+  # Try the dashboard with no Alpaca keys and no .env file at all:
+  #   docker compose up demo   ->   http://localhost:8099
+  # Runs the real server against a synthetic market. Orders are captured in
+  # memory and thrown away - this container cannot reach a real account.
+  demo:
+    build: .
+    container_name: apace-demo
+    profiles: ["demo"]
+    command: ["node", "test/serve-mock.mjs"]
+    environment:
+      ALPACA_KEY_ID: PKDEMO
+      ALPACA_SECRET_KEY: demosecret
+      OPENROUTER_API_KEY: mock-key
+      WATCHLIST: NVDA,MSFT,AAPL,GRAB,PLUG
+      PORT: "8099"
+      DATA_DIR: /tmp/apace-demo
+      TZ: America/New_York
+    ports:
+      - "127.0.0.1:8099:8099"
+
 volumes:
   apace-data:

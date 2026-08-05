@@ -16,23 +16,27 @@ Browser  ──>  Express (this container)  ──>  Alpaca  (keys never leave t
 
 ## Run it
 
+**New here? Follow [SETUP.md](SETUP.md)** — a step-by-step walkthrough from
+installing Docker to placing a first paper trade, written to assume nothing.
+
+### See it with no keys and no account
+
+```bash
+docker compose up demo    # → http://localhost:8099
+```
+
+Runs the real server against a synthetic market. The Execute button works end to
+end; orders are captured in memory and discarded. Do this first.
+
+### Run it against your paper account
+
 ```bash
 cp .env.example .env      # then fill in your paper keys
-docker compose up --build
-open http://localhost:8080
+docker compose up --build # → http://localhost:8080
 ```
 
-Without Docker: `npm install && npm start` (Node 20.6+).
-
-### Look at it before wiring anything up
-
-```bash
-npm run mock              # http://localhost:8099
-```
-
-Runs the real server against a synthetic market — no keys, no account, no open
-market required. The Execute button works end to end; orders are captured in
-memory and discarded.
+Without Docker: `npm install && npm start` (Node 20.6+), or `npm run mock` for the
+synthetic market.
 
 ### Tests
 

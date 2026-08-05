@@ -9,6 +9,8 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 COPY server ./server
 COPY public ./public
+# Included so `docker compose up demo` can run the synthetic market with no keys.
+COPY test ./test
 
 # Writable location for the analysis cache and trade log.
 RUN mkdir -p /app/data && chown -R node:node /app
