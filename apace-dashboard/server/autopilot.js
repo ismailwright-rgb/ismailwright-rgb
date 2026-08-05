@@ -177,7 +177,12 @@ export async function tick({ refreshAnalysis, now = Date.now(), dryRun = false }
     trading &&
     !dryRun
   ) {
-    await alpaca.closeAllPositions();
+    // Equities only: crypto has no close to be flat by, and closing it here
+    // would exit a position purely because the stock market shut.
+    const equityPositions = positions.filter((p) => !alpaca.normaliseSymbol(p.symbol).endsWith('USD'));
+    for (const position of equityPositions) {
+      await alpaca.closePosition(position.symbol).catch(() => {});
+    }
     day.flattened = true;
     await saveDay(day);
     await store.appendTrade({ symbol: '*', status: 'auto-flattened', count: positions.length });
@@ -294,8 +299,13 @@ export async function tick({ refreshAnalysis, now = Date.now(), dryRun = false }
   await rememberEntry(candidate.symbol, {
     entryPrice: plan.entryPrice,
     stopPrice: plan.stopPrice,
+    takeProfitPrice: plan.takeProfitPrice,
     riskPerShare: plan.riskPerShare,
     placedAt: new Date(now).toISOString(),
+    assetClass: candidate.group === 'crypto' ? 'crypto' : 'equity',
+    score: candidate.score,
+    factors: candidate.factors,
+    window: window.key,
   });
 
   const entry = {

@@ -5,8 +5,11 @@
       "parameters": {},
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [-560, -320],
-      "id": "9e515595-8679-4f32-9811-e78d05ccabf1",
+      "position": [
+        -768,
+        -368
+      ],
+      "id": "19788855-0a19-42cd-a637-214b89200efa",
       "name": "When clicking 'Execute workflow'"
     },
     {
@@ -22,11 +25,14 @@
       },
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [-560, -140],
-      "id": "1a2b3c4d-0001-4000-8000-000000000001",
+      "position": [
+        -768,
+        -176
+      ],
+      "id": "56771153-ecc9-44b1-9c3a-efe6edb8ece0",
       "name": "Weekdays 10:15 ET",
       "disabled": true,
-      "notes": "Cron is evaluated in the workflow timezone (Settings > Timezone). Set it to America/New_York so this lands 45 min after the open. Disabled by default - enable once you trust the guard."
+      "notes": "Cron is evaluated in the workflow timezone (Settings > Timezone). Set it to America/New_York so this lands 45 min after the open. Disabled by default - enable once you trust the guard. Note this fires on weekdays only, so crypto is not looked at over a weekend."
     },
     {
       "parameters": {
@@ -34,13 +40,16 @@
         "text": "=Today is {{ $now.toISODate() }}. Analyze the watchlist and return your recommendations for today in the required JSON format.",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "You are a careful paper-trading research agent. Your job is to analyze a watchlist of stocks and ETFs and produce clear, structured trade recommendations.\n\nCore rules:\n- You only operate in paper trading mode. Never assume real money.\n- You do not predict the future with certainty. Always express uncertainty.\n- Capital preservation matters more than chasing returns.\n- Prefer higher-quality, more liquid names when confidence is similar.\n- Respect risk: suggest smaller size on lower-confidence or higher-volatility names.\n- Only recommend a buy when you have a clear, evidence-based reason.\n- If nothing looks attractive, it is better to return an empty recommendation list than to force a position.\n\nWatchlist you may analyze (no other symbols will be accepted downstream):\nGRAB, PLUG, GLD, SLV, CPER, SPY, QQQ, AAPL, MSFT, NVDA, FCX, NEM, CAT, AMZN, GOOGL, META, JPM, XOM\n\nTools available to you:\n- get_account: paper account buying power and equity.\n- get_positions: what you already hold. Do not recommend adding to a name you already hold.\n- get_quotes: latest bid/ask for the full watchlist. Use this to judge spread and liquidity.\n- get_daily_bars: 90 days of daily OHLCV for up to 5 symbols at a time. Use this for momentum and relative strength.\n\nEVIDENCE DISCIPLINE - this is the most important rule:\nYou have NO news feed, NO earnings calendar, and NO fundamental data. You must not invent them.\n- Base every thesis strictly on what get_quotes and get_daily_bars actually returned.\n- Compute momentum and relative strength yourself from the bars (e.g. 20-day and 50-day change versus SPY over the same window).\n- Never cite a news event, product launch, analyst action, or earnings date. If your reasoning depends on one, lower your confidence and say the driver is unverifiable with your current data.\n- If a tool call fails or returns no data for a symbol, say so and do not recommend that symbol.\n\nSizing guidance:\n- Suggest a USD notional amount, not a share count.\n- Anything below 55 confidence should be Avoid, or Buy at a token size.\n- A downstream risk guard enforces a hard per-order cap and a per-run budget, and drops anything outside the watchlist. Size sensibly anyway - do not rely on the guard to correct you.\n\nReturn only the structured JSON object described by the output schema."
+          "systemMessage": "You are a careful paper-trading research agent covering equities, commodity-proxy ETFs, and crypto. Your job is to analyze a watchlist and produce clear, structured trade recommendations.\n\nCore rules:\n- You only operate in paper trading mode. Never assume real money.\n- You do not predict the future with certainty. Always express uncertainty.\n- Capital preservation matters more than chasing returns. Speed of growth is a downstream effect of a real, repeated edge - never the objective itself. Reject any temptation to size up or force a trade in order to grow the account quickly.\n- Prefer higher-quality, more liquid names when confidence is similar.\n- Respect risk: suggest smaller size on lower-confidence or higher-volatility names. Crypto is materially more volatile than the equity/commodity names on this list - size it more conservatively for the same confidence level.\n- Only recommend a buy when you have a clear, evidence-based reason.\n- If nothing looks attractive, it is better to return an empty recommendation list than to force a position.\n- Long-only for now. Do not recommend shorting or options strategies - this workflow does not support them yet.\n\nWatchlist you may analyze (no other symbols will be accepted downstream):\nEquities/ETFs/commodity proxies: GRAB, PLUG, GLD, SLV, CPER, SPY, QQQ, AAPL, MSFT, NVDA, FCX, NEM, CAT, AMZN, GOOGL, META, JPM, XOM\nCrypto (24/7, use crypto tools for these, symbol format BTC/USD not BTC): BTC/USD, ETH/USD\n\nTools available to you:\n- get_account: paper account buying power and equity.\n- get_positions: what you already hold. Do not recommend adding to a name you already hold. NOTE: crypto positions come back without the slash, as BTCUSD - treat that as the same position as BTC/USD.\n- get_quotes: latest bid/ask for the equity/ETF watchlist. Use this to judge spread and liquidity.\n- get_daily_bars: 90 days of daily OHLCV for up to 5 equity/ETF symbols at a time. Use this for momentum and relative strength.\n- get_crypto_quotes: latest bid/ask for BTC/USD and ETH/USD.\n- get_crypto_bars: 90 days of daily OHLCV for a crypto symbol. Crypto trades 24/7 so bars are continuous, unlike equities.\n\nPATTERN-DETECTION DISCIPLINE - apply this to every symbol before forming a thesis:\n- Only cite a historical pattern (e.g. mean reversion off a band, momentum continuation, a recurring range) if it shows up multiple times in the bars you pulled with a broadly consistent outcome. A single similar-looking past instance is NOT a pattern - say so if that's all you find, and lower confidence accordingly.\n- Classify the current regime for each symbol you seriously consider: trending, ranging, or high-volatility/breakout. State your confidence in that classification.\n- Compute momentum and relative strength yourself from the bars (e.g. 20-day and 50-day change versus SPY for equities, versus each other for BTC/ETH). Do not eyeball it.\n\nEVIDENCE DISCIPLINE - this is the most important rule:\nYou have NO news feed, NO earnings calendar, and NO fundamental or on-chain data. You must not invent them.\n- Base every thesis strictly on what get_quotes/get_crypto_quotes and get_daily_bars/get_crypto_bars actually returned.\n- Never cite a news event, product launch, analyst action, earnings date, or macro catalyst you weren't given data for. If your reasoning depends on one, lower your confidence and say the driver is unverifiable with your current data.\n- If a tool call fails or returns no data for a symbol, say so and do not recommend that symbol.\n\nSizing guidance:\n- Suggest a USD notional amount, not a share/coin count.\n- Anything below 55 confidence should be Avoid, or Buy at a token size.\n- Crypto positions should default to a smaller notional than an equity position at the same confidence level, given higher volatility.\n- A downstream risk guard enforces hard per-order caps (including a lower cap for crypto), a per-run budget, and drops anything outside the watchlist. Size sensibly anyway - do not rely on the guard to correct you.\n\nReturn only the structured JSON object described by the output schema."
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
-      "position": [-260, -320],
-      "id": "253c67b9-7f08-4f3f-8811-fe1eee71342c",
+      "position": [
+        -304,
+        -272
+      ],
+      "id": "268b3abe-0a34-4b67-84e9-54562fd58d9d",
       "name": "Trading Agent - Paper"
     },
     {
@@ -50,26 +59,32 @@
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "typeVersion": 1,
-      "position": [-380, -100],
-      "id": "b0f04604-4b56-4d79-b4ed-15bf9fb9ed73",
+      "position": [
+        -544,
+        -48
+      ],
+      "id": "8df59ddd-ad53-430d-b96e-73befb2f3a49",
       "name": "OpenRouter Chat Model",
-      "notes": "Free-tier models are rate limited and are the least reliable at tool calling. If the agent ignores its tools or mangles the JSON, swap this first.",
       "credentials": {
         "openRouterApi": {
           "id": "kXNVLyX95tlfZOdl",
           "name": "OpenRouter account"
         }
-      }
+      },
+      "notes": "Free-tier models are rate limited and are the least reliable at tool calling. If the agent ignores its tools or mangles the JSON, swap this first."
     },
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"market_comment\": {\n      \"type\": \"string\",\n      \"description\": \"Short overall market comment\"\n    },\n    \"recommendations\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"symbol\": { \"type\": \"string\" },\n          \"action\": { \"type\": \"string\", \"enum\": [\"Buy\", \"Hold\", \"Avoid\"] },\n          \"notional_usd\": { \"type\": \"number\" },\n          \"confidence\": { \"type\": \"number\" },\n          \"thesis\": { \"type\": \"string\" },\n          \"risks\": { \"type\": \"string\" },\n          \"sizing_note\": { \"type\": \"string\" }\n        },\n        \"required\": [\"symbol\", \"action\", \"notional_usd\", \"confidence\", \"thesis\", \"risks\", \"sizing_note\"]\n      }\n    }\n  },\n  \"required\": [\"market_comment\", \"recommendations\"]\n}"
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"market_comment\": {\n      \"type\": \"string\",\n      \"description\": \"Short overall market comment\"\n    },\n    \"recommendations\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"symbol\": {\n            \"type\": \"string\"\n          },\n          \"action\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"Buy\",\n              \"Hold\",\n              \"Avoid\"\n            ]\n          },\n          \"notional_usd\": {\n            \"type\": \"number\"\n          },\n          \"confidence\": {\n            \"type\": \"number\"\n          },\n          \"thesis\": {\n            \"type\": \"string\"\n          },\n          \"risks\": {\n            \"type\": \"string\"\n          },\n          \"sizing_note\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"symbol\",\n          \"action\",\n          \"notional_usd\",\n          \"confidence\",\n          \"thesis\",\n          \"risks\",\n          \"sizing_note\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"market_comment\",\n    \"recommendations\"\n  ]\n}"
       },
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
-      "position": [-100, -100],
-      "id": "1a2b3c4d-0002-4000-8000-000000000002",
+      "position": [
+        96,
+        -48
+      ],
+      "id": "eca5e3ee-8a8f-4281-8f8b-b75f733730af",
       "name": "Recommendation Schema"
     },
     {
@@ -78,78 +93,142 @@
         "url": "https://paper-api.alpaca.markets/v2/account",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
+        "sendHeaders": false,
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
-      "position": [-240, -100],
-      "id": "36c24457-a2c5-4d27-a6c9-4b33524dfb9c",
+      "position": [
+        -416,
+        -48
+      ],
+      "id": "bca33f16-8ffe-4dea-b563-2c48e8fd3302",
       "name": "get_account",
       "credentials": {
         "httpCustomAuth": {
-          "id": "REPLACE_WITH_ALPACA_CRED_ID",
-          "name": "Alpaca Paper API"
+          "id": "EaNRdd52tPFBFam9",
+          "name": "Alpaca"
         }
       }
     },
     {
       "parameters": {
-        "toolDescription": "List the positions currently held in the paper account. Call this before recommending anything so you do not double up on a name you already own.",
+        "toolDescription": "List the positions currently held in the paper account. Call this before recommending anything so you do not double up on a name you already own. Crypto is returned without the slash (BTCUSD), which is the same position as BTC/USD.",
         "url": "https://paper-api.alpaca.markets/v2/positions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
+        "sendHeaders": false,
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
-      "position": [-160, -100],
-      "id": "1a2b3c4d-0003-4000-8000-000000000003",
+      "position": [
+        -288,
+        -48
+      ],
+      "id": "ce7b667e-8bec-42a2-a74f-c4d4edc38c33",
       "name": "get_positions",
       "credentials": {
         "httpCustomAuth": {
-          "id": "REPLACE_WITH_ALPACA_CRED_ID",
-          "name": "Alpaca Paper API"
+          "id": "EaNRdd52tPFBFam9",
+          "name": "Alpaca"
         }
       }
     },
     {
       "parameters": {
-        "toolDescription": "Get the latest bid/ask quote for every symbol on the watchlist. Use the bid-ask spread to judge liquidity. This is a point-in-time snapshot and contains no history - use get_daily_bars for anything trend related.",
+        "toolDescription": "Get the latest bid/ask quote for every equity/ETF symbol on the watchlist (not crypto - use get_crypto_quotes for BTC/USD and ETH/USD). Use the bid-ask spread to judge liquidity. This is a point-in-time snapshot and contains no history - use get_daily_bars for anything trend related.",
         "url": "https://data.alpaca.markets/v2/stocks/quotes/latest?symbols=GRAB,PLUG,GLD,SLV,CPER,SPY,QQQ,AAPL,MSFT,NVDA,FCX,NEM,CAT,AMZN,GOOGL,META,JPM,XOM&feed=iex",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
+        "sendHeaders": false,
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
-      "position": [-80, -100],
-      "id": "446cb37b-fc6c-4179-a066-9b96228d0379",
+      "position": [
+        -160,
+        -48
+      ],
+      "id": "094e0ed7-496e-4e81-86c2-25e20ee3b028",
       "name": "get_quotes",
-      "notes": "feed=iex is the free data plan. Drop the parameter if you have an Alpaca market data subscription (SIP).",
       "credentials": {
         "httpCustomAuth": {
-          "id": "REPLACE_WITH_ALPACA_CRED_ID",
-          "name": "Alpaca Paper API"
+          "id": "EaNRdd52tPFBFam9",
+          "name": "Alpaca"
+        }
+      },
+      "notes": "feed=iex is the free data plan. Drop the parameter if you have an Alpaca market data subscription (SIP)."
+    },
+    {
+      "parameters": {
+        "toolDescription": "Get 90 days of daily OHLCV bars for up to 5 equity/ETF symbols at a time (not crypto - use get_crypto_bars for BTC/USD and ETH/USD). Use this for momentum and relative strength. Pass symbols as a comma separated list with no spaces, for example: NVDA,MSFT,SPY",
+        "url": "=https://data.alpaca.markets/v2/stocks/bars?symbols={{ $fromAI('symbols', 'Comma separated ticker symbols, no spaces, maximum 5, always include SPY for comparison', 'string') }}&timeframe=1Day&start={{ $now.minus({ days: 90 }).toISODate() }}&limit=1000&adjustment=split&feed=iex",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": false,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        -32,
+        -48
+      ],
+      "id": "2820cfcc-bc9d-4d5a-9714-ca9a6e8a4366",
+      "name": "get_daily_bars",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "EaNRdd52tPFBFam9",
+          "name": "Alpaca"
         }
       }
     },
     {
       "parameters": {
-        "toolDescription": "Get 90 days of daily OHLCV bars for up to 5 symbols at a time. Use this to compute momentum and relative strength versus SPY. Pass symbols as a comma separated list with no spaces, for example: NVDA,MSFT,SPY",
-        "url": "=https://data.alpaca.markets/v2/stocks/bars?symbols={{ $fromAI('symbols', 'Comma separated ticker symbols, no spaces, maximum 5, always include SPY for comparison', 'string') }}&timeframe=1Day&start={{ $now.minus({ days: 90 }).toISODate() }}&limit=1000&adjustment=split&feed=iex",
+        "toolDescription": "Get the latest bid/ask quote for BTC/USD and ETH/USD. Crypto trades 24/7 so this is always live, unlike equity quotes outside market hours.",
+        "url": "https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes?symbols=BTC/USD,ETH/USD",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
+        "sendHeaders": false,
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
-      "position": [0, -100],
-      "id": "1a2b3c4d-0004-4000-8000-000000000004",
-      "name": "get_daily_bars",
+      "position": [
+        -160,
+        96
+      ],
+      "id": "c1a1e001-0000-4000-8000-000000000001",
+      "name": "get_crypto_quotes",
       "credentials": {
         "httpCustomAuth": {
-          "id": "REPLACE_WITH_ALPACA_CRED_ID",
-          "name": "Alpaca Paper API"
+          "id": "EaNRdd52tPFBFam9",
+          "name": "Alpaca"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Get 90 days of daily OHLCV bars for one crypto symbol. Pass symbol exactly as BTC/USD or ETH/USD.",
+        "url": "=https://data.alpaca.markets/v1beta3/crypto/us/bars?symbols={{ $fromAI('symbol', 'Crypto pair, exactly BTC/USD or ETH/USD', 'string') }}&timeframe=1Day&start={{ $now.minus({ days: 90 }).toISODate() }}&limit=1000",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": false,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        -32,
+        96
+      ],
+      "id": "c1a1e002-0000-4000-8000-000000000002",
+      "name": "get_crypto_bars",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "EaNRdd52tPFBFam9",
+          "name": "Alpaca"
         }
       }
     },
@@ -158,31 +237,39 @@
         "url": "https://paper-api.alpaca.markets/v2/positions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
+        "sendHeaders": false,
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [80, -320],
-      "id": "1a2b3c4d-0005-4000-8000-000000000005",
+      "position": [
+        304,
+        -272
+      ],
+      "id": "5897e609-a38e-45f5-9f1a-d970ec3c05cd",
       "name": "Get Positions For Guard",
       "alwaysOutputData": true,
-      "notes": "alwaysOutputData is ON so an empty portfolio still emits one item. Without it, zero positions means zero items and every downstream node is skipped.",
       "credentials": {
         "httpCustomAuth": {
-          "id": "REPLACE_WITH_ALPACA_CRED_ID",
-          "name": "Alpaca Paper API"
+          "id": "EaNRdd52tPFBFam9",
+          "name": "Alpaca"
         }
-      }
+      },
+      "notes": "alwaysOutputData is ON so an empty portfolio still emits one item. Without it, zero positions means zero items and every downstream node is skipped."
     },
     {
       "parameters": {
-        "jsCode": "// Risk guard. The agent cannot place orders itself - only what survives this node\n// becomes a real order. Treat every field coming out of the model as untrusted.\n\nconst MAX_NOTIONAL_PER_ORDER = 500;   // USD per single order\nconst MAX_NOTIONAL_PER_RUN   = 2000;  // USD across the whole run\nconst MIN_CONFIDENCE         = 55;\nconst MAX_ORDERS_PER_RUN     = 4;\n\nconst ALLOWLIST = [\n  'GRAB', 'PLUG', 'GLD', 'SLV', 'CPER', 'SPY', 'QQQ', 'AAPL', 'MSFT',\n  'NVDA', 'FCX', 'NEM', 'CAT', 'AMZN', 'GOOGL', 'META', 'JPM', 'XOM',\n];\n\n// The parsed agent output. With the structured parser attached it lands on .output.\nconst agentJson = $('Trading Agent - Paper').first().json;\nconst parsed = agentJson.output ?? agentJson;\nconst recommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];\n\n// Symbols already held, from the main-flow positions fetch feeding this node.\nconst held = new Set(\n  $input.all().map((item) => item.json.symbol).filter(Boolean).map((s) => String(s).toUpperCase()),\n);\n\nconst approved = [];\nconst rejected = [];\nlet runTotal = 0;\n\nfor (const rec of recommendations) {\n  const symbol = String(rec.symbol ?? '').toUpperCase().trim();\n  const confidence = Number(rec.confidence);\n  const requested = Number(rec.notional_usd);\n  const reasons = [];\n\n  if (String(rec.action ?? '').toLowerCase() !== 'buy') {\n    reasons.push(`action is ${rec.action}, not Buy`);\n  }\n  if (!ALLOWLIST.includes(symbol)) {\n    reasons.push(`${symbol || '(blank)'} is not on the allowlist`);\n  }\n  if (!Number.isFinite(confidence) || confidence < MIN_CONFIDENCE) {\n    reasons.push(`confidence ${rec.confidence} is below ${MIN_CONFIDENCE}`);\n  }\n  if (!Number.isFinite(requested) || requested <= 0) {\n    reasons.push(`notional ${rec.notional_usd} is not a positive number`);\n  }\n  if (held.has(symbol)) {\n    reasons.push('already holding this symbol');\n  }\n  if (approved.some((a) => a.symbol === symbol)) {\n    reasons.push('duplicate recommendation in the same run');\n  }\n  if (approved.length >= MAX_ORDERS_PER_RUN) {\n    reasons.push(`already at the ${MAX_ORDERS_PER_RUN} order limit for this run`);\n  }\n\n  if (reasons.length) {\n    rejected.push({ symbol, reasons });\n    continue;\n  }\n\n  const capped = Math.min(requested, MAX_NOTIONAL_PER_ORDER);\n  if (runTotal + capped > MAX_NOTIONAL_PER_RUN) {\n    rejected.push({ symbol, reasons: ['run budget exhausted'] });\n    continue;\n  }\n  runTotal += capped;\n\n  approved.push({\n    approved: true,\n    symbol,\n    notional: Number(capped.toFixed(2)),\n    requested_notional: requested,\n    was_capped: capped < requested,\n    confidence,\n    thesis: rec.thesis ?? '',\n    risks: rec.risks ?? '',\n    market_comment: parsed.market_comment ?? '',\n  });\n}\n\nconsole.log(`approved ${approved.length} / ${recommendations.length}, $${runTotal}`);\nconsole.log('rejected:', JSON.stringify(rejected));\n\n// Always emit at least one item so the IF node has something to route.\nif (!approved.length) {\n  return [{\n    json: {\n      approved: false,\n      reason: 'no recommendation passed the risk guard',\n      considered: recommendations.length,\n      rejected,\n      market_comment: parsed.market_comment ?? '',\n    },\n  }];\n}\n\nreturn approved.map((json) => ({ json }));"
+        "jsCode": "// Risk guard. The agent cannot place orders itself - only what survives this node\n// becomes a real order. Treat every field coming out of the model as untrusted.\n//\n// Paste this into the \"Risk Guard\" Code node, replacing its contents.\n//\n// FIX: Alpaca returns crypto positions without the slash (\"BTCUSD\"), while the\n// agent recommends the slashed form (\"BTC/USD\"). Comparing them directly meant\n// the \"already holding\" check could never match a crypto position, so the guard\n// would happily buy BTC again on top of one it already owned. Every symbol\n// comparison now goes through normalise().\n\nconst MAX_NOTIONAL_PER_ORDER        = 500;   // USD per single equity/ETF order\nconst MAX_NOTIONAL_PER_ORDER_CRYPTO = 150;   // USD per single crypto order - tighter given volatility\nconst MAX_NOTIONAL_PER_RUN          = 2000;  // USD across the whole run\nconst MAX_CRYPTO_NOTIONAL_PER_RUN   = 300;   // USD ceiling on total crypto exposure added per run\nconst MIN_CONFIDENCE                = 55;\nconst MAX_ORDERS_PER_RUN            = 4;\nconst MAX_CRYPTO_ORDERS_PER_RUN     = 1;     // at most one new crypto position per run\n\nconst ALLOWLIST = [\n  'GRAB', 'PLUG', 'GLD', 'SLV', 'CPER', 'SPY', 'QQQ', 'AAPL', 'MSFT',\n  'NVDA', 'FCX', 'NEM', 'CAT', 'AMZN', 'GOOGL', 'META', 'JPM', 'XOM',\n  'BTC/USD', 'ETH/USD',\n];\nconst CRYPTO_SYMBOLS = new Set(['BTC/USD', 'ETH/USD']);\n\n// One canonical form for comparisons: upper case, no spaces, no slash.\n// \"BTC/USD\" and \"BTCUSD\" are the same position.\nconst normalise = (value) => String(value ?? '').toUpperCase().replace(/\\s+/g, '').replace(/\\//g, '');\n\nconst ALLOWED = new Set(ALLOWLIST.map(normalise));\nconst CRYPTO = new Set([...CRYPTO_SYMBOLS].map(normalise));\n\n// The parsed agent output. With the structured parser attached it lands on .output.\nconst agentJson = $('Trading Agent - Paper').first().json;\nconst parsed = agentJson.output ?? agentJson;\nconst recommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];\n\n// Symbols already held, from the main-flow positions fetch feeding this node.\nconst held = new Set($input.all().map((item) => item.json.symbol).filter(Boolean).map(normalise));\n\nconst approved = [];\nconst rejected = [];\nlet runTotal = 0;\nlet cryptoRunTotal = 0;\nlet cryptoOrderCount = 0;\n\nfor (const rec of recommendations) {\n  // Keep the slashed form for the order body; compare on the normalised one.\n  const symbol = String(rec.symbol ?? '').toUpperCase().trim();\n  const key = normalise(symbol);\n  const isCrypto = CRYPTO.has(key);\n  const confidence = Number(rec.confidence);\n  const requested = Number(rec.notional_usd);\n  const reasons = [];\n\n  if (String(rec.action ?? '').toLowerCase() !== 'buy') {\n    reasons.push(`action is ${rec.action}, not Buy`);\n  }\n  if (!ALLOWED.has(key)) {\n    reasons.push(`${symbol || '(blank)'} is not on the allowlist`);\n  }\n  if (!Number.isFinite(confidence) || confidence < MIN_CONFIDENCE) {\n    reasons.push(`confidence ${rec.confidence} is below ${MIN_CONFIDENCE}`);\n  }\n  if (!Number.isFinite(requested) || requested <= 0) {\n    reasons.push(`notional ${rec.notional_usd} is not a positive number`);\n  }\n  if (held.has(key)) {\n    reasons.push('already holding this symbol');\n  }\n  if (approved.some((a) => normalise(a.symbol) === key)) {\n    reasons.push('duplicate recommendation in the same run');\n  }\n  if (approved.length >= MAX_ORDERS_PER_RUN) {\n    reasons.push(`already at the ${MAX_ORDERS_PER_RUN} order limit for this run`);\n  }\n  if (isCrypto && cryptoOrderCount >= MAX_CRYPTO_ORDERS_PER_RUN) {\n    reasons.push(`already at the ${MAX_CRYPTO_ORDERS_PER_RUN} crypto order limit for this run`);\n  }\n\n  if (reasons.length) {\n    rejected.push({ symbol, reasons });\n    continue;\n  }\n\n  const perOrderCap = isCrypto ? MAX_NOTIONAL_PER_ORDER_CRYPTO : MAX_NOTIONAL_PER_ORDER;\n  const capped = Math.min(requested, perOrderCap);\n\n  if (runTotal + capped > MAX_NOTIONAL_PER_RUN) {\n    rejected.push({ symbol, reasons: ['run budget exhausted'] });\n    continue;\n  }\n  if (isCrypto && cryptoRunTotal + capped > MAX_CRYPTO_NOTIONAL_PER_RUN) {\n    rejected.push({ symbol, reasons: ['crypto run budget exhausted'] });\n    continue;\n  }\n\n  runTotal += capped;\n  if (isCrypto) {\n    cryptoRunTotal += capped;\n    cryptoOrderCount += 1;\n  }\n\n  approved.push({\n    approved: true,\n    symbol,\n    asset_class: isCrypto ? 'crypto' : 'equity',\n    notional: Number(capped.toFixed(2)),\n    requested_notional: requested,\n    was_capped: capped < requested,\n    confidence,\n    thesis: rec.thesis ?? '',\n    risks: rec.risks ?? '',\n    market_comment: parsed.market_comment ?? '',\n  });\n}\n\nconsole.log(`approved ${approved.length} / ${recommendations.length}, $${runTotal} ($${cryptoRunTotal} crypto)`);\nconsole.log('rejected:', JSON.stringify(rejected));\n\n// Always emit at least one item so the IF node has something to route.\nif (!approved.length) {\n  return [{\n    json: {\n      approved: false,\n      reason: 'no recommendation passed the risk guard',\n      considered: recommendations.length,\n      rejected,\n      market_comment: parsed.market_comment ?? '',\n    },\n  }];\n}\n\nreturn approved.map((json) => ({ json }));\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [280, -320],
-      "id": "1a2b3c4d-0006-4000-8000-000000000006",
-      "name": "Risk Guard"
+      "position": [
+        528,
+        -272
+      ],
+      "id": "885e933b-1201-47bd-8f06-c7323f967963",
+      "name": "Risk Guard",
+      "notes": "Symbol comparisons are normalised (slash removed, upper-cased) so the agent's BTC/USD matches the BTCUSD that Alpaca reports as a position. Without that, the already-holding check never fires for crypto."
     },
     {
       "parameters": {
@@ -211,8 +298,11 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [480, -320],
-      "id": "1a2b3c4d-0008-4000-8000-000000000008",
+      "position": [
+        752,
+        -272
+      ],
+      "id": "3849d846-3235-4bb6-9c93-ac5ce48265f5",
       "name": "Approved?"
     },
     {
@@ -221,72 +311,201 @@
         "url": "https://paper-api.alpaca.markets/v2/orders",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
+        "sendHeaders": false,
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  symbol: $json.symbol,\n  notional: $json.notional,\n  side: 'buy',\n  type: 'market',\n  time_in_force: 'day',\n  client_order_id: 'agent-' + $json.symbol + '-' + $now.toISODate()\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  symbol: $json.symbol,\n  notional: $json.notional,\n  side: 'buy',\n  type: 'market',\n  time_in_force: $json.asset_class === 'crypto' ? 'gtc' : 'day',\n  client_order_id: 'agent-' + $json.symbol.replace('/', '') + '-' + $now.toISODate()\n}) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, -400],
-      "id": "7d8816e1-b9fd-40a6-b73c-a8324e1fa6f0",
+      "position": [
+        976,
+        -368
+      ],
+      "id": "44b8e099-dcc1-444c-b817-07c232d5c052",
       "name": "Place Order",
-      "notes": "client_order_id is symbol + date, so a second run on the same day is rejected by Alpaca instead of doubling the position. Fractional notional orders must use time_in_force=day.",
       "credentials": {
         "httpCustomAuth": {
-          "id": "REPLACE_WITH_ALPACA_CRED_ID",
-          "name": "Alpaca Paper API"
+          "id": "EaNRdd52tPFBFam9",
+          "name": "Alpaca"
         }
-      }
+      },
+      "notes": "client_order_id is symbol + date, so a second run on the same day is rejected by Alpaca instead of doubling the position. Equity notional orders require time_in_force=day; crypto notional orders require gtc or ioc (day is invalid for crypto). NOTE: this workflow places entries only - it does not attach or manage a stop. Exits are handled by the Apace dashboard's exit loop, or by hand."
     },
     {
       "parameters": {},
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [700, -240],
-      "id": "1a2b3c4d-0009-4000-8000-000000000009",
+      "position": [
+        976,
+        -176
+      ],
+      "id": "5316809e-6e23-4280-b471-17c3b85458cd",
       "name": "No Trade Today"
     }
   ],
   "pinData": {},
   "connections": {
     "When clicking 'Execute workflow'": {
-      "main": [[{ "node": "Trading Agent - Paper", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Weekdays 10:15 ET": {
-      "main": [[{ "node": "Trading Agent - Paper", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "OpenRouter Chat Model": {
-      "ai_languageModel": [[{ "node": "Trading Agent - Paper", "type": "ai_languageModel", "index": 0 }]]
+      "ai_languageModel": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Recommendation Schema": {
-      "ai_outputParser": [[{ "node": "Trading Agent - Paper", "type": "ai_outputParser", "index": 0 }]]
+      "ai_outputParser": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
     },
     "get_account": {
-      "ai_tool": [[{ "node": "Trading Agent - Paper", "type": "ai_tool", "index": 0 }]]
+      "ai_tool": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     },
     "get_positions": {
-      "ai_tool": [[{ "node": "Trading Agent - Paper", "type": "ai_tool", "index": 0 }]]
+      "ai_tool": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     },
     "get_quotes": {
-      "ai_tool": [[{ "node": "Trading Agent - Paper", "type": "ai_tool", "index": 0 }]]
+      "ai_tool": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     },
     "get_daily_bars": {
-      "ai_tool": [[{ "node": "Trading Agent - Paper", "type": "ai_tool", "index": 0 }]]
+      "ai_tool": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_crypto_quotes": {
+      "ai_tool": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_crypto_bars": {
+      "ai_tool": [
+        [
+          {
+            "node": "Trading Agent - Paper",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Trading Agent - Paper": {
-      "main": [[{ "node": "Get Positions For Guard", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Get Positions For Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get Positions For Guard": {
-      "main": [[{ "node": "Risk Guard", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Risk Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Risk Guard": {
-      "main": [[{ "node": "Approved?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Approved?": {
       "main": [
-        [{ "node": "Place Order", "type": "main", "index": 0 }],
-        [{ "node": "No Trade Today", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Place Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Trade Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -296,7 +515,8 @@
     "binaryMode": "separate"
   },
   "meta": {
-    "templateCredsSetupCompleted": false
+    "templateCredsSetupCompleted": true,
+    "instanceId": "450591486f7f5c64f4c69ec411612fca68837bb801193fbf58028222766b01de"
   },
   "tags": [
     {

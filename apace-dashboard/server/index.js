@@ -2,6 +2,8 @@ import { config } from './config.js';
 import { createApp, refreshAnalysis } from './app.js';
 import * as store from './store.js';
 import * as autopilot from './autopilot.js';
+import { manageExits } from './exits.js';
+import { flags } from './runtime.js';
 
 await store.init();
 
@@ -34,6 +36,22 @@ createApp().listen(config.port, '0.0.0.0', () => {
     }
   };
 
+  // Exits run every minute and entries every few, for the reason spelled out in
+  // netlify/functions/autopilot-scheduled.mjs: a crypto stop is only as tight as
+  // this loop, because nothing holds it at the exchange.
+  const runExits = async () => {
+    try {
+      const { autopilot: enabled, trading } = await flags();
+      if (!enabled) return;
+      for (const action of (await manageExits({ trading })).filter((a) => a.action === 'close')) {
+        console.log(`exit: ${action.symbol} — ${action.reason}`);
+      }
+    } catch (error) {
+      console.error('exit cycle failed:', error.message);
+    }
+  };
+
+  setInterval(runExits, 60_000);
   setInterval(runTick, config.autopilot.intervalMinutes * 60_000);
   setTimeout(runTick, 15_000); // one shortly after boot, once the app has settled
 }

@@ -1,34 +1,54 @@
 import { refreshAnalysis } from '../../server/app.js';
 import * as store from '../../server/store.js';
 import * as autopilot from '../../server/autopilot.js';
+import { manageExits } from '../../server/exits.js';
+import { flags } from '../../server/runtime.js';
 
 /**
- * Scheduled autopilot cycle.
+ * The loop that makes this an autopilot rather than a dashboard.
  *
- * Netlify invokes this on the cron below; it is not reachable over HTTP, so it
- * needs no authentication of its own. It still does nothing unless AUTOPILOT is
- * explicitly true and order placement is enabled - which is off by default on a
- * public deployment.
+ * Runs every minute, and does two different jobs at two different rates:
  *
- * The schedule fires every 5 minutes around the clock; the autopilot's own
- * checks decide whether the market is open and whether the window is any good,
- * so there is no benefit to encoding market hours in cron.
+ *  EVERY MINUTE - manage what is already open. For equities the stop rests at
+ *  the exchange and this only ratchets it; for crypto, where Alpaca refuses to
+ *  hold a stop, THIS LOOP IS THE STOP. It compares price against the recorded
+ *  stop and target and closes the position itself.
+ *
+ *  EVERY FIVE MINUTES - decide whether to open something new. Entries are the
+ *  expensive part (a full analysis), and one minute of extra delay on an entry
+ *  costs far less than one minute of delay on an exit.
+ *
+ * The honest limitation: a polled stop is not a resting stop. Between checks
+ * price can move through it, and you exit at whatever the next check sees. On
+ * crypto that gap can be a percent or more. It is bounded by the poll interval,
+ * which is why exits run at a minute rather than at five.
  */
-export const config = { schedule: '*/5 * * * *' };
+export const config = { schedule: '* * * * *' };
 
 export default async () => {
   try {
     await store.init({ force: true });
-    // The runtime flag is the authority; tick() re-checks it and returns before
-    // touching the network when it is off.
-    if (!(await autopilot.isEnabled())) {
-      return new Response('autopilot off', { status: 200 });
+
+    const { autopilot: enabled, trading } = await flags();
+    if (!enabled) return new Response('autopilot off', { status: 200 });
+
+    // Always, every minute.
+    const exitActions = await manageExits({ trading });
+    for (const action of exitActions.filter((a) => a.action === 'close')) {
+      console.log(`exit: ${action.symbol} — ${action.reason}`);
     }
+
+    // Entries on the slower cadence.
+    const minute = new Date().getUTCMinutes();
+    if (minute % 5 !== 0) {
+      return new Response(JSON.stringify({ exits: exitActions.length }), { status: 200 });
+    }
+
     const result = await autopilot.tick({ refreshAnalysis });
     console.log('autopilot:', JSON.stringify(result).slice(0, 400));
-    return new Response(JSON.stringify(result), { status: 200 });
+    return new Response(JSON.stringify({ exits: exitActions.length, ...result }), { status: 200 });
   } catch (error) {
-    console.error('autopilot tick failed:', error);
+    console.error('autopilot cycle failed:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 };

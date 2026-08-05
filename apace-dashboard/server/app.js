@@ -14,6 +14,7 @@ import { tradeWindow } from './windows.js';
 import * as autopilot from './autopilot.js';
 import { flags, setFlags, tradingEnabled } from './runtime.js';
 import { runDiagnostics } from './diagnostics.js';
+import { performance } from './performance.js';
 
 /**
  * Locate the static files under both module systems.
@@ -386,6 +387,9 @@ export function createApp() {
 
   // Read-only. Tests every dependency one at a time, with timings, so a failure
   // names itself instead of surfacing as an empty page.
+  // What the closed trades say about the scoring. Read-only.
+  app.get('/api/performance', asyncRoute(async (req, res) => res.json(await performance())));
+
   app.get(
     '/api/diagnostics',
     asyncRoute(async (req, res) => res.json(await runDiagnostics({ publicDir: PUBLIC_DIR }))),

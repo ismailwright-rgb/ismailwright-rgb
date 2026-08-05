@@ -172,8 +172,9 @@ export function evaluateTrade({ candidate, plan, account, positions, session, an
     }
     if (!config.cryptoTrading) {
       blockers.push(
-        'Crypto trading is off. Alpaca will not attach a stop to a crypto order, so the stop only exists ' +
-          'while this server is running. Set CRYPTO_TRADING=true if you accept that.',
+        'Crypto trading is off. Alpaca will not hold a stop on a crypto order, so the exit loop enforces it ' +
+          'by checking price every minute and closing the position itself. That is a polled stop, not a resting ' +
+          'one - a fast move can gap through it. Set CRYPTO_TRADING=true to accept that trade-off.',
       );
     }
   } else if (!config.watchlist.includes(candidate.symbol)) {

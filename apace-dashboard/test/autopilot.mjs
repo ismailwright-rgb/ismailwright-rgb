@@ -244,3 +244,91 @@ await check('status reports the limits it is enforcing', async () => {
 
 await rm(DATA_DIR, { recursive: true, force: true });
 console.log('\nautopilot: OK');
+
+/* --- crypto exits: the loop is the stop ------------------------------------ */
+const exits = await import('../server/exits.js');
+
+await check('a crypto position is closed when price breaks its stop', async () => {
+  orders = installMock({
+    positions: [
+      {
+        symbol: 'BTCUSD',           // Alpaca drops the slash
+        qty: '0.0015',
+        avg_entry_price: '94000',
+        current_price: '92000',     // below the stop below
+        unrealized_pl: '-3',
+        unrealized_plpc: '-0.02',
+      },
+    ],
+  });
+
+  await exits.rememberEntry('BTC/USD', {
+    entryPrice: 94000,
+    stopPrice: 93000,
+    takeProfitPrice: 96000,
+    riskPerShare: 1000,
+    assetClass: 'crypto',
+  });
+
+  const actions = await exits.manageExits({ trading: true });
+  const closed = actions.find((a) => a.action === 'close');
+  assert.ok(closed, 'a breached crypto stop must close the position');
+  assert.match(closed.reason, /broke the 93000 stop/);
+});
+
+await check('a crypto position is closed when it reaches its target', async () => {
+  orders = installMock({
+    positions: [
+      {
+        symbol: 'BTCUSD',
+        qty: '0.0015',
+        avg_entry_price: '94000',
+        current_price: '96500',
+        unrealized_pl: '4',
+        unrealized_plpc: '0.026',
+      },
+    ],
+  });
+
+  await exits.rememberEntry('BTC/USD', {
+    entryPrice: 94000,
+    stopPrice: 93000,
+    takeProfitPrice: 96000,
+    riskPerShare: 1000,
+    assetClass: 'crypto',
+  });
+
+  const closed = (await exits.manageExits({ trading: true })).find((a) => a.action === 'close');
+  assert.ok(closed, 'no resting take-profit exists, so the loop has to take it');
+  assert.match(closed.reason, /reached the 96000 target/);
+});
+
+await check('a crypto stop ratchets up without any exchange order', async () => {
+  orders = installMock({
+    positions: [
+      {
+        symbol: 'BTCUSD',
+        qty: '0.0015',
+        avg_entry_price: '94000',
+        current_price: '95500',     // +1.5R on a 1000 risk
+        unrealized_pl: '2',
+        unrealized_plpc: '0.016',
+      },
+    ],
+  });
+
+  await exits.rememberEntry('BTC/USD', {
+    entryPrice: 94000,
+    stopPrice: 93000,
+    takeProfitPrice: 99000,
+    riskPerShare: 1000,
+    assetClass: 'crypto',
+  });
+
+  const moved = (await exits.manageExits({ trading: true })).find((a) => a.action === 'move-stop');
+  assert.ok(moved, 'the ratchet must apply to crypto too');
+  assert.ok(moved.stopPrice > 94000, 'stop should be above entry by now');
+
+  const context = await exits.readContext();
+  assert.equal(context.BTCUSD.stopPrice, moved.stopPrice, 'the new stop must be persisted, since nothing holds it');
+});
