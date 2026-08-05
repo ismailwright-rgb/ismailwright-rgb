@@ -15,6 +15,7 @@ import * as autopilot from './autopilot.js';
 import { flags, setFlags, tradingEnabled } from './runtime.js';
 import { runDiagnostics } from './diagnostics.js';
 import { performance } from './performance.js';
+import { rememberEntry } from './exits.js';
 
 /**
  * Locate the static files under both module systems.
@@ -329,18 +330,37 @@ export function createApp() {
         return res.status(422).json({ error: 'Trade blocked by risk guard', ...verdict, plan });
       }
 
-      const order = await alpaca.placeBracketOrder({
-        symbol,
-        qty: plan.qty,
-        entryType: 'market',
+      const orderRef = clientOrderId(alpaca.normaliseSymbol(symbol), analysis.session.date);
+      const order =
+        candidate.group === 'crypto'
+          ? await alpaca.placeCryptoOrder({ symbol, notional: plan.notional, clientOrderId: orderRef })
+          : await alpaca.placeBracketOrder({
+              symbol,
+              qty: plan.qty,
+              entryType: 'market',
+              stopPrice: plan.stopPrice,
+              takeProfitPrice: plan.takeProfitPrice,
+              clientOrderId: orderRef,
+            });
+
+      // Without this a hand-placed trade is invisible to the exit loop - no
+      // trailing stop, no time stop - and is never graded when it closes. Only
+      // the autopilot's own trades were being remembered.
+      await rememberEntry(symbol, {
+        entryPrice: plan.entryPrice,
         stopPrice: plan.stopPrice,
         takeProfitPrice: plan.takeProfitPrice,
-        clientOrderId: clientOrderId(symbol, analysis.session.date),
+        riskPerShare: plan.riskPerShare,
+        assetClass: candidate.group === 'crypto' ? 'crypto' : 'equity',
+        score: candidate.score,
+        factors: candidate.factors,
+        window: analysis.window?.key ?? null,
       });
 
       const entry = {
         symbol,
         status: 'submitted',
+        source: 'manual',
         orderId: order.id,
         clientOrderId: order.client_order_id,
         qty: plan.qty,

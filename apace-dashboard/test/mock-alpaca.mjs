@@ -181,9 +181,15 @@ const MODEL_REPLY = {
 /** Replaces globalThis.fetch. Returns the array of captured order payloads. */
 export function installMock({ positions = [], account = {} } = {}) {
   const orders = [];
+  // Keep the real one: a test that stands up the app still has to reach it.
+  const realFetch = globalThis.__realFetch ?? globalThis.fetch;
+  globalThis.__realFetch = realFetch;
 
   globalThis.fetch = async (input, options = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.url);
+    if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') {
+      return realFetch(input, options);
+    }
     const { pathname, searchParams } = url;
     const json = (body, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });

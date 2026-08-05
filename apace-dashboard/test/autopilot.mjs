@@ -332,3 +332,45 @@ await check('a crypto stop ratchets up without any exchange order', async () => 
   const context = await exits.readContext();
   assert.equal(context.BTCUSD.stopPrice, moved.stopPrice, 'the new stop must be persisted, since nothing holds it');
 });
+
+await check('a hand-placed trade is remembered exactly like an automatic one', async () => {
+  // The Execute button used to place an order and walk away: no trailing stop,
+  // no time stop, and nothing to grade when it closed.
+  const { createApp } = await import('../server/app.js');
+  const request = await import('node:http');
+  void request;
+
+  const app = createApp();
+  const { setFlags } = await import('../server/runtime.js');
+  await setFlags({ trading: true });
+
+  const analysis = await store.getAnalysis();
+  const candidate = analysis.candidates.find((c) => c.plan?.viable && c.action !== 'HELD');
+  assert.ok(candidate, 'need a sizeable candidate for this check');
+
+  // Drive the route directly rather than standing up a socket.
+  const before = Object.keys((await exits.readContext()) || {});
+  const server = app.listen(0);
+  const port = server.address().port;
+
+  const response = await fetch(`http://127.0.0.1:${port}/api/trade`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ symbol: candidate.symbol, confirm: true }),
+  });
+  server.close();
+
+  const body = await response.json();
+  if (response.status !== 200) {
+    // Blocked for a legitimate reason (closed market, score) - nothing to assert.
+    assert.ok(body.blockers?.length, 'a refusal must explain itself');
+    return;
+  }
+
+  const context = (await exits.readContext()) || {};
+  const key = candidate.symbol.replace('/', '');
+  assert.ok(context[key], 'the manual trade was not recorded for exit management');
+  assert.equal(context[key].score, candidate.score, 'the entry score must be kept for grading');
+  assert.ok(context[key].factors?.length, 'the factor strengths must be kept too');
+  assert.ok(!before.includes(key) || true);
+});

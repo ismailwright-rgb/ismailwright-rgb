@@ -1094,6 +1094,88 @@ $('tradingToggle').addEventListener('click', async (event) => {
   }
 });
 
+function renderPerformance(report) {
+  const { overall } = report;
+
+  const summary = overall.trades
+    ? `<strong>${overall.trades}</strong> closed · <strong>${overall.winRate}%</strong> won · ` +
+      `<strong>${overall.totalR}R</strong> total · ${overall.avgR}R average`
+    : 'No closed trades yet. Every position the dashboard opens is graded when it closes.';
+
+  const factorRows = report.byFactor
+    .filter((f) => f.separation !== null)
+    .map((f) => {
+      const good = f.separation > 0;
+      return `<tr>
+        <td><strong>${escapeHtml(f.factor)}</strong></td>
+        <td class="num">${f.whenStrong.trades} on / ${f.whenWeak.trades} off</td>
+        <td class="num">${f.whenStrong.avgR}R</td>
+        <td class="num">${f.whenWeak.avgR}R</td>
+        <td class="num" style="color:${good ? 'var(--good)' : 'var(--bad)'}">${good ? '+' : ''}${f.separation}R</td>
+      </tr>`;
+    })
+    .join('');
+
+  const scoreRows = report.byScore
+    .filter((b) => b.trades)
+    .map(
+      (b) => `<tr><td><strong>${escapeHtml(b.band)}</strong></td><td class="num">${b.trades}</td>
+        <td class="num">${b.winRate}%</td><td class="num">${b.avgR}R</td><td class="num">${b.totalR}R</td></tr>`,
+    )
+    .join('');
+
+  $('perfPanel').hidden = false;
+  $('perfPanel').innerHTML = `
+    <div class="banner banner--${report.sufficientSample ? 'info' : 'warn'}" style="display:block">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+        <strong>Track record</strong>
+        <button class="btn btn--sm" id="perfClose" type="button">Close</button>
+      </div>
+      <p style="margin:6px 0 4px">${summary}</p>
+      ${report.notes.map((n) => `<p class="label" style="text-transform:none;margin:2px 0">${escapeHtml(n)}</p>`).join('')}
+
+      ${
+        scoreRows
+          ? `<div class="panel__title">Did a higher score mean a better trade?</div>
+             <div style="overflow-x:auto"><table class="diag">
+               <tr><td class="label">Score</td><td class="label">Trades</td><td class="label">Win</td><td class="label">Avg</td><td class="label">Total</td></tr>
+               ${scoreRows}
+             </table></div>`
+          : ''
+      }
+
+      ${
+        factorRows
+          ? `<div class="panel__title">Which factors actually separated winners from losers?</div>
+             <div style="overflow-x:auto"><table class="diag">
+               <tr><td class="label">Factor</td><td class="label">Sample</td><td class="label">Firing</td><td class="label">Quiet</td><td class="label">Edge</td></tr>
+               ${factorRows}
+             </table></div>
+             <p class="label" style="text-transform:none;margin-top:8px">
+               "Edge" is how much better trades did when that factor was firing. Negative means its weight is
+               working against you.
+             </p>`
+          : ''
+      }
+    </div>`;
+
+  document.getElementById('perfClose')?.addEventListener('click', () => {
+    $('perfPanel').hidden = true;
+  });
+}
+
+$('perfBtn').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    renderPerformance(await api('/api/performance'));
+  } catch (error) {
+    alert(`Could not load the track record: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 $('diagBtn').addEventListener('click', async (event) => {
   const button = event.currentTarget;
   button.disabled = true;
