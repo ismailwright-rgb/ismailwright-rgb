@@ -37,7 +37,13 @@ export const config = {
   openRouterKey: process.env.OPENROUTER_API_KEY || '',
   openRouterModel: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4.5',
 
-  watchlist: (process.env.WATCHLIST || 'SPY,QQQ,AAPL,MSFT,NVDA')
+  // Defaults to the full watchlist rather than a token few, so a deployment that
+  // never sets WATCHLIST still scans everything instead of quietly dropping most
+  // of it. SPY is always fetched as the benchmark whether or not it is listed.
+  watchlist: (
+    process.env.WATCHLIST ||
+    'GRAB,PLUG,GLD,SLV,CPER,SPY,QQQ,AAPL,MSFT,NVDA,FCX,NEM,CAT,AMZN,GOOGL,META,JPM,XOM'
+  )
     .split(',')
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),
