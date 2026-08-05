@@ -9,6 +9,7 @@ const pendingConfirm = new Map();
 const planBySymbol = new Map();
 const chosenAmount = new Map();
 let accountTimer = null;
+let firstAnalysisStarted = false;
 
 /* --- formatting ----------------------------------------------------------- */
 const money = (v) =>
@@ -411,6 +412,12 @@ function renderBanners(data, meta) {
   if (data.newsRead.available === false) {
     banners.push(['info', `<strong>No news reasoning.</strong> ${escapeHtml(data.newsRead.reason || 'model unavailable')} — scores are price and volume only.`]);
   }
+  if (state?.store && state.store.shared === false) {
+    banners.push([
+      'bad',
+      `<strong>State is not shared between functions.</strong> ${escapeHtml(state.store.hint || '')} Until then the analysis is computed and thrown away, so the candidate list stays empty.`,
+    ]);
+  }
   if (data.dataFeed === 'iex') {
     banners.push(['info', '<strong>IEX feed.</strong> Volume covers only IEX, so relative volume and VWAP are approximations. A SIP subscription makes both meaningfully sharper.']);
   }
@@ -429,7 +436,8 @@ function renderRail(data, meta) {
   $('dayTrades').textContent = data.account.pdtRestricted
     ? `${data.account.dayTradeCount} / 3`
     : String(data.account.dayTradeCount);
-  $('analysedAt').textContent = `${clockTime(data.generatedAt)} · ${meta.ageSeconds}s`;
+  $('analysedAt').textContent =
+    meta.ageSeconds == null ? 'never' : `${clockTime(data.generatedAt)} · ${meta.ageSeconds}s`;
 }
 
 function renderPositions(positions) {
@@ -538,6 +546,11 @@ async function pollAccount() {
 
     renderWindow(live.window);
     renderPositions(live.positions);
+
+    if (live.session) {
+      $('sessionState').textContent = live.session.isCurrent ? 'Open' : 'Closed';
+      startCountdown(live.session);
+    }
 
     if (state?.analysis) {
       state.analysis.account = { ...state.analysis.account, ...live };
@@ -677,8 +690,26 @@ function renderLimits(limits) {
     .join('');
 }
 
+function renderEmpty() {
+  const failed = state?.store && state.store.shared === false;
+  $('rows').innerHTML = `<div class="card">
+    <p class="empty" style="padding:4px 0">
+      ${
+        failed
+          ? 'No analysis is reaching this page. See the banner above — until state is shared between functions, each run is written somewhere the dashboard cannot read.'
+          : 'No analysis yet. Starting one now — it pulls bars, quotes and news for the whole watchlist, so give it up to a minute.'
+      }
+    </p>
+  </div>`;
+  $('candidateSummary').textContent = '';
+  renderPositions(state?.analysis?.positions || []);
+}
+
 function render() {
-  if (!state?.analysis) return;
+  if (!state?.analysis) {
+    renderEmpty();
+    return;
+  }
   const data = state.analysis;
   const meta = { ageSeconds: state.ageSeconds, stale: state.stale };
 
@@ -782,6 +813,14 @@ async function loadState({ reanalyze = false } = {}) {
       state = result.started ? await pollForAnalysis(previous, button) : result;
     } else {
       state = await api('/api/state');
+
+      // A deployment that has never run an analysis would otherwise sit on the
+      // placeholder until someone thought to press the button.
+      if (!state.analysis && !firstAnalysisStarted && state.store?.shared !== false) {
+        firstAnalysisStarted = true;
+        render();
+        return loadState({ reanalyze: true });
+      }
     }
     render();
     announce(reanalyze ? 'Analysis refreshed.' : 'Loaded.');
@@ -1017,9 +1056,10 @@ if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 
 loadState().then(startAccountPolling);
 setInterval(() => {
-  if (state && document.visibilityState === 'visible') {
+  if (state?.analysis && state.ageSeconds != null && document.visibilityState === 'visible') {
     state.ageSeconds += 5;
     state.stale = state.ageSeconds > (state.analysis?.limits?.maxAnalysisAgeSeconds ?? 600);
-    $('analysedAt').textContent = `${clockTime(state.analysis.generatedAt)} · ${state.ageSeconds}s`;
+    $('analysedAt').textContent =
+      state.ageSeconds == null ? 'never' : `${clockTime(state.analysis.generatedAt)} · ${state.ageSeconds}s`;
   }
 }, 5000);

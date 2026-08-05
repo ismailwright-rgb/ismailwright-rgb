@@ -6,7 +6,15 @@
  *   node test/netlify.mjs
  */
 import assert from 'node:assert/strict';
+import { rm } from 'node:fs/promises';
 import { installMock } from './mock-alpaca.mjs';
+
+// Isolated, and cleared first: the blob backend falls back to the filesystem
+// when Blobs is unavailable, so a leftover analysis from another suite would
+// otherwise make this order-dependent.
+process.env.DATA_DIR = '/tmp/apace-netlify-test';
+await rm(process.env.DATA_DIR, { recursive: true, force: true });
+await rm('/tmp/apace-data', { recursive: true, force: true });
 
 process.env.NETLIFY = 'true';
 process.env.ALPACA_KEY_ID ||= 'PKTEST';
@@ -73,6 +81,22 @@ await check('state is served with credentials', async () => {
   assert.equal(body.tradingEnabled, false);
 });
 
+await check('a missing analysis has no age rather than an infinite one', async () => {
+  const body = JSON.parse((await call('/api/state')).body);
+  assert.equal(body.analysis, null, 'this deployment should not have an analysis yet');
+  assert.equal(body.ageSeconds, null, 'Infinity is not JSON and renders as "Infinitys old"');
+  assert.equal(body.stale, false);
+});
+
+await check('state reports whether it is actually shared between functions', async () => {
+  const body = JSON.parse((await call('/api/state')).body);
+  assert.ok(body.store, 'the dashboard cannot warn about ephemeral state it is not told about');
+  assert.equal(typeof body.store.shared, 'boolean');
+  // Blobs is unavailable in this test, which is exactly the broken deployment.
+  assert.equal(body.store.shared, false);
+  assert.match(body.store.hint, /Blobs/);
+});
+
 await check('the function-prefixed path resolves the same route', async () => {
   const res = await call('/.netlify/functions/api/api/health', { auth: false });
   assert.equal(res.statusCode, 200);
@@ -137,4 +161,5 @@ await check('analyze hands off to the background function', async () => {
   assert.equal(seen[0].auth, AUTH, 'credentials must be forwarded to the background function');
 });
 
+await rm(process.env.DATA_DIR, { recursive: true, force: true });
 console.log('\nnetlify: OK');

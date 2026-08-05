@@ -115,7 +115,9 @@ function globalBlockers({ day, session, window, account, positions, analysisAgeS
     }
   }
 
-  if (analysisAgeSeconds > config.maxAnalysisAgeSeconds) {
+  if (!Number.isFinite(analysisAgeSeconds)) {
+    blockers.push('No analysis yet — hit Refresh analysis.');
+  } else if (analysisAgeSeconds > config.maxAnalysisAgeSeconds) {
     blockers.push(`Analysis is ${Math.round(analysisAgeSeconds)}s old.`);
   }
 

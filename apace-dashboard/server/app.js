@@ -162,12 +162,15 @@ export function createApp() {
       let analysis = store.getAnalysis();
       if (!analysis && !config.isServerless) analysis = await refreshAnalysis();
 
+      const age = store.analysisAgeSeconds();
       res.json({
         analysis,
-        ageSeconds: Math.round(store.analysisAgeSeconds()),
-        stale: store.analysisAgeSeconds() > config.maxAnalysisAgeSeconds,
+        // Infinity is not JSON; a missing analysis has no age, it simply is not there.
+        ageSeconds: Number.isFinite(age) ? Math.round(age) : null,
+        stale: Number.isFinite(age) && age > config.maxAnalysisAgeSeconds,
         trades: store.getTradeLog().slice(0, 20),
         tradingEnabled: await tradingEnabled(),
+        store: await store.storeInfo(),
       });
     }),
   );
@@ -189,6 +192,7 @@ export function createApp() {
         stale: false,
         trades: store.getTradeLog().slice(0, 20),
         tradingEnabled: await tradingEnabled(),
+        store: await store.storeInfo(),
       });
     }),
   );

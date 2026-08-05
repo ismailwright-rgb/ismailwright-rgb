@@ -95,6 +95,40 @@ const blobBackend = {
 
 const backend = config.isServerless ? blobBackend : fileBackend;
 
+/**
+ * Is state actually shared between invocations?
+ *
+ * This matters more than it sounds. On Netlify the analysis is produced by a
+ * background function and read by the api function - two different instances. If
+ * Blobs is not enabled, each falls back to its own temp directory, the reader
+ * never sees what the writer wrote, and the dashboard waits forever for an
+ * analysis that was computed and thrown away.
+ */
+let blobsWorking = null;
+
+export async function storeInfo() {
+  if (!config.isServerless) return { backend: 'filesystem', shared: true };
+
+  if (blobsWorking === null) {
+    try {
+      const store = await getBlobStore();
+      await store.setJSON('__probe', { at: Date.now() });
+      blobsWorking = true;
+    } catch {
+      blobsWorking = false;
+    }
+  }
+
+  return {
+    backend: blobsWorking ? 'netlify-blobs' : 'ephemeral',
+    shared: blobsWorking,
+    hint: blobsWorking
+      ? null
+      : 'Netlify Blobs is not enabled for this site. Enable it under Site configuration → Blobs, ' +
+        'otherwise the background analysis is written to one instance and read from another.',
+  };
+}
+
 /* --- interface ------------------------------------------------------------- */
 
 /**

@@ -114,7 +114,9 @@ export function evaluateTrade({ candidate, plan, account, positions, session, an
     blockers.push(`${candidate.symbol} is not on the configured watchlist.`);
   }
 
-  if (analysisAgeSeconds > config.maxAnalysisAgeSeconds) {
+  if (!Number.isFinite(analysisAgeSeconds)) {
+    blockers.push('No analysis yet. Refresh before trading.');
+  } else if (analysisAgeSeconds > config.maxAnalysisAgeSeconds) {
     blockers.push(
       `Analysis is ${Math.round(analysisAgeSeconds)}s old (limit ${config.maxAnalysisAgeSeconds}s). Refresh before trading.`,
     );
