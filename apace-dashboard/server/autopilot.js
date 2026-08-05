@@ -4,6 +4,8 @@ import * as store from './store.js';
 import { buildTradePlan, evaluateTrade, clientOrderId } from './guard.js';
 import { resolveSession } from './session.js';
 import { tradeWindow } from './windows.js';
+import { flags, setFlags } from './runtime.js';
+import { manageExits, rememberEntry } from './exits.js';
 
 /**
  * Unattended trading.
@@ -25,20 +27,22 @@ import { tradeWindow } from './windows.js';
 
 const DAY_STATE_KEY = 'autopilot-day';
 const JOURNAL_KEY = 'autopilot-journal';
-const ENABLED_KEY = 'autopilot-enabled';
-
 /**
  * AUTOPILOT sets the default; the dashboard toggle overrides it and persists.
  * Requiring a redeploy to stop a trading loop would be a poor kill switch.
  */
 export async function isEnabled() {
-  const override = await store.readKey(ENABLED_KEY, undefined);
-  return typeof override === 'boolean' ? override : config.autopilot.enabled;
+  return (await flags()).autopilot;
 }
 
+/**
+ * Turning the autopilot on enables order placement with it. Splitting the two
+ * across a button and an environment variable meant the button silently did
+ * nothing, which is worse than either choice on its own.
+ */
 export async function setEnabled(value) {
   const next = Boolean(value);
-  await store.writeKey(ENABLED_KEY, next);
+  await setFlags(next ? { autopilot: true, trading: true } : { autopilot: false });
   await journal({ action: next ? 'enabled' : 'disabled', by: 'dashboard' });
   return next;
 }
@@ -75,11 +79,11 @@ export const readJournal = () => store.readKey(JOURNAL_KEY, []);
 export const readDayState = () => store.readKey(DAY_STATE_KEY, null);
 
 /** Reasons the autopilot will not trade at all right now, regardless of symbol. */
-function globalBlockers({ day, session, window, account, positions, analysisAgeSeconds, enabled }) {
+function globalBlockers({ day, session, window, account, positions, analysisAgeSeconds, enabled, trading }) {
   const blockers = [];
 
   if (!enabled) blockers.push('Autopilot is off.');
-  if (!config.enableTrading) blockers.push('Order placement is disabled on this deployment (ENABLE_TRADING).');
+  if (!trading) blockers.push('Order placement is off.');
   if (day.haltedReason) blockers.push(`Halted for the day: ${day.haltedReason}`);
 
   if (!session.isCurrent) blockers.push('Market is closed.');
@@ -124,7 +128,7 @@ function globalBlockers({ day, session, window, account, positions, analysisAgeS
  */
 export async function tick({ refreshAnalysis, now = Date.now() }) {
   // Checked before any network call, so an idle loop costs nothing.
-  const enabled = await isEnabled();
+  const { autopilot: enabled, trading } = await flags();
   if (!enabled) return { action: 'idle', reason: 'autopilot is off' };
 
   const resolved = await resolveSession(new Date(now));
@@ -146,6 +150,21 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
     await saveDay(day);
   }
 
+  // Manage what is already open BEFORE deciding whether to open anything new.
+  // A poor window or a used-up trade cap must never stop a stop from trailing.
+  if (positions.length && trading) {
+    const exitActions = await manageExits({ now, trading });
+    for (const action of exitActions.filter((a) => a.action !== 'hold' && a.action !== 'skip')) {
+      await journal({
+        action: action.action === 'close' ? 'time-stop' : 'move-stop',
+        symbol: action.symbol,
+        r: Number(action.r?.toFixed?.(2)),
+        stopPrice: action.stopPrice ?? null,
+        reason: action.reason,
+      });
+    }
+  }
+
   // Flat by the close: a day trade that sleeps is no longer a day trade, and an
   // overnight gap can exceed the stop that was sized for intraday moves.
   if (
@@ -153,7 +172,7 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
     positions.length > 0 &&
     session.minutesToClose <= config.autopilot.flattenMinutesBeforeClose &&
     !day.flattened &&
-    config.enableTrading
+    trading
   ) {
     await alpaca.closeAllPositions();
     day.flattened = true;
@@ -171,7 +190,7 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
   const analysis = store.getAnalysis();
   const analysisAgeSeconds = store.analysisAgeSeconds();
 
-  const blockers = globalBlockers({ day, session, window, account, positions, analysisAgeSeconds, enabled });
+  const blockers = globalBlockers({ day, session, window, account, positions, analysisAgeSeconds, enabled, trading });
   if (blockers.length) {
     await journal({ action: 'skip', scope: 'session', blockers, window: window.key });
     return { action: 'skip', blockers };
@@ -238,6 +257,14 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
   day.symbolsTraded = [...day.symbolsTraded, candidate.symbol];
   await saveDay(day);
 
+  // Record what this position was sized against so R is meaningful later.
+  await rememberEntry(candidate.symbol, {
+    entryPrice: plan.entryPrice,
+    stopPrice: plan.stopPrice,
+    riskPerShare: plan.riskPerShare,
+    placedAt: new Date(now).toISOString(),
+  });
+
   const entry = {
     symbol: candidate.symbol,
     status: 'submitted',
@@ -291,9 +318,9 @@ export async function resume() {
 
 export async function status() {
   const session = await resolveSession();
-  const [day, enabled, account, positions] = await Promise.all([
+  const [day, runtime, account, positions] = await Promise.all([
     loadDay(session),
-    isEnabled(),
+    flags(),
     alpaca.getAccount().catch(() => ({})),
     alpaca.getPositions().catch(() => []),
   ]);
@@ -310,7 +337,8 @@ export async function status() {
     account,
     positions,
     analysisAgeSeconds: store.analysisAgeSeconds(),
-    enabled,
+    enabled: runtime.autopilot,
+    trading: runtime.trading,
   });
 
   const held = new Set(positions.map((p) => p.symbol));
@@ -330,10 +358,10 @@ export async function status() {
     }));
 
   return {
-    enabled,
-    source: typeof (await store.readKey(ENABLED_KEY, undefined)) === 'boolean' ? 'dashboard' : 'environment',
+    enabled: runtime.autopilot,
+    source: runtime.source.autopilot,
     envDefault: config.autopilot.enabled,
-    tradingEnabled: config.enableTrading,
+    tradingEnabled: runtime.trading,
     paper: config.isPaper,
     intervalMinutes: config.autopilot.intervalMinutes,
     minScore: config.autopilot.minScore,

@@ -181,6 +181,49 @@ journal is the point. It is the only way to find out whether the scoring has an
 edge, and you should read a couple of weeks of it on paper before trusting it
 with anything.
 
+### Exits — keeping the profit
+
+The bracket placed at entry is a floor, not a plan. A fixed stop and target give
+back every open profit on a trade that runs and then reverses. On every cycle the
+autopilot ratchets the stop, measured in R (one R = the per-share risk the
+position was sized against, so the same rules fit a $2 stock and a $600 one):
+
+| At | What happens |
+|---|---|
+| **+1.0R** | Stop moves to breakeven — the trade can no longer cost anything |
+| **+1.5R** | Stop trails 0.75R behind price, ratcheting up only |
+| **45 min under +0.3R** | Position is closed — capital stops sitting in a dead trade |
+| **10 min to the close** | Everything is flattened |
+
+The stop only ever moves up. Exits are managed even on cycles where no new entry
+is allowed: a poor window or a used-up trade cap must never stop a stop trailing.
+
+### Validating it — `npm run backtest`
+
+```bash
+npm run backtest -- --days 60
+```
+
+Replays the strategy bar by bar over real history using the same scoring, the same
+window gate and the same exit policy, with no lookahead — each decision sees only
+bars that had closed at that moment. Reports win rate, total R, average R, max
+drawdown, and a breakdown by exit reason, window and symbol. Full detail lands in
+`data/backtest.json`.
+
+**What it cannot model**, and why the number is an estimate with a known bias:
+
+- **No news.** Live scores include a model's read of headlines worth up to 12
+  points either way, plus vetoes. The replay is technicals only.
+- **Assumed spreads.** Historical quotes are not fetched, so the liquidity factor
+  contributes a constant rather than a measurement.
+- **Optimistic fills.** Entry is next-bar-open plus slippage; a real market order
+  in a fast tape can do worse.
+- **Pessimistic bars.** When one bar spans both stop and target, the stop is
+  assumed to hit first — intrabar sequence is unknowable from OHLC.
+
+A losing backtest is decisive. A winning one is permission to paper trade, not
+evidence of an edge.
+
 ### Before you turn it on
 
 The scoring has **never been validated against history**. The factor weights are

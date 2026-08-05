@@ -61,6 +61,16 @@ export const config = {
   maxAnalysisAgeSeconds: num('MAX_ANALYSIS_AGE_SECONDS', 600),
   targetRMultiple: num('TARGET_R_MULTIPLE', 2),
 
+  // Managing an open position. Measured in R - one R is the per-share risk the
+  // position was sized against.
+  exits: {
+    breakevenAtR: num('EXIT_BREAKEVEN_AT_R', 1),
+    trailAtR: num('EXIT_TRAIL_AT_R', 1.5),
+    trailDistanceR: num('EXIT_TRAIL_DISTANCE_R', 0.75),
+    timeStopMinutes: num('EXIT_TIME_STOP_MINUTES', 45),
+    timeStopMinR: num('EXIT_TIME_STOP_MIN_R', 0.3),
+  },
+
   // Unattended trading. Off unless switched on deliberately, and every threshold
   // is stricter than the manual path - the autopilot never gets more latitude
   // than a human click.

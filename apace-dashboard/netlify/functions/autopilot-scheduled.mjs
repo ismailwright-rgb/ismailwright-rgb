@@ -1,4 +1,3 @@
-import { config as appConfig } from '../../server/config.js';
 import { refreshAnalysis } from '../../server/app.js';
 import * as store from '../../server/store.js';
 import * as autopilot from '../../server/autopilot.js';
@@ -18,12 +17,10 @@ import * as autopilot from '../../server/autopilot.js';
 export const config = { schedule: '*/5 * * * *' };
 
 export default async () => {
-  if (!appConfig.enableTrading) {
-    return new Response('trading disabled on this deployment', { status: 200 });
-  }
-
   try {
     await store.init({ force: true });
+    // The runtime flag is the authority; tick() re-checks it and returns before
+    // touching the network when it is off.
     if (!(await autopilot.isEnabled())) {
       return new Response('autopilot off', { status: 200 });
     }

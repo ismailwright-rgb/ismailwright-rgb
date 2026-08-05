@@ -142,6 +142,12 @@ export const closePosition = (symbol) =>
 
 export const closeAllPositions = () => trading('/v2/positions?cancel_orders=true', { method: 'DELETE' });
 
+export const getOpenOrders = () => trading('/v2/orders?status=open&limit=200&nested=false');
+
+/** Move a resting stop without cancelling and re-placing it. */
+export const replaceOrder = (orderId, patch) =>
+  trading(`/v2/orders/${encodeURIComponent(orderId)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+
 export const getOrders = (status = 'all', limit = 50) =>
   trading(`/v2/orders?status=${status}&limit=${limit}&direction=desc&nested=true`);
 

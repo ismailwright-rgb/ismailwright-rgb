@@ -12,6 +12,7 @@ import { buildTradePlan, evaluateTrade, clientOrderId } from './guard.js';
 import { resolveSession } from './session.js';
 import { tradeWindow } from './windows.js';
 import * as autopilot from './autopilot.js';
+import { flags, setFlags, tradingEnabled } from './runtime.js';
 
 /**
  * Locate the static files under both module systems.
@@ -149,8 +150,11 @@ export function createApp() {
     next();
   }));
 
-  app.get('/api/health', (req, res) =>
-    res.json({ ok: true, mode: config.isPaper ? 'paper' : 'live', trading: config.enableTrading }));
+  app.get(
+    '/api/health',
+    asyncRoute(async (req, res) =>
+      res.json({ ok: true, mode: config.isPaper ? 'paper' : 'live', trading: await tradingEnabled() })),
+  );
 
   app.get(
     '/api/state',
@@ -163,7 +167,7 @@ export function createApp() {
         ageSeconds: Math.round(store.analysisAgeSeconds()),
         stale: store.analysisAgeSeconds() > config.maxAnalysisAgeSeconds,
         trades: store.getTradeLog().slice(0, 20),
-        tradingEnabled: config.enableTrading,
+        tradingEnabled: await tradingEnabled(),
       });
     }),
   );
@@ -184,7 +188,7 @@ export function createApp() {
         ageSeconds: 0,
         stale: false,
         trades: store.getTradeLog().slice(0, 20),
-        tradingEnabled: config.enableTrading,
+        tradingEnabled: await tradingEnabled(),
       });
     }),
   );
@@ -261,7 +265,7 @@ export function createApp() {
         window: tradeWindow(Date.now(), { open: session.open, close: session.close }),
       });
 
-      if (!config.enableTrading) {
+      if (!(await tradingEnabled())) {
         verdict.allowed = false;
         verdict.blockers = [
           'Order placement is disabled on this deployment (ENABLE_TRADING is not true).',
@@ -276,12 +280,10 @@ export function createApp() {
   app.post(
     '/api/trade',
     asyncRoute(async (req, res) => {
-      if (!config.enableTrading) {
+      if (!(await tradingEnabled())) {
         return res.status(403).json({
-          error: 'Order placement is disabled on this deployment',
-          blockers: [
-            'ENABLE_TRADING is not true here. This deployment is read-only by design; run the dashboard locally to place orders.',
-          ],
+          error: 'Order placement is off',
+          blockers: ['Turn trading on from the dashboard, or set ENABLE_TRADING=true, before placing orders.'],
           warnings: [],
         });
       }
@@ -374,16 +376,20 @@ export function createApp() {
   app.post(
     '/api/autopilot/enabled',
     asyncRoute(async (req, res) => {
-      if (req.body?.enabled === true && !config.enableTrading) {
-        return res.status(409).json({
-          error: 'Order placement is disabled on this deployment',
-          blockers: ['Set ENABLE_TRADING=true before the autopilot can place anything.'],
-        });
-      }
       const enabled = await autopilot.setEnabled(req.body?.enabled === true);
       res.json({ ok: true, enabled, ...(await autopilot.status()) });
     }),
   );
+
+  app.post(
+    '/api/trading/enabled',
+    asyncRoute(async (req, res) => {
+      const next = await setFlags({ trading: req.body?.enabled === true });
+      res.json({ ok: true, ...next });
+    }),
+  );
+
+  app.get('/api/flags', asyncRoute(async (req, res) => res.json(await flags())));
 
   // The kill switch. Halting takes effect for the rest of the session and
   // survives a restart; it clears itself at the next open.
@@ -412,10 +418,8 @@ export function createApp() {
     }),
   );
 
-  const requireTrading = (req, res, next) =>
-    config.enableTrading
-      ? next()
-      : res.status(403).json({ error: 'Position management is disabled on this deployment' });
+  const requireTrading = asyncRoute(async (req, res, next) =>
+    (await tradingEnabled()) ? next() : res.status(403).json({ error: 'Order placement is off' }));
 
   app.post(
     '/api/positions/:symbol/close',

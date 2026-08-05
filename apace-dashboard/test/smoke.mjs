@@ -291,6 +291,75 @@ check('a bad window warns but never blocks', () => {
   assert.ok(verdict.warnings.some((w) => w.includes('Midday lull')));
 });
 
+/* --- exit management -------------------------------------------------------- */
+const { decideExit } = await import('../server/exits.js');
+
+// A $100 entry risking $1 per share: 1R = $101, 1.5R = $101.50.
+const position = { entryPrice: 100, riskPerShare: 1, currentStop: 99, minutesHeld: 5 };
+
+check('does nothing while the trade is still near entry', () => {
+  const decision = decideExit({ ...position, currentPrice: 100.4 });
+  assert.equal(decision.action, 'hold');
+});
+
+check('moves the stop to breakeven at 1R', () => {
+  const decision = decideExit({ ...position, currentPrice: 101 });
+  assert.equal(decision.action, 'move-stop');
+  assert.ok(decision.stopPrice > 100, 'breakeven stop must sit above entry, not at it');
+  assert.ok(decision.stopPrice < 100.5);
+});
+
+check('trails behind price once the trade is working', () => {
+  const decision = decideExit({ ...position, currentPrice: 103, currentStop: 100.01 });
+  assert.equal(decision.action, 'move-stop');
+  // 0.75R behind 103 = 102.25
+  assert.ok(Math.abs(decision.stopPrice - 102.25) < 0.02, `got ${decision.stopPrice}`);
+});
+
+check('the stop only ever ratchets up', () => {
+  // Price pulled back from 103 to 101.6, stop already trailed to 102.25.
+  const decision = decideExit({ ...position, currentPrice: 101.6, currentStop: 102.25 });
+  assert.equal(decision.action, 'hold', 'a stop that can move down is not a stop');
+});
+
+check('cuts a position that has gone nowhere', () => {
+  const decision = decideExit({ ...position, currentPrice: 100.1, minutesHeld: 60 });
+  assert.equal(decision.action, 'close');
+  assert.match(decision.reason, /not working/);
+});
+
+check('leaves a working position alone past the time stop', () => {
+  const decision = decideExit({ ...position, currentPrice: 102, minutesHeld: 60 });
+  assert.notEqual(decision.action, 'close', 'a winning trade must not be time-stopped');
+});
+
+check('refuses to act without a risk basis', () => {
+  const decision = decideExit({ entryPrice: 100, currentPrice: 105, riskPerShare: 0, minutesHeld: 5 });
+  assert.equal(decision.action, 'hold');
+});
+
+/* --- backtest harness ------------------------------------------------------- */
+await checkAsync('the backtest replays without lookahead and reports a full summary', async () => {
+  const { runBacktest } = await import('../server/backtest.js');
+  const result = await runBacktest({ days: 8, minScore: 60, symbols: config.watchlist });
+
+  assert.ok(result.sessions > 0, 'no sessions replayed');
+  assert.ok(Array.isArray(result.tradeList));
+  for (const key of ['winRate', 'totalR', 'avgR', 'maxDrawdownR', 'byReason', 'byWindow', 'curve']) {
+    assert.ok(key in result, `summary is missing ${key}`);
+  }
+
+  for (const trade of result.tradeList) {
+    assert.ok(trade.openedAt < trade.exitAt, `${trade.symbol} exited before it was entered`);
+    assert.ok(trade.entryPrice > 0 && trade.riskPerShare > 0);
+    assert.ok(Number.isFinite(trade.r));
+    // Entries only happen in windows the autopilot would allow.
+    assert.ok(['morning_trend', 'afternoon_trend'].includes(trade.window), `entered during ${trade.window}`);
+  }
+
+  assert.ok(result.maxDrawdownR <= 0, 'drawdown must be zero or negative');
+});
+
 /* --- order payload --------------------------------------------------------- */
 await checkAsync('the submitted order is a day bracket with both legs', async () => {
   const plan = buildTradePlan({ symbol: 'AAPL', entryPrice: 220, atrValue: 1.2, equity: 30_000 });
