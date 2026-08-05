@@ -704,7 +704,6 @@ function renderEmpty() {
     </p>
   </div>`;
   $('candidateSummary').textContent = '';
-  renderPositions(state?.analysis?.positions || []);
 }
 
 function render() {
@@ -1116,7 +1115,8 @@ document.addEventListener('toggle', (event) => {
 const savedTheme = storage.get('apace-theme');
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 
-loadState().then(startAccountPolling);
+startAccountPolling();   // rail and positions first; they do not depend on an analysis
+loadState();
 setInterval(() => {
   if (state?.analysis && state.ageSeconds != null && document.visibilityState === 'visible') {
     state.ageSeconds += 5;

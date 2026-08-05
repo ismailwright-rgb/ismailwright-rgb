@@ -81,11 +81,16 @@ await check('state is served with credentials', async () => {
   assert.equal(body.tradingEnabled, false);
 });
 
-await check('a missing analysis has no age rather than an infinite one', async () => {
-  const body = JSON.parse((await call('/api/state')).body);
-  assert.equal(body.analysis, null, 'this deployment should not have an analysis yet');
-  assert.equal(body.ageSeconds, null, 'Infinity is not JSON and renders as "Infinitys old"');
-  assert.equal(body.stale, false);
+await check('a missing analysis is reported as absent, not infinitely old', async () => {
+  // /api/state now self-heals, so check the paths that read the store as-is.
+  const store = await import('../server/store.js');
+  await store.setAnalysis(null);
+
+  const body = JSON.parse((await call('/api/autopilot')).body);
+  const ageBlocker = body.blockers.find((b) => /analysis/i.test(b));
+  assert.ok(ageBlocker, 'the autopilot should say something about the missing analysis');
+  assert.doesNotMatch(ageBlocker, /Infinity/, 'an infinite age must never reach the page');
+  assert.match(ageBlocker, /No analysis yet/);
 });
 
 await check('state reports whether it is actually shared between functions', async () => {
@@ -139,32 +144,36 @@ await check('preview still explains itself, with the block listed first', async 
   assert.ok(body.plan.qty >= 1, 'the plan is still shown so the reasoning stays visible');
 });
 
-await check('without shared state, analyze runs inline and returns the result', async () => {
-  process.env.URL = 'https://example.netlify.app';
+await check('analyze runs inline and returns the result directly', async () => {
   const seen = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = String(typeof input === 'string' ? input : input.url);
-    if (url.includes('analyze-background')) {
-      seen.push(url);
-      return new Response('', { status: 202 });
-    }
+    if (url.includes('-background')) seen.push(url);
     return realFetch(input, init);
   };
 
   const res = await call('/api/analyze', { method: 'POST' });
   globalThis.fetch = realFetch;
 
-  // Handing the run to a background function would write the result somewhere
-  // this instance can never read, so without shared state it has to happen here
-  // and come back in the response itself.
-  assert.equal(seen.length, 0, 'a background run would be computed and discarded');
+  // No handoff. Measured upstream time is about a second, and a background run
+  // depends on shared state to read the result back - two failure modes for no
+  // benefit.
+  assert.equal(seen.length, 0, 'nothing should be handed to a background function');
   assert.equal(res.statusCode, 200);
 
   const body = JSON.parse(res.body);
-  assert.ok(body.analysis, 'the analysis must be returned directly');
+  assert.ok(body.analysis, 'the analysis must come back in the response');
   assert.ok(body.analysis.candidates.length > 0);
-  assert.equal(body.store.shared, false);
+});
+
+await check('a first visit gets an analysis without being asked', async () => {
+  const store = await import('../server/store.js');
+  await store.setAnalysis(null);
+
+  const body = JSON.parse((await call('/api/state')).body);
+  assert.ok(body.analysis, '/api/state must produce an analysis when there is none');
+  assert.ok(body.analysis.candidates.length > 0);
 });
 
 await rm(process.env.DATA_DIR, { recursive: true, force: true });

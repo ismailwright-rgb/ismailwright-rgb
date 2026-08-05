@@ -101,18 +101,6 @@ export function refreshAnalysis() {
   return analysisInFlight;
 }
 
-/** Kicks off a Netlify background function, which may run far longer than a request. */
-async function triggerBackgroundAnalysis(req) {
-  const base = process.env.URL || process.env.DEPLOY_URL;
-  if (!base) throw new Error('site URL unavailable, cannot start background analysis');
-
-  // Fire and forget - background functions return 202 immediately.
-  await fetch(`${base}/.netlify/functions/analyze-background`, {
-    method: 'POST',
-    headers: req.headers.authorization ? { Authorization: req.headers.authorization } : {},
-  });
-}
-
 /* --- app -------------------------------------------------------------------- */
 export function createApp() {
   const app = express();
@@ -161,7 +149,7 @@ export function createApp() {
     '/api/state',
     asyncRoute(async (req, res) => {
       let analysis = store.getAnalysis();
-      if (!analysis && !config.isServerless) analysis = await refreshAnalysis();
+      if (!analysis) analysis = await refreshAnalysis();
 
       const age = store.analysisAgeSeconds();
       res.json({
@@ -179,16 +167,12 @@ export function createApp() {
   app.post(
     '/api/analyze',
     asyncRoute(async (req, res) => {
+      // Deliberately synchronous, even on serverless. Measured upstream time for
+      // the whole watchlist is around a second, so a handoff to a background
+      // function bought nothing - and cost two outages: a catch-all redirect that
+      // swallowed the call, and a hard dependency on shared state to read the
+      // result back. Run it here and return it.
       const storeState = await store.storeInfo();
-
-      // Handing off to a background function only works when both sides can see
-      // the same store. Without that, the run would be computed and discarded,
-      // so do it inline and return it directly - the page gets its analysis even
-      // if nothing can persist it.
-      if (config.isServerless && storeState.shared) {
-        await triggerBackgroundAnalysis(req);
-        return res.status(202).json({ started: true, poll: '/api/state' });
-      }
 
       const analysis = await refreshAnalysis();
       res.json({

@@ -58,7 +58,7 @@ export async function runDiagnostics({ publicDir = null } = {}) {
     await timed('store', 'Whether state survives between requests', () => store.storeInfo(), (info) =>
       `${info.backend}${info.shared ? '' : ' — NOT shared, autopilot and one-click trading will not work'}`),
     await timed('alpaca: account', 'Credentials and account access', () => alpaca.getAccount(), (a) =>
-      `equity ${Number(a.equity).toFixed(2)} · buying power ${Number(a.buying_power).toFixed(2)} · day trades ${a.daytrade_count}`),
+      `equity ${Number(a.equity).toFixed(2)} · buying power ${Number(a.buying_power).toFixed(2)} · day trades ${a.daytrade_count ?? 0}`),
     await timed('alpaca: clock', 'Market open or closed', () => alpaca.getClock(), (c) =>
       c.is_open ? 'market open' : `closed, next open ${c.next_open}`),
     await timed('alpaca: session', 'Calendar and session resolution', () => resolveSession(), (s) =>
