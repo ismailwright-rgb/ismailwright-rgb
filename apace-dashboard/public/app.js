@@ -6,6 +6,9 @@ let autoRefresh = false;
 let autoTimer = null;
 const openRows = new Set();
 const pendingConfirm = new Map();
+const planBySymbol = new Map();
+const chosenAmount = new Map();
+let accountTimer = null;
 
 /* --- formatting ----------------------------------------------------------- */
 const money = (v) =>
@@ -116,17 +119,21 @@ function planBlock(candidate) {
     return `<p class="empty">No position could be sized: ${escapeHtml(plan?.reason || 'unknown reason')}.</p>`;
   }
 
+  planBySymbol.set(candidate.symbol, plan);
+  const amount = chosenAmount.get(candidate.symbol) ?? plan.notional;
   const riskShare = 1 / (1 + plan.rMultiple);
+
   return `
     <div class="plan">
       <div class="plan__grid">
-        <div class="plan__cell"><span class="label">Shares</span><span class="plan__v">${plan.qty}</span></div>
+        <div class="plan__cell"><span class="label">Shares</span><span class="plan__v" data-qty="${candidate.symbol}">${plan.qty}</span></div>
         <div class="plan__cell"><span class="label">Entry</span><span class="plan__v">${fixed(plan.entryPrice)}</span></div>
         <div class="plan__cell"><span class="label">Stop</span><span class="plan__v">${fixed(plan.stopPrice)}</span></div>
         <div class="plan__cell"><span class="label">Target</span><span class="plan__v">${fixed(plan.takeProfitPrice)}</span></div>
-        <div class="plan__cell"><span class="label">Notional</span><span class="plan__v">${money(plan.notional)}</span></div>
-        <div class="plan__cell"><span class="label">At risk</span><span class="plan__v">${money(plan.riskDollars)}</span></div>
+        <div class="plan__cell"><span class="label">Notional</span><span class="plan__v" data-notional="${candidate.symbol}">${money(plan.notional)}</span></div>
+        <div class="plan__cell"><span class="label">At risk</span><span class="plan__v" data-risk="${candidate.symbol}">${money(plan.riskDollars)}</span></div>
       </div>
+
       <div>
         <div class="plan__ladder" role="img" aria-label="Risk to reward, 1 to ${plan.rMultiple}">
           <span class="plan__risk" style="width:${(riskShare * 100).toFixed(0)}%"></span>
@@ -134,7 +141,85 @@ function planBlock(candidate) {
         </div>
         <span class="label">stop ${fixed(plan.stopDistancePct)}% away · target ${plan.rMultiple}R</span>
       </div>
+
+      <div class="amount">
+        <label class="amount__field">
+          <span class="amount__prefix">$</span>
+          <input type="number" min="1" step="1" inputmode="numeric"
+                 data-amount="${candidate.symbol}" value="${Math.round(amount)}"
+                 aria-label="Dollar amount to invest in ${candidate.symbol}" />
+        </label>
+        <button type="button" class="amount__preset" data-preset="${candidate.symbol}|suggested">Suggested</button>
+        <button type="button" class="amount__preset" data-preset="${candidate.symbol}|100">$100</button>
+        <button type="button" class="amount__preset" data-preset="${candidate.symbol}|250">$250</button>
+        <button type="button" class="amount__preset" data-preset="${candidate.symbol}|max">Max</button>
+        <span class="amount__readout" data-readout="${candidate.symbol}"></span>
+      </div>
     </div>`;
+}
+
+/**
+ * Recompute shares and risk from the typed amount. Purely for feedback while
+ * typing - the server rebuilds the plan from scratch and re-checks the ceiling
+ * before anything is sent.
+ */
+function updateAmountReadout(symbol) {
+  const plan = planBySymbol.get(symbol);
+  const input = document.querySelector(`[data-amount="${symbol}"]`);
+  const readout = document.querySelector(`[data-readout="${symbol}"]`);
+  if (!plan?.viable || !input || !readout) return;
+
+  const amount = Math.max(0, Number(input.value) || 0);
+  chosenAmount.set(symbol, amount);
+
+  // An analysis cached before these fields existed outlives a redeploy, so treat
+  // every one of them as optional rather than rendering NaN across the panel.
+  const maxNotional = Number.isFinite(plan.maxNotional) ? plan.maxNotional : Infinity;
+  const riskPerShare = Number.isFinite(plan.riskPerShare) ? plan.riskPerShare : 0;
+  const equity = Number.isFinite(plan.equity) ? plan.equity : 0;
+  const riskBudget = Number.isFinite(plan.riskBudget) ? plan.riskBudget : Infinity;
+  const maxRiskDollars = Number.isFinite(plan.maxRiskDollars) ? plan.maxRiskDollars : Infinity;
+
+  if (!Number.isFinite(plan.entryPrice) || plan.entryPrice <= 0) {
+    readout.textContent = 'Refresh the analysis to size this trade.';
+    return;
+  }
+
+  const capped = Math.min(amount, maxNotional);
+  const qty = Math.floor(capped / plan.entryPrice);
+  const notional = qty * plan.entryPrice;
+  const risk = qty * riskPerShare;
+  const riskPct = equity > 0 ? (risk / equity) * 100 : 0;
+  const riskPctText = riskPct > 0 && riskPct < 0.01 ? '<0.01%' : `${riskPct.toFixed(2)}%`;
+
+  const setText = (selector, value) => {
+    const el = document.querySelector(`[${selector}="${symbol}"]`);
+    if (el) el.textContent = value;
+  };
+  setText('data-qty', qty);
+  setText('data-notional', money(notional));
+  setText('data-risk', money(risk));
+
+  const blocked = risk > maxRiskDollars;
+  const over = !blocked && risk > riskBudget;
+  readout.classList.toggle('is-blocked', blocked);
+  readout.classList.toggle('is-over', over);
+
+  if (qty < 1) {
+    readout.textContent = `Not enough for one share at ${fixed(plan.entryPrice)}.`;
+    return;
+  }
+  if (amount > maxNotional) {
+    readout.innerHTML = `Capped at <strong>${money(maxNotional)}</strong> per order → <strong>${qty}</strong> sh, risk <strong>${money(risk)}</strong>`;
+    return;
+  }
+  if (blocked) {
+    readout.innerHTML = `Risk <strong>${money(risk)}</strong> (${riskPctText}) is above the <strong>${money(maxRiskDollars)}</strong> ceiling — this will be refused`;
+    return;
+  }
+  readout.innerHTML = `<strong>${qty}</strong> sh · risk <strong>${money(risk)}</strong> (${riskPctText} of equity)${
+    over ? ' — above your target' : ''
+  }`;
 }
 
 function reasonsBlock(candidate) {
@@ -220,7 +305,11 @@ function renderRow(candidate, limits) {
     <details class="${rowClass.join(' ')}" data-symbol="${candidate.symbol}" ${isOpen ? 'open' : ''}>
       <summary class="row__head">
         <div>
-          <div class="row__symbol">${candidate.symbol}</div>
+          <div class="row__symbol">${candidate.symbol}${
+            candidate.group && candidate.group !== 'equity'
+              ? `<span class="badge">${escapeHtml(candidate.group)}</span>`
+              : ''
+          }</div>
           <div class="row__price">${fixed(candidate.last)} <span class="${candidate.changePct >= 0 ? 'pl--up' : 'pl--down'}">${pct(candidate.changePct)}</span></div>
         </div>
 
@@ -247,6 +336,16 @@ function renderRow(candidate, limits) {
             <div class="panel__title">Score breakdown · ${candidate.technicalScore} technical ${newsNote} ${vetoNote}</div>
             ${candidate.factors.map(factorBar).join('')}
           </div>
+
+          ${
+            candidate.instrumentNote
+              ? `<p class="factor__detail" style="padding-top:10px">${escapeHtml(candidate.instrumentNote)}${
+                  candidate.correlatedWith?.length
+                    ? ` <span class="label">moves with ${candidate.correlatedWith.map(escapeHtml).join(', ')}</span>`
+                    : ''
+                }</p>`
+              : ''
+          }
 
           <div class="panel">
             <div class="panel__title">Why / why not</div>
@@ -380,6 +479,84 @@ function renderLog(trades) {
     .join('');
 }
 
+function qualityBand(quality) {
+  if (quality >= 0.7) return 'good';
+  if (quality >= 0.4) return 'fair';
+  return 'poor';
+}
+
+function renderWindow(window) {
+  const strip = $('windowStrip');
+  if (!window) {
+    strip.hidden = true;
+    return;
+  }
+  strip.hidden = false;
+  strip.dataset.quality = qualityBand(window.quality);
+
+  $('windowLabel').textContent = window.label;
+  $('windowNote').textContent = window.note;
+
+  const filled = Math.round(window.quality * 5);
+  $('windowMeter').innerHTML = Array.from(
+    { length: 5 },
+    (unused, i) => `<span class="${i < filled ? 'is-on' : ''}"></span>`,
+  ).join('');
+  $('windowMeter').setAttribute('aria-label', `Timing quality ${filled} of 5: ${window.label}`);
+
+  const parts = [];
+  if (window.next) parts.push(`${window.next.label} in ${window.next.inMinutes} min`);
+  if (window.bestRemaining && window.bestRemaining.key !== window.next?.key) {
+    parts.push(`best left: ${window.bestRemaining.label} in ${window.bestRemaining.inMinutes} min`);
+  }
+  $('windowNext').textContent = parts.join(' · ');
+}
+
+/**
+ * Account and clock only - no bars, no quotes, no model call - so this can run
+ * every 15 seconds without hammering Alpaca or the analysis budget.
+ */
+async function pollAccount() {
+  try {
+    const live = await api('/api/account');
+    $('liveDot').classList.remove('live-dot--stalled');
+
+    const flash = (id, value) => {
+      const el = $(id);
+      if (!el || el.textContent === value) return;
+      el.textContent = value;
+      el.classList.remove('rail__value--flash');
+      void el.offsetWidth; // restart the animation
+      el.classList.add('rail__value--flash');
+    };
+
+    flash('equity', compactMoney(live.equity));
+    flash('buyingPower', compactMoney(live.buyingPower));
+    flash('openPl', live.openPositions ? money(live.unrealizedPl) : '—');
+    $('openPl').className = `rail__value ${live.unrealizedPl >= 0 ? 'pl--up' : 'pl--down'}`;
+    $('dayTrades').textContent = live.pdtRestricted ? `${live.dayTradeCount} / 3` : String(live.dayTradeCount);
+
+    renderWindow(live.window);
+    renderPositions(live.positions);
+
+    if (state?.analysis) {
+      state.analysis.account = { ...state.analysis.account, ...live };
+      state.analysis.positions = live.positions;
+    }
+  } catch {
+    // A poll failure is not worth interrupting the page for; mark it and move on.
+    $('liveDot').classList.add('live-dot--stalled');
+  }
+}
+
+function startAccountPolling() {
+  clearInterval(accountTimer);
+  pollAccount(); // don't leave the rail empty for the first interval
+  accountTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') pollAccount();
+  }, 15000);
+}
+
 function renderLimits(limits) {
   const rows = [
     ['Min score to trade', limits.minScoreToTrade],
@@ -410,7 +587,11 @@ function render() {
   const tradeable = data.candidates.filter((c) => c.action === 'TRADEABLE').length;
   $('candidateSummary').textContent = `${tradeable} tradeable · ${data.candidates.length} scanned · ${data.tookMs}ms`;
 
+  renderWindow(data.window);
+
   $('rows').innerHTML = data.candidates.map((c) => renderRow(c, data.limits)).join('');
+  // Expanded rows keep whatever amount was typed before the re-render.
+  openRows.forEach((symbol) => updateAmountReadout(symbol));
   $('footnote').textContent =
     `Scores are computed from ${data.dataFeed.toUpperCase()} price and volume; the written reasoning comes from a language model reading headlines and cannot move the score by more than 12 points. Nothing here is advice, and a backtest was never run — treat every number as a prompt to look closer, not a verdict.`;
 
@@ -523,9 +704,14 @@ async function handleExecute(symbol, button) {
   button.disabled = true;
 
   try {
+    const notional = chosenAmount.get(symbol) ?? null;
+
     if (!pendingConfirm.get(symbol)) {
       button.innerHTML = '<span class="spinner"></span> Checking…';
-      const preview = await api('/api/preview', { method: 'POST', body: JSON.stringify({ symbol }) });
+      const preview = await api('/api/preview', {
+        method: 'POST',
+        body: JSON.stringify({ symbol, notional }),
+      });
       showBlockers(symbol, preview.blockers, preview.warnings);
 
       if (!preview.allowed) {
@@ -554,7 +740,10 @@ async function handleExecute(symbol, button) {
     }
 
     button.innerHTML = '<span class="spinner"></span> Sending…';
-    const result = await api('/api/trade', { method: 'POST', body: JSON.stringify({ symbol, confirm: true }) });
+    const result = await api('/api/trade', {
+      method: 'POST',
+      body: JSON.stringify({ symbol, confirm: true, notional }),
+    });
     pendingConfirm.delete(symbol);
 
     button.textContent = `Sent · order ${String(result.order.id).slice(0, 8)}`;
@@ -573,7 +762,33 @@ async function handleExecute(symbol, button) {
 }
 
 /* --- events --------------------------------------------------------------- */
+document.addEventListener('input', (event) => {
+  const input = event.target.closest('[data-amount]');
+  if (!input) return;
+  // Typing a new amount invalidates any confirmation already armed.
+  const symbol = input.dataset.amount;
+  if (pendingConfirm.delete(symbol)) {
+    const button = document.querySelector(`[data-execute="${symbol}"]`);
+    if (button) button.textContent = 'Check & execute';
+  }
+  updateAmountReadout(symbol);
+});
+
 document.addEventListener('click', async (event) => {
+  const preset = event.target.closest('[data-preset]');
+  if (preset) {
+    const [symbol, kind] = preset.dataset.preset.split('|');
+    const plan = planBySymbol.get(symbol);
+    const input = document.querySelector(`[data-amount="${symbol}"]`);
+    if (!plan || !input) return;
+
+    const value =
+      kind === 'suggested' ? plan.suggestedNotional : kind === 'max' ? plan.maxNotional : Number(kind);
+    input.value = Math.round(value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+
   const executeBtn = event.target.closest('[data-execute]');
   if (executeBtn) {
     event.preventDefault();
@@ -649,14 +864,18 @@ $('themeToggle').addEventListener('click', () => {
 document.addEventListener('toggle', (event) => {
   const row = event.target.closest('details.row');
   if (!row) return;
-  if (row.open) openRows.add(row.dataset.symbol);
-  else openRows.delete(row.dataset.symbol);
+  if (row.open) {
+    openRows.add(row.dataset.symbol);
+    updateAmountReadout(row.dataset.symbol);
+  } else {
+    openRows.delete(row.dataset.symbol);
+  }
 }, true);
 
 const savedTheme = storage.get('apace-theme');
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 
-loadState();
+loadState().then(startAccountPolling);
 setInterval(() => {
   if (state && document.visibilityState === 'visible') {
     state.ageSeconds += 5;

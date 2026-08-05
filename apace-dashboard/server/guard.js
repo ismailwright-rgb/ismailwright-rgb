@@ -7,7 +7,7 @@ const round2 = (value) => Math.round(value * 100) / 100;
  * count. Sizing is risk-first - the stop distance and the equity at risk decide
  * the share count, not a fixed dollar amount.
  */
-export function buildTradePlan({ symbol, entryPrice, atrValue, equity }) {
+export function buildTradePlan({ symbol, entryPrice, atrValue, equity, requestedNotional = null }) {
   if (!entryPrice || !Number.isFinite(entryPrice) || entryPrice <= 0) {
     return { viable: false, reason: 'no usable entry price' };
   }
@@ -36,11 +36,18 @@ export function buildTradePlan({ symbol, entryPrice, atrValue, equity }) {
     return { viable: false, reason: 'stop would sit within a cent or two of entry, which is not a real stop' };
   }
 
-  const riskDollars = (equity * config.riskPctPerTrade) / 100;
+  const riskBudget = (equity * config.riskPctPerTrade) / 100;
 
   // Bracket orders are whole-share only, so the notional cap is applied in shares.
   const maxQtyByNotional = Math.floor(config.maxNotionalPerOrder / entry);
-  const qty = Math.min(Math.floor(riskDollars / perShareRisk), maxQtyByNotional);
+
+  // A hand-entered amount sets the share count directly; otherwise size from the
+  // risk budget. Either way the per-order cap is the last word.
+  const custom = Number.isFinite(requestedNotional) && requestedNotional > 0;
+  const targetQty = custom
+    ? Math.floor(requestedNotional / entry)
+    : Math.floor(riskBudget / perShareRisk);
+  const qty = Math.min(targetQty, maxQtyByNotional);
 
   if (qty < 1) {
     return {
@@ -48,9 +55,14 @@ export function buildTradePlan({ symbol, entryPrice, atrValue, equity }) {
       reason:
         maxQtyByNotional < 1
           ? `one share costs ${entry.toFixed(2)}, above the ${config.maxNotionalPerOrder} per-order cap`
-          : `risking ${riskDollars.toFixed(2)} with a ${perShareRisk.toFixed(2)} stop does not buy a whole share`,
+          : custom
+            ? `${requestedNotional.toFixed(2)} does not buy a whole share at ${entry.toFixed(2)}`
+            : `risking ${riskBudget.toFixed(2)} with a ${perShareRisk.toFixed(2)} stop does not buy a whole share`,
     };
   }
+
+  const riskDollars = round2(qty * perShareRisk);
+  const riskPct = equity > 0 ? (riskDollars / equity) * 100 : 0;
 
   return {
     viable: true,
@@ -59,10 +71,24 @@ export function buildTradePlan({ symbol, entryPrice, atrValue, equity }) {
     takeProfitPrice,
     qty,
     notional: round2(qty * entry),
-    riskDollars: round2(qty * perShareRisk),
+    riskDollars,
+    riskPct: round2(riskPct),
     riskPerShare: perShareRisk,
     rMultiple: config.targetRMultiple,
     stopDistancePct: round2((perShareRisk / entry) * 100),
+
+    // What the UI needs to explain the number it is showing.
+    custom,
+    requestedNotional: custom ? round2(requestedNotional) : null,
+    cappedByNotional: targetQty > maxQtyByNotional,
+    suggestedNotional: round2(Math.min(Math.floor(riskBudget / perShareRisk), maxQtyByNotional) * entry),
+    riskBudget: round2(riskBudget),
+    overRiskBudget: riskDollars > riskBudget,
+    maxRiskDollars: round2((equity * config.maxRiskPctPerTrade) / 100),
+
+    // Echoed so the amount selector can recompute without another round trip.
+    equity: round2(equity),
+    maxNotional: config.maxNotionalPerOrder,
   };
 }
 
@@ -71,7 +97,7 @@ export function buildTradePlan({ symbol, entryPrice, atrValue, equity }) {
  * against freshly fetched account state - the browser's payload is never trusted
  * for anything except which symbol was clicked.
  */
-export function evaluateTrade({ candidate, plan, account, positions, session, analysisAgeSeconds }) {
+export function evaluateTrade({ candidate, plan, account, positions, session, analysisAgeSeconds, window = null }) {
   const blockers = [];
   const warnings = [];
 
@@ -142,6 +168,30 @@ export function evaluateTrade({ candidate, plan, account, positions, session, an
     if (plan.notional > config.maxNotionalPerOrder) {
       blockers.push(`Order notional ${plan.notional} exceeds the ${config.maxNotionalPerOrder} cap.`);
     }
+
+    // A hand-entered amount can imply far more risk than the default sizing.
+    // Allowed up to a hard ceiling, refused beyond it.
+    if (plan.riskDollars > plan.maxRiskDollars) {
+      blockers.push(
+        `That amount risks ${plan.riskDollars.toFixed(2)} to the stop, above the ${config.maxRiskPctPerTrade}% of equity ceiling (${plan.maxRiskDollars.toFixed(2)}).`,
+      );
+    } else if (plan.overRiskBudget) {
+      warnings.push(
+        `This risks ${plan.riskDollars.toFixed(2)} (${plan.riskPct}% of equity), above your ${config.riskPctPerTrade}% target of ${plan.riskBudget.toFixed(2)}.`,
+      );
+    }
+
+    if (plan.cappedByNotional) {
+      warnings.push(`Reduced to ${plan.qty} shares by the ${config.maxNotionalPerOrder} per-order cap.`);
+    }
+  }
+
+  // Timing is advisory, never a blocker - the score and the guard already decide
+  // whether the setup is valid; this says whether the clock is on your side.
+  if (window && window.quality < 0.4 && window.quality > 0) {
+    warnings.push(
+      `${window.label}: ${window.note}${window.bestRemaining ? ` ${window.bestRemaining.label} begins in ${window.bestRemaining.inMinutes} min.` : ''}`,
+    );
   }
 
   if (candidate.dataQuality?.partial) {

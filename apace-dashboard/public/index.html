@@ -28,8 +28,12 @@
       <span class="rail__value" id="equity">—</span>
     </div>
     <div class="rail__stat">
-      <span class="label">Buying power</span>
+      <span class="label">Buying power <span class="live-dot" id="liveDot" title="Updating live"></span></span>
       <span class="rail__value" id="buyingPower">—</span>
+    </div>
+    <div class="rail__stat">
+      <span class="label">Open P&amp;L</span>
+      <span class="rail__value" id="openPl">—</span>
     </div>
     <div class="rail__stat">
       <span class="label">Day trades</span>
@@ -46,6 +50,18 @@
       <button class="btn btn--primary" id="refreshBtn" type="button">Refresh analysis</button>
     </div>
   </header>
+
+  <section class="window-strip" id="windowStrip" hidden>
+    <div class="window-strip__now">
+      <span class="label">Timing</span>
+      <div class="window-strip__headline">
+        <span class="window-strip__label" id="windowLabel">—</span>
+        <span class="meter" id="windowMeter" role="img" aria-label="Timing quality"></span>
+      </div>
+    </div>
+    <p class="window-strip__note" id="windowNote"></p>
+    <div class="window-strip__next" id="windowNext"></div>
+  </section>
 
   <div id="banners"></div>
 

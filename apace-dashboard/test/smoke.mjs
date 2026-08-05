@@ -179,6 +179,118 @@ check('insufficient buying power is blocked', () => {
   assert.ok(verdict.blockers.some((b) => b.includes('buying power')));
 });
 
+/* --- session timing -------------------------------------------------------- */
+const { tradeWindow } = await import('../server/windows.js');
+
+const sessionOpen = new Date('2026-08-05T13:30:00Z');
+const sessionClose = new Date('2026-08-05T20:00:00Z');
+const at = (minutes) =>
+  tradeWindow(sessionOpen.getTime() + minutes * 60000, { open: sessionOpen, close: sessionClose });
+
+check('the session is divided into the expected windows', () => {
+  assert.equal(at(-15).key, 'premarket');
+  assert.equal(at(5).key, 'opening_drive');
+  assert.equal(at(45).key, 'morning_trend');
+  assert.equal(at(150).key, 'midday_lull');
+  assert.equal(at(320).key, 'afternoon_trend');
+  assert.equal(at(375).key, 'closing_imbalance');
+  assert.equal(at(400).key, 'closed');
+});
+
+check('the morning trend is rated the best window', () => {
+  const qualities = [at(5), at(45), at(150), at(320), at(375)].map((w) => w.quality);
+  assert.equal(Math.max(...qualities), at(45).quality);
+});
+
+check('a poor window points at the next good one', () => {
+  const lull = at(150);
+  assert.equal(lull.bestRemaining.key, 'afternoon_trend');
+  assert.ok(lull.bestRemaining.inMinutes > 0);
+});
+
+check('a half day collapses the middle instead of inverting', () => {
+  const shortClose = new Date('2026-08-05T17:00:00Z'); // 3.5 hours
+  const window = tradeWindow(sessionOpen.getTime() + 130 * 60000, {
+    open: sessionOpen,
+    close: shortClose,
+  });
+  assert.ok(['afternoon_trend', 'closing_imbalance'].includes(window.key), `got ${window.key}`);
+  assert.ok(window.quality >= 0);
+});
+
+/* --- custom position size --------------------------------------------------- */
+check('a chosen dollar amount sets the share count', () => {
+  const plan = buildTradePlan({ symbol: 'AAPL', entryPrice: 100, atrValue: 1, equity: 50_000, requestedNotional: 400 });
+  assert.equal(plan.qty, 4);
+  assert.equal(plan.custom, true);
+  assert.equal(plan.notional, 400);
+});
+
+check('a chosen amount is still capped by the per-order limit', () => {
+  const plan = buildTradePlan({
+    symbol: 'AAPL',
+    entryPrice: 100,
+    atrValue: 1,
+    equity: 500_000,
+    requestedNotional: 100_000,
+  });
+  assert.ok(plan.notional <= config.maxNotionalPerOrder);
+  assert.equal(plan.cappedByNotional, true);
+});
+
+check('an amount that risks more than the ceiling is refused', () => {
+  // Wide stop on a small account: a few hundred dollars breaches 1.5% of equity.
+  const equity = 2000;
+  const plan = buildTradePlan({ symbol: 'AAPL', entryPrice: 100, atrValue: 8, equity, requestedNotional: 500 });
+  assert.ok(plan.viable);
+  assert.ok(plan.riskDollars > plan.maxRiskDollars, 'test setup should breach the ceiling');
+
+  const verdict = evaluateTrade({
+    candidate: healthyCandidate,
+    plan,
+    account: { equity: String(equity), buying_power: '4000', daytrade_count: '0' },
+    positions: [],
+    session: openSession,
+    analysisAgeSeconds: 5,
+  });
+  assert.equal(verdict.allowed, false);
+  assert.ok(verdict.blockers.some((b) => b.includes('ceiling')));
+});
+
+check('an amount above the target but under the ceiling warns and proceeds', () => {
+  const equity = 30_000;
+  const plan = buildTradePlan({ symbol: 'AAPL', entryPrice: 100, atrValue: 1, equity, requestedNotional: 500 });
+  const budget = (equity * config.riskPctPerTrade) / 100;
+  assert.ok(plan.riskDollars <= plan.maxRiskDollars);
+
+  const verdict = evaluateTrade({
+    candidate: healthyCandidate,
+    plan,
+    account: { equity: String(equity), buying_power: '60000', daytrade_count: '0' },
+    positions: [],
+    session: openSession,
+    analysisAgeSeconds: 5,
+  });
+  assert.equal(verdict.allowed, true, verdict.blockers.join('; '));
+  if (plan.riskDollars > budget) {
+    assert.ok(verdict.warnings.some((w) => w.includes('above your')));
+  }
+});
+
+check('a bad window warns but never blocks', () => {
+  const verdict = evaluateTrade({
+    candidate: healthyCandidate,
+    plan: buildTradePlan({ symbol: 'AAPL', entryPrice: 220, atrValue: 1.2, equity: 30_000 }),
+    account: baseAccount,
+    positions: [],
+    session: openSession,
+    analysisAgeSeconds: 5,
+    window: at(150),
+  });
+  assert.equal(verdict.allowed, true, 'timing must never be a hard blocker');
+  assert.ok(verdict.warnings.some((w) => w.includes('Midday lull')));
+});
+
 /* --- order payload --------------------------------------------------------- */
 await checkAsync('the submitted order is a day bracket with both legs', async () => {
   const plan = buildTradePlan({ symbol: 'AAPL', entryPrice: 220, atrValue: 1.2, equity: 30_000 });

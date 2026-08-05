@@ -42,13 +42,17 @@ export const config = {
   // of it. SPY is always fetched as the benchmark whether or not it is listed.
   watchlist: (
     process.env.WATCHLIST ||
-    'GRAB,PLUG,GLD,SLV,CPER,SPY,QQQ,AAPL,MSFT,NVDA,FCX,NEM,CAT,AMZN,GOOGL,META,JPM,XOM'
+    'GRAB,PLUG,GLD,SLV,CPER,SPY,QQQ,AAPL,MSFT,NVDA,FCX,NEM,CAT,AMZN,GOOGL,META,JPM,XOM,UUP,FXE,FXB'
   )
     .split(',')
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),
 
   riskPctPerTrade: num('RISK_PCT_PER_TRADE', 0.5),
+  // Hard ceiling for a manually chosen dollar amount. The default sizing targets
+  // riskPctPerTrade; this is the most a hand-entered amount may risk before the
+  // guard refuses, whatever was typed into the box.
+  maxRiskPctPerTrade: num('MAX_RISK_PCT_PER_TRADE', 1.5),
   maxNotionalPerOrder: num('MAX_NOTIONAL_PER_ORDER', 500),
   maxOpenPositions: num('MAX_OPEN_POSITIONS', 4),
   minScoreToTrade: num('MIN_SCORE_TO_TRADE', 70),

@@ -5,6 +5,8 @@ import { scoreSymbol, applyNewsAdjustment, actionForScore } from './score.js';
 import { analyzeNews } from './llm.js';
 import { buildTradePlan } from './guard.js';
 import { resolveSession } from './session.js';
+import { tradeWindow } from './windows.js';
+import { describe, correlatedWith } from './universe.js';
 
 const BENCHMARK = 'SPY';
 
@@ -46,9 +48,13 @@ export async function runAnalysis() {
     const bars = sessionBarsFor(intraday[symbol], session);
     const dailyBars = daily[symbol] || [];
 
+    const meta = describe(symbol);
+
     if (!bars.length) {
       candidates.push({
         symbol,
+        group: meta.group,
+        instrumentNote: meta.note,
         tradable: false,
         score: 0,
         action: 'NO DATA',
@@ -89,6 +95,9 @@ export async function runAnalysis() {
 
     candidates.push({
       symbol,
+      group: meta.group,
+      instrumentNote: meta.note,
+      correlatedWith: correlatedWith(symbol),
       last,
       open,
       priorClose,
@@ -151,6 +160,7 @@ export async function runAnalysis() {
   return {
     generatedAt: new Date().toISOString(),
     tookMs: Date.now() - startedAt,
+    window: tradeWindow(Date.now(), { open: session.open, close: session.close }),
     session: {
       date: session.date,
       open: session.open.toISOString(),
@@ -185,6 +195,7 @@ export async function runAnalysis() {
       maxOpenPositions: config.maxOpenPositions,
       maxSpreadBps: config.maxSpreadBps,
       riskPctPerTrade: config.riskPctPerTrade,
+      maxRiskPctPerTrade: config.maxRiskPctPerTrade,
       minMinutesToClose: config.minMinutesToClose,
       targetRMultiple: config.targetRMultiple,
       maxAnalysisAgeSeconds: config.maxAnalysisAgeSeconds,

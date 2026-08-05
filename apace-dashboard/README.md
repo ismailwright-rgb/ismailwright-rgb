@@ -61,8 +61,46 @@ the order payload, every risk blocker, and the serverless auth boundary.
   headlines. Every headline is linked so you can check the model's read.
 - **The proposed trade** — entry, stop, target, share count, dollars at risk, and
   the R:R ladder — before you commit to anything.
-- **Session context** in the rail: market clock with a countdown to the close,
-  equity, buying power, and your day-trade count against the PDT limit.
+- **A dollar amount you choose.** Type an amount, or take the risk-derived
+  suggestion, and shares and dollars-at-risk update as you type. The server
+  re-derives everything before sending and refuses anything above the risk
+  ceiling.
+- **Session context** in the rail, refreshed every 15 seconds: equity, buying
+  power, open P&L, and your day-trade count against the PDT limit.
+
+## Timing
+
+A strip above the candidates rates the current part of the session for opening a
+new day trade, and says how long until the next window:
+
+| Window | Rating | Why |
+|---|---|---|
+| Opening drive (first 30 min) | Fair | Heaviest volume, but wide spreads and frequent reversals |
+| Morning trend (30–120 min) | **Best** | Opening range set, volume still high, time for a move to work |
+| Midday lull | Poor | Thinnest volume; breakouts fail more often |
+| Afternoon trend (last 2h to 30 min) | Good | Volume returns, less room to run |
+| Closing imbalance (last 30 min) | Avoid | Mechanical auction flow; the guard blocks new entries anyway |
+
+Timing never blocks a trade — it warns. These ratings are conventional desk
+wisdom, not numbers fitted to your fills.
+
+## Currencies
+
+**Alpaca does not trade forex.** No USD/GBP, no USD/EUR — it offers US equities,
+ETFs, options and crypto. A currency view has to be expressed through an ETF that
+holds the currency, and three are on the watchlist:
+
+| Symbol | Tracks |
+|---|---|
+| `UUP` | US dollar index — roughly the inverse of EUR/USD |
+| `FXE` | Euro — a proxy for EUR/USD |
+| `FXB` | British pound — a proxy for GBP/USD |
+
+They score like any other symbol and are badged `currency` in the list. One real
+limitation: they trade only during US equity hours, so a move made during the
+London session shows up as a gap at 09:30 ET rather than something you could have
+traded into. They also move on the same driver, so treat `UUP` and `FXE` as one
+position, not two — the dashboard flags the correlation.
 
 ## Sizing and risk
 

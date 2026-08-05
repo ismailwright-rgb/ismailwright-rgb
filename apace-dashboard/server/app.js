@@ -10,6 +10,7 @@ import * as store from './store.js';
 import { runAnalysis } from './analyze.js';
 import { buildTradePlan, evaluateTrade, clientOrderId } from './guard.js';
 import { resolveSession } from './session.js';
+import { tradeWindow } from './windows.js';
 
 /**
  * Locate the static files under both module systems.
@@ -187,6 +188,47 @@ export function createApp() {
     }),
   );
 
+  // Light enough to poll: account and clock only, no bars, quotes or model call.
+  app.get(
+    '/api/account',
+    asyncRoute(async (req, res) => {
+      const [account, positions, session] = await Promise.all([
+        alpaca.getAccount(),
+        alpaca.getPositions(),
+        resolveSession(),
+      ]);
+
+      const equity = Number(account.equity) || 0;
+      res.json({
+        at: new Date().toISOString(),
+        equity,
+        buyingPower: Number(account.buying_power) || 0,
+        cash: Number(account.cash) || 0,
+        dayTradeCount: Number(account.daytrade_count ?? 0),
+        patternDayTrader: Boolean(account.pattern_day_trader),
+        pdtRestricted: equity < 25000,
+        openPositions: positions.length,
+        unrealizedPl: positions.reduce((sum, p) => sum + (Number(p.unrealized_pl) || 0), 0),
+        positions: positions.map((p) => ({
+          symbol: p.symbol,
+          qty: Number(p.qty),
+          avgEntry: Number(p.avg_entry_price),
+          current: Number(p.current_price),
+          unrealizedPl: Number(p.unrealized_pl),
+          unrealizedPlPct: Number(p.unrealized_plpc) * 100,
+        })),
+        session: {
+          date: session.date,
+          open: session.open.toISOString(),
+          close: session.close.toISOString(),
+          isCurrent: session.isCurrent,
+          minutesToClose: Math.round(session.minutesToClose),
+        },
+        window: tradeWindow(Date.now(), { open: session.open, close: session.close }),
+      });
+    }),
+  );
+
   app.post(
     '/api/preview',
     asyncRoute(async (req, res) => {
@@ -206,6 +248,7 @@ export function createApp() {
         entryPrice: candidate.ask || candidate.last,
         atrValue: candidate.atr,
         equity: Number(account.equity) || 0,
+        requestedNotional: Number(req.body?.notional) || null,
       });
       const verdict = evaluateTrade({
         candidate,
@@ -214,6 +257,7 @@ export function createApp() {
         positions,
         session,
         analysisAgeSeconds: store.analysisAgeSeconds(),
+        window: tradeWindow(Date.now(), { open: session.open, close: session.close }),
       });
 
       if (!config.enableTrading) {
@@ -259,7 +303,13 @@ export function createApp() {
       const candidate = analysis.candidates.find((c) => c.symbol === symbol);
       const equity = Number(account.equity) || 0;
       const plan = candidate
-        ? buildTradePlan({ symbol, entryPrice: candidate.ask || candidate.last, atrValue: candidate.atr, equity })
+        ? buildTradePlan({
+            symbol,
+            entryPrice: candidate.ask || candidate.last,
+            atrValue: candidate.atr,
+            equity,
+            requestedNotional: Number(req.body?.notional) || null,
+          })
         : { viable: false, reason: 'unknown symbol' };
 
       const verdict = evaluateTrade({
@@ -269,6 +319,7 @@ export function createApp() {
         positions,
         session,
         analysisAgeSeconds: store.analysisAgeSeconds(),
+        window: tradeWindow(Date.now(), { open: session.open, close: session.close }),
       });
 
       if (!verdict.allowed) {
