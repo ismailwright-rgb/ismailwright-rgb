@@ -1,0 +1,21 @@
+services:
+  dashboard:
+    build: .
+    container_name: apace-dashboard
+    restart: unless-stopped
+    env_file: .env
+    # Bound to loopback on purpose: without DASHBOARD_USER set, anyone who can
+    # reach this port can place orders. Change to "8080:8080" only after you have
+    # set basic auth, and even then think about what else is on that network.
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - apace-data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 4s
+      retries: 3
+
+volumes:
+  apace-data:

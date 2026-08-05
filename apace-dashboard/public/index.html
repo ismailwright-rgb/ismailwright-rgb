@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Apace — intraday console</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>◪</text></svg>" />
+</head>
+<body>
+  <header class="rail">
+    <div class="rail__brand">
+      <span class="rail__title">Apace</span>
+      <span id="modeBadge" class="mode-badge mode-badge--paper">paper</span>
+    </div>
+
+    <div class="rail__stat">
+      <span class="label">Session</span>
+      <span class="rail__value" id="sessionState">—</span>
+    </div>
+    <div class="rail__stat">
+      <span class="label">To close</span>
+      <span class="rail__value" id="countdown">—</span>
+    </div>
+    <div class="rail__stat">
+      <span class="label">Equity</span>
+      <span class="rail__value" id="equity">—</span>
+    </div>
+    <div class="rail__stat">
+      <span class="label">Buying power</span>
+      <span class="rail__value" id="buyingPower">—</span>
+    </div>
+    <div class="rail__stat">
+      <span class="label">Day trades</span>
+      <span class="rail__value" id="dayTrades">—</span>
+    </div>
+    <div class="rail__stat">
+      <span class="label">Analysed</span>
+      <span class="rail__value" id="analysedAt">—</span>
+    </div>
+
+    <div class="rail__actions">
+      <button class="btn btn--sm" id="themeToggle" type="button" aria-label="Switch colour theme">Theme</button>
+      <button class="btn btn--sm" id="autoToggle" type="button" aria-pressed="false">Auto off</button>
+      <button class="btn btn--primary" id="refreshBtn" type="button">Refresh analysis</button>
+    </div>
+  </header>
+
+  <div id="banners"></div>
+
+  <main class="layout">
+    <section>
+      <div class="section-head">
+        <h2>Candidates</h2>
+        <span class="label" id="candidateSummary"></span>
+      </div>
+      <div class="rows" id="rows">
+        <p class="empty">Loading the first analysis — this pulls bars, quotes and news for the whole watchlist, so give it a few seconds.</p>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card">
+        <div class="section-head">
+          <h2>Open positions</h2>
+          <button class="btn btn--sm btn--danger" id="flattenBtn" type="button">Flatten all</button>
+        </div>
+        <div id="positions"><p class="empty">None.</p></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head"><h2>Activity</h2></div>
+        <div class="log" id="tradeLog"><p class="empty">No orders yet.</p></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head"><h2>Limits in force</h2></div>
+        <div id="limits" class="log"></div>
+      </div>
+    </aside>
+  </main>
+
+  <p class="footnote" id="footnote"></p>
+
+  <div class="sr-only" role="status" aria-live="polite" id="liveRegion"></div>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
