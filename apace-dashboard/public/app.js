@@ -552,9 +552,78 @@ async function pollAccount() {
 function startAccountPolling() {
   clearInterval(accountTimer);
   pollAccount(); // don't leave the rail empty for the first interval
+  pollAutopilot();
   accountTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') pollAccount();
+    if (document.visibilityState !== 'visible') return;
+    pollAccount();
+    pollAutopilot();
   }, 15000);
+}
+
+function renderAutopilot(data) {
+  const badge = $('autopilotState');
+  const stop = $('autopilotHalt');
+  const body = $('autopilotBody');
+
+  const halted = Boolean(data.day?.haltedReason);
+  const running = data.enabled && data.tradingEnabled && !halted;
+
+  badge.textContent = halted ? 'halted' : data.enabled ? (data.tradingEnabled ? 'running' : 'blocked') : 'off';
+  badge.className = `pill ${halted ? 'pill--bad' : running ? 'pill--good' : 'pill--neutral'}`;
+
+  stop.hidden = !data.enabled;
+  stop.textContent = halted ? 'Resume' : 'Stop';
+  stop.className = `btn btn--sm ${halted ? '' : 'btn--danger'}`;
+
+  if (!data.enabled) {
+    body.innerHTML =
+      '<p class="empty">Off. Set <code>AUTOPILOT=true</code> to let it trade on its own — read the journal it writes before trusting it.</p>';
+    return;
+  }
+
+  const rows = [
+    ['Trades today', `${data.day.tradesPlaced} / ${data.maxTradesPerDay}`],
+    ['Day P&L', data.dayPnlPct == null ? '—' : pct(data.dayPnlPct)],
+    ['Loss limit', `${data.dailyLossLimitPct}%`],
+    ['Min score', data.minScore],
+    ['Runs every', `${data.intervalMinutes} min`],
+  ];
+
+  const lastFew = (data.journal || []).slice(0, 6);
+  const journalHtml = lastFew.length
+    ? lastFew
+        .map((item) => {
+          const detail =
+            item.action === 'trade'
+              ? `bought ${item.qty} ${escapeHtml(item.symbol)} at score ${item.score}`
+              : item.action === 'flatten'
+                ? `flattened: ${escapeHtml(item.reason || '')}`
+                : item.action === 'halt'
+                  ? `halted: ${escapeHtml(item.reason || '')}`
+                  : escapeHtml((item.blockers || [])[0] || 'skipped');
+          return `<div class="log__row">
+            <div><span class="label" style="text-transform:none">${detail}</span></div>
+            <span class="log__time">${clockTime(item.at)}</span>
+          </div>`;
+        })
+        .join('')
+    : '<p class="empty">No decisions logged yet.</p>';
+
+  body.innerHTML = `
+    ${halted ? `<p class="banner banner--bad" style="margin:0 0 9px">Halted: ${escapeHtml(data.day.haltedReason)}</p>` : ''}
+    <div class="log">
+      ${rows.map(([k, v]) => `<div class="log__row"><span>${escapeHtml(k)}</span><span class="num">${escapeHtml(String(v))}</span></div>`).join('')}
+    </div>
+    <div class="panel__title">Recent decisions</div>
+    <div class="log">${journalHtml}</div>`;
+}
+
+async function pollAutopilot() {
+  try {
+    renderAutopilot(await api('/api/autopilot'));
+  } catch {
+    // Non-critical panel; leave whatever was last rendered.
+  }
 }
 
 function renderLimits(limits) {
@@ -822,6 +891,26 @@ $('flattenBtn').addEventListener('click', async () => {
     await loadState();
   } catch (error) {
     alert(`Flatten failed: ${error.message}`);
+  }
+});
+
+$('autopilotHalt').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  const resuming = button.textContent === 'Resume';
+  if (!resuming && !confirm('Stop the autopilot for the rest of the session?')) return;
+
+  button.disabled = true;
+  try {
+    await api(`/api/autopilot/${resuming ? 'resume' : 'halt'}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: 'stopped from the dashboard' }),
+    });
+    announce(resuming ? 'Autopilot resumed.' : 'Autopilot halted.');
+    await pollAutopilot();
+  } catch (error) {
+    alert(`Could not change the autopilot: ${error.message}`);
+  } finally {
+    button.disabled = false;
   }
 });
 

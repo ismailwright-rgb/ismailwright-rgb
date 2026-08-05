@@ -151,6 +151,43 @@ curl -X POST localhost:8080/api/trade -H 'content-type: application/json' \
 - **Idempotent orders.** Each carries a `client_order_id`, so a double-click or a
   retry cannot double a position.
 
+## Autopilot
+
+Unattended trading. **Off unless `AUTOPILOT=true`**, and refused outright against
+a live endpoint unless `AUTOPILOT_ALLOW_LIVE=true` as well — `ALLOW_LIVE` covers a
+human deciding to click, not a loop deciding on its own.
+
+Every cycle (default 5 minutes) it takes the freshest analysis, picks the single
+best candidate, and runs it through the same guard a manual click would. It never
+gets more latitude than you do — every threshold is stricter:
+
+| Limit | Default | Manual equivalent |
+|---|---|---|
+| Minimum score | 75 | 70 |
+| Window quality | 0.7 — morning and afternoon trend only | none |
+| Trades per day | 3 | none |
+| Daily loss limit | 2% drawdown, then halts for the session | none |
+| Flatten before close | 10 minutes | manual |
+
+It closes everything before the bell: a day trade that sleeps is no longer a day
+trade, and an overnight gap can blow through a stop sized for intraday moves.
+
+**The kill switch** is the Stop button on the dashboard, or
+`POST /api/autopilot/halt`. Halting lasts the rest of the session, survives a
+restart, and clears at the next open.
+
+**Every decision is journalled** — taken or skipped, with the reasons. That
+journal is the point. It is the only way to find out whether the scoring has an
+edge, and you should read a couple of weeks of it on paper before trusting it
+with anything.
+
+### Before you turn it on
+
+The scoring has **never been validated against history**. The factor weights are
+reasoned, not fitted, and no backtest exists. Automating an unproven strategy does
+not make it work — it removes the last human check and applies the same judgement
+faster and more consistently. Paper only, then read the journal.
+
 ## Known limits — read these
 
 - **The IEX feed is thin.** On the free plan, volume reflects IEX only, so relative

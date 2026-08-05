@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/smoke.mjs && node test/netlify.mjs && node test/bundle.mjs",
+    "test": "node test/smoke.mjs && node test/autopilot.mjs && node test/netlify.mjs && node test/bundle.mjs",
     "mock": "node test/serve-mock.mjs"
   },
   "dependencies": {

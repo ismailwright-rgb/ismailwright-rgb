@@ -116,6 +116,10 @@ export function getTradeLog() {
   return tradeLog;
 }
 
+/** Generic key access, for state that does not need an in-memory mirror. */
+export const readKey = (key, fallback) => backend.read(key, fallback);
+export const writeKey = (key, value) => backend.write(key, value);
+
 export async function appendTrade(entry) {
   // Re-read first: another invocation may have logged since this one started.
   if (config.isServerless) {

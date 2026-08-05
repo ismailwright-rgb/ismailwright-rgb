@@ -11,6 +11,7 @@ import { runAnalysis } from './analyze.js';
 import { buildTradePlan, evaluateTrade, clientOrderId } from './guard.js';
 import { resolveSession } from './session.js';
 import { tradeWindow } from './windows.js';
+import * as autopilot from './autopilot.js';
 
 /**
  * Locate the static files under both module systems.
@@ -357,6 +358,41 @@ export function createApp() {
       await store.appendTrade(entry);
 
       res.json({ ok: true, order, plan, warnings: verdict.warnings, trade: entry });
+    }),
+  );
+
+  app.get(
+    '/api/autopilot',
+    asyncRoute(async (req, res) => {
+      const [status, journal] = await Promise.all([autopilot.status(), autopilot.readJournal()]);
+      res.json({ ...status, journal: journal.slice(0, 40) });
+    }),
+  );
+
+  // The kill switch. Halting takes effect for the rest of the session and
+  // survives a restart; it clears itself at the next open.
+  app.post(
+    '/api/autopilot/halt',
+    asyncRoute(async (req, res) => {
+      const day = await autopilot.halt(String(req.body?.reason || '').slice(0, 200) || 'stopped from the dashboard');
+      res.json({ ok: true, day });
+    }),
+  );
+
+  app.post(
+    '/api/autopilot/resume',
+    asyncRoute(async (req, res) => {
+      const day = await autopilot.resume();
+      res.json({ ok: true, day });
+    }),
+  );
+
+  // Run one cycle now. Also the entry point for a scheduled invocation.
+  app.post(
+    '/api/autopilot/tick',
+    asyncRoute(async (req, res) => {
+      const result = await autopilot.tick({ refreshAnalysis });
+      res.json({ ok: true, ...result });
     }),
   );
 

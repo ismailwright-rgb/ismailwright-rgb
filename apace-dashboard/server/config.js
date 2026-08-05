@@ -61,6 +61,19 @@ export const config = {
   maxAnalysisAgeSeconds: num('MAX_ANALYSIS_AGE_SECONDS', 600),
   targetRMultiple: num('TARGET_R_MULTIPLE', 2),
 
+  // Unattended trading. Off unless switched on deliberately, and every threshold
+  // is stricter than the manual path - the autopilot never gets more latitude
+  // than a human click.
+  autopilot: {
+    enabled: process.env.AUTOPILOT === 'true',
+    intervalMinutes: num('AUTOPILOT_INTERVAL_MINUTES', 5),
+    minScore: num('AUTOPILOT_MIN_SCORE', num('MIN_SCORE_TO_TRADE', 70) + 5),
+    minWindowQuality: num('AUTOPILOT_MIN_WINDOW_QUALITY', 0.7),
+    maxTradesPerDay: num('AUTOPILOT_MAX_TRADES_PER_DAY', 3),
+    dailyLossLimitPct: num('AUTOPILOT_DAILY_LOSS_LIMIT_PCT', 2),
+    flattenMinutesBeforeClose: num('AUTOPILOT_FLATTEN_MINUTES_BEFORE_CLOSE', 10),
+  },
+
   port: num('PORT', 8080),
   dashboardUser: process.env.DASHBOARD_USER || '',
   dashboardPassword: process.env.DASHBOARD_PASSWORD || '',
@@ -86,6 +99,15 @@ if (config.isServerless && !config.dashboardUser) {
 
 if (config.dashboardUser && !config.dashboardPassword) {
   throw new Error('DASHBOARD_USER is set but DASHBOARD_PASSWORD is empty.');
+}
+
+// Unattended trading against real money needs its own opt-in. ALLOW_LIVE covers
+// a human deciding to click; it does not cover a loop deciding on its own.
+if (config.autopilot.enabled && !config.isPaper && process.env.AUTOPILOT_ALLOW_LIVE !== 'true') {
+  throw new Error(
+    'AUTOPILOT is on against a live trading endpoint. Set AUTOPILOT_ALLOW_LIVE=true only if you ' +
+      'genuinely intend an unsupervised loop to trade real money.',
+  );
 }
 
 if (!config.keyId || !config.secretKey) {
