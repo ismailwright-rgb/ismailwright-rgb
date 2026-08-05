@@ -13,6 +13,8 @@
     <div class="rail__brand">
       <span class="rail__title">Apace</span>
       <span id="modeBadge" class="mode-badge mode-badge--paper">paper</span>
+      <button class="mode-badge mode-badge--off" id="tradingToggle" type="button"
+              title="Whether this dashboard may place orders at all">trading off</button>
     </div>
 
     <div class="rail__stat">
@@ -91,7 +93,11 @@
       <div class="card" id="autopilotCard">
         <div class="section-head">
           <h2>Autopilot <span id="autopilotState" class="pill pill--neutral">off</span></h2>
-          <button class="btn btn--sm btn--danger" id="autopilotHalt" type="button" hidden>Stop</button>
+          <span style="display:flex;gap:6px">
+            <button class="btn btn--sm" id="autopilotDryRun" type="button"
+                    title="Decide as if it were trading, but place nothing">Dry run</button>
+            <button class="btn btn--sm btn--danger" id="autopilotHalt" type="button" hidden>Stop</button>
+          </span>
         </div>
         <div id="autopilotBody"><p class="empty">Not enabled.</p></div>
       </div>

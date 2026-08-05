@@ -547,3 +547,6 @@ table.diag td { padding: 5px 10px 5px 0; vertical-align: top; border-bottom: 1px
 table.diag tr:last-child td { border-bottom: 0; }
 table.diag td:first-child { width: 18px; }
 table.diag td:nth-child(3) { text-align: right; white-space: nowrap; color: var(--muted); }
+
+.mode-badge--off { color: var(--muted); background: var(--surface-sunken); cursor: pointer; }
+.mode-badge--on { color: var(--good); background: var(--good-soft); cursor: pointer; }

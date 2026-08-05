@@ -207,6 +207,34 @@ await check('status says exactly what is blocking it and what it would buy', asy
   assert.equal(status.source, 'dashboard', 'the override should be reported as coming from the dashboard');
 });
 
+await check('a dry run decides without placing anything', async () => {
+  await resetDay();
+  await autopilot.setEnabled(true);
+  orders.length = 0;
+
+  // Midday lull: the autopilot would refuse, but a dry run still has to show
+  // what it would have picked — that is the point of watching it.
+  const result = await autopilot.tick({ refreshAnalysis, now: minutesIn(200), dryRun: true });
+
+  assert.equal(orders.length, 0, 'a dry run must never reach the market');
+  assert.equal(result.dryRun, true);
+  assert.ok(result.symbol, 'it should still name the candidate it would take');
+  assert.ok(result.plan?.viable, 'and show the order it would build');
+  assert.equal(result.wouldTrade, false, 'while being honest that it would not fire');
+  assert.ok(result.blockers.some((b) => /lull|below the/i.test(b)), result.blockers.join('; '));
+});
+
+await check('a dry run works while the autopilot is switched off', async () => {
+  await autopilot.setEnabled(false);
+  orders.length = 0;
+
+  const result = await autopilot.tick({ refreshAnalysis, now: minutesIn(60), dryRun: true });
+  assert.notEqual(result.action, 'idle', 'being off must not prevent inspecting the decision');
+  assert.equal(orders.length, 0);
+
+  await autopilot.setEnabled(true);
+});
+
 await check('status reports the limits it is enforcing', async () => {
   const status = await autopilot.status();
   assert.equal(status.enabled, true);

@@ -128,10 +128,10 @@ function globalBlockers({ day, session, window, account, positions, analysisAgeS
  * One decision cycle. `runAnalysis` is injected so the caller controls how fresh
  * the data is and so tests can drive it without the network.
  */
-export async function tick({ refreshAnalysis, now = Date.now() }) {
+export async function tick({ refreshAnalysis, now = Date.now(), dryRun = false }) {
   // Checked before any network call, so an idle loop costs nothing.
   const { autopilot: enabled, trading } = await flags();
-  if (!enabled) return { action: 'idle', reason: 'autopilot is off' };
+  if (!enabled && !dryRun) return { action: 'idle', reason: 'autopilot is off' };
 
   const resolved = await resolveSession(new Date(now));
   // Recompute against the injected clock so a test can place itself anywhere in
@@ -154,7 +154,7 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
 
   // Manage what is already open BEFORE deciding whether to open anything new.
   // A poor window or a used-up trade cap must never stop a stop from trailing.
-  if (positions.length && trading) {
+  if (positions.length && trading && !dryRun) {
     const exitActions = await manageExits({ now, trading });
     for (const action of exitActions.filter((a) => a.action !== 'hold' && a.action !== 'skip')) {
       await journal({
@@ -174,7 +174,8 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
     positions.length > 0 &&
     session.minutesToClose <= config.autopilot.flattenMinutesBeforeClose &&
     !day.flattened &&
-    trading
+    trading &&
+    !dryRun
   ) {
     await alpaca.closeAllPositions();
     day.flattened = true;
@@ -193,7 +194,7 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
   const analysisAgeSeconds = store.analysisAgeSeconds();
 
   const blockers = globalBlockers({ day, session, window, account, positions, analysisAgeSeconds, enabled, trading });
-  if (blockers.length) {
+  if (blockers.length && !dryRun) {
     await journal({ action: 'skip', scope: 'session', blockers, window: window.key });
     return { action: 'skip', blockers };
   }
@@ -204,16 +205,14 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
     .sort((a, b) => b.score - a.score);
 
   if (!ranked.length) {
-    await journal({
-      action: 'skip',
-      scope: 'candidates',
-      blockers: [`Nothing scored ${config.autopilot.minScore} or better.`],
-      best: analysis?.candidates?.[0]
-        ? `${analysis.candidates[0].symbol} ${analysis.candidates[0].score}`
-        : null,
-      window: window.key,
-    });
-    return { action: 'skip', blockers: ['no candidate above the autopilot threshold'] };
+    const reason = `Nothing scored ${config.autopilot.minScore} or better.`;
+    const best = analysis?.candidates?.[0]
+      ? `${analysis.candidates[0].symbol} ${analysis.candidates[0].score}`
+      : null;
+    if (!dryRun) {
+      await journal({ action: 'skip', scope: 'candidates', blockers: [reason], best, window: window.key });
+    }
+    return { action: 'skip', dryRun, blockers: [...blockers, reason], best, window: window.key };
   }
 
   const candidate = ranked[0];
@@ -233,6 +232,21 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
     analysisAgeSeconds,
     window,
   });
+
+  if (dryRun) {
+    return {
+      action: 'dry-run',
+      dryRun: true,
+      symbol: candidate.symbol,
+      score: candidate.score,
+      window: window.key,
+      wouldTrade: verdict.allowed && blockers.length === 0,
+      blockers: [...blockers, ...verdict.blockers],
+      warnings: verdict.warnings,
+      plan,
+      runnerUp: ranked[1] ? `${ranked[1].symbol} ${ranked[1].score}` : null,
+    };
+  }
 
   if (!verdict.allowed) {
     await journal({

@@ -575,7 +575,14 @@ function startAccountPolling() {
   }, 15000);
 }
 
+function renderTradingBadge(enabled) {
+  const badge = $('tradingToggle');
+  badge.textContent = enabled ? 'trading on' : 'trading off';
+  badge.className = `mode-badge mode-badge--${enabled ? 'on' : 'off'}`;
+}
+
 function renderAutopilot(data) {
+  renderTradingBadge(data.tradingEnabled);
   const badge = $('autopilotState');
   const stop = $('autopilotHalt');
   const body = $('autopilotBody');
@@ -590,8 +597,8 @@ function renderAutopilot(data) {
   stop.dataset.next = halted ? 'resume' : data.enabled ? 'off' : 'on';
   stop.textContent = halted ? 'Resume' : data.enabled ? 'Turn off' : 'Turn on';
   stop.className = `btn btn--sm ${data.enabled && !halted ? 'btn--danger' : 'btn--primary'}`;
-  stop.disabled = !data.enabled && !data.tradingEnabled;
-  stop.title = !data.tradingEnabled ? 'ENABLE_TRADING is not true on this deployment' : '';
+  stop.disabled = false;
+  stop.title = data.enabled ? '' : 'Turning the autopilot on also enables order placement';
 
   const rows = [
     ['Trades today', `${data.day?.tradesPlaced ?? 0} / ${data.maxTradesPerDay}`],
@@ -717,6 +724,7 @@ function render() {
   renderRail(data, meta);
   renderBanners(data, meta);
   renderPositions(data.positions);
+  renderTradingBadge(tradingEnabled());
   $('flattenBtn').disabled = !tradingEnabled();
   renderLog(state.trades || []);
   renderLimits(data.limits);
@@ -1001,6 +1009,82 @@ function renderDiagnostics(report) {
     $('diagPanel').hidden = true;
   });
 }
+
+$('autopilotDryRun').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = 'Deciding…';
+
+  try {
+    const result = await api('/api/autopilot/tick', { method: 'POST', body: JSON.stringify({ dryRun: true }) });
+    const body = $('autopilotBody');
+
+    const lines = [];
+    if (result.symbol) {
+      lines.push(
+        `<strong>${escapeHtml(result.symbol)}</strong> at score ${result.score} would be the pick` +
+          (result.runnerUp ? `, then ${escapeHtml(result.runnerUp)}` : '') + '.',
+      );
+      if (result.plan?.viable) {
+        lines.push(
+          `${result.plan.qty} shares · entry ${fixed(result.plan.entryPrice)} · stop ${fixed(result.plan.stopPrice)} · ` +
+            `target ${fixed(result.plan.takeProfitPrice)} · ${money(result.plan.riskDollars)} at risk.`,
+        );
+      }
+      lines.push(
+        result.wouldTrade
+          ? '<span style="color:var(--good)">It would place this order now.</span>'
+          : '<span style="color:var(--warn)">It would not trade — see below.</span>',
+      );
+    } else {
+      lines.push('No candidate qualifies right now.');
+      if (result.best) lines.push(`Best on the board: ${escapeHtml(result.best)}.`);
+    }
+
+    const blockers = (result.blockers || []).map((b) => `<li>${escapeHtml(b)}</li>`).join('');
+
+    body.insertAdjacentHTML(
+      'afterbegin',
+      `<div class="banner banner--info" style="display:block;margin:0 0 10px">
+        <strong>Dry run</strong> — nothing was sent.
+        <p style="margin:6px 0">${lines.join('<br>')}</p>
+        ${blockers ? `<ul class="blockers">${blockers}</ul>` : ''}
+      </div>`,
+    );
+  } catch (error) {
+    alert(`Dry run failed: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Dry run';
+  }
+});
+
+$('tradingToggle').addEventListener('click', async (event) => {
+  const badge = event.currentTarget;
+  const turningOn = badge.textContent === 'trading off';
+  if (
+    turningOn &&
+    !confirm('Allow this dashboard to place orders?\n\nThe Execute buttons and Flatten all become live. Every risk check still applies.')
+  ) {
+    return;
+  }
+
+  badge.disabled = true;
+  try {
+    const next = await api('/api/trading/enabled', {
+      method: 'POST',
+      body: JSON.stringify({ enabled: turningOn }),
+    });
+    renderTradingBadge(next.trading);
+    if (state) state.tradingEnabled = next.trading;
+    render();
+    await pollAutopilot();
+  } catch (error) {
+    alert(`Could not change trading: ${error.message}`);
+  } finally {
+    badge.disabled = false;
+  }
+});
 
 $('diagBtn').addEventListener('click', async (event) => {
   const button = event.currentTarget;

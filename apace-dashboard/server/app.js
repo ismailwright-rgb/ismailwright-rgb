@@ -413,7 +413,7 @@ export function createApp() {
   app.post(
     '/api/autopilot/tick',
     asyncRoute(async (req, res) => {
-      const result = await autopilot.tick({ refreshAnalysis });
+      const result = await autopilot.tick({ refreshAnalysis, dryRun: req.body?.dryRun === true });
       res.json({ ok: true, ...result });
     }),
   );
