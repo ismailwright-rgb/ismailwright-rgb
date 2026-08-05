@@ -584,13 +584,24 @@ $('autoToggle').addEventListener('click', (event) => {
   }
 });
 
+// Storage throws outright in some embedded contexts, so never let a theme
+// preference take the rest of the script down with it.
+const storage = {
+  get(key) {
+    try { return localStorage.getItem(key); } catch { return null; }
+  },
+  set(key, value) {
+    try { localStorage.setItem(key, value); } catch { /* preference is not persisted */ }
+  },
+};
+
 $('themeToggle').addEventListener('click', () => {
   const current =
     document.documentElement.dataset.theme ||
     (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   const next = current === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
-  localStorage.setItem('apace-theme', next);
+  storage.set('apace-theme', next);
 });
 
 document.addEventListener('toggle', (event) => {
@@ -600,7 +611,7 @@ document.addEventListener('toggle', (event) => {
   else openRows.delete(row.dataset.symbol);
 }, true);
 
-const savedTheme = localStorage.getItem('apace-theme');
+const savedTheme = storage.get('apace-theme');
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 
 loadState();
