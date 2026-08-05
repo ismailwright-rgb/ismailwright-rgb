@@ -10,6 +10,19 @@ function num(name, fallback) {
   return parsed;
 }
 
+/**
+ * NETLIFY=true is set during the BUILD, not in the function runtime — relying on
+ * it alone meant a deployed function thought it was running on a normal server
+ * and tried to write state to a read-only filesystem. Check the runtime markers
+ * as well: Lambda always sets these, and Netlify injects the blobs context.
+ */
+const SERVERLESS =
+  process.env.NETLIFY === 'true' ||
+  Boolean(process.env.NETLIFY_DEV) ||
+  Boolean(process.env.NETLIFY_BLOBS_CONTEXT) ||
+  Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+  Boolean(process.env.LAMBDA_TASK_ROOT);
+
 const tradingUrl = (process.env.ALPACA_TRADING_URL || PAPER_HOST).replace(/\/+$/, '');
 const isPaper = tradingUrl === PAPER_HOST;
 const allowLive = process.env.ALLOW_LIVE === 'true';
@@ -88,19 +101,16 @@ export const config = {
   dashboardUser: process.env.DASHBOARD_USER || '',
   dashboardPassword: process.env.DASHBOARD_PASSWORD || '',
 
-  // Netlify sets NETLIFY=true in both builds and function runtimes.
-  isServerless: process.env.NETLIFY === 'true' || Boolean(process.env.NETLIFY_DEV),
+  isServerless: SERVERLESS,
 
-  // Order placement is opt-in. On a public host it stays off unless explicitly
-  // enabled, so a deploy cannot quietly expose a trade button to the internet.
-  enableTrading: process.env.ENABLE_TRADING
-    ? process.env.ENABLE_TRADING === 'true'
-    : !(process.env.NETLIFY === 'true' || Boolean(process.env.NETLIFY_DEV)),
+  // Order placement is opt-in on a public host, so a deploy cannot quietly
+  // expose a trade button. The dashboard toggle overrides this at runtime.
+  enableTrading: process.env.ENABLE_TRADING ? process.env.ENABLE_TRADING === 'true' : !SERVERLESS,
 };
 
 // A public URL with no gate in front of it is not acceptable, whatever it serves:
 // the dashboard exposes account equity and positions even with trading disabled.
-if (config.isServerless && !config.dashboardUser) {
+if (SERVERLESS && !config.dashboardUser) {
   throw new Error(
     'DASHBOARD_USER and DASHBOARD_PASSWORD are required when deploying to a public host. ' +
       'Set them in your Netlify site environment variables.',

@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 
 import { config } from './config.js';
 
@@ -21,19 +22,37 @@ let initialised = false;
 
 /* --- file backend ---------------------------------------------------------- */
 const DATA_DIR = process.env.DATA_DIR || path.resolve(process.cwd(), 'data');
-const filePath = (key) => path.join(DATA_DIR, `${key}.json`);
+// Somewhere writable on every host, including a read-only serverless filesystem.
+const FALLBACK_DIR = path.join(tmpdir(), 'apace-data');
+
+let activeDir = DATA_DIR;
+const filePath = (dir, key) => path.join(dir, `${key}.json`);
 
 const fileBackend = {
   async read(key, fallback) {
-    try {
-      return JSON.parse(await readFile(filePath(key), 'utf8'));
-    } catch {
-      return fallback;
+    for (const dir of new Set([activeDir, DATA_DIR, FALLBACK_DIR])) {
+      try {
+        return JSON.parse(await readFile(filePath(dir, key), 'utf8'));
+      } catch {
+        // try the next location
+      }
     }
+    return fallback;
   },
   async write(key, value) {
-    await mkdir(DATA_DIR, { recursive: true });
-    await writeFile(filePath(key), JSON.stringify(value, null, 2));
+    const body = JSON.stringify(value, null, 2);
+    try {
+      await mkdir(activeDir, { recursive: true });
+      await writeFile(filePath(activeDir, key), body);
+    } catch (error) {
+      if (activeDir === FALLBACK_DIR) throw error;
+      // A read-only or missing data directory must not take a toggle down with
+      // it. Move to the temp directory and stay there.
+      console.warn(`store: ${activeDir} is not writable (${error.code}); falling back to ${FALLBACK_DIR}`);
+      activeDir = FALLBACK_DIR;
+      await mkdir(activeDir, { recursive: true });
+      await writeFile(filePath(activeDir, key), body);
+    }
   },
 };
 
@@ -52,14 +71,25 @@ const blobBackend = {
   async read(key, fallback) {
     try {
       const store = await getBlobStore();
-      return (await store.get(key, { type: 'json' })) ?? fallback;
+      const found = await store.get(key, { type: 'json' });
+      if (found != null) return found;
     } catch {
-      return fallback;
+      // Blobs may not be enabled on the site; fall through to the filesystem.
     }
+    return fileBackend.read(key, fallback);
   },
   async write(key, value) {
-    const store = await getBlobStore();
-    await store.setJSON(key, value);
+    try {
+      const store = await getBlobStore();
+      await store.setJSON(key, value);
+      return;
+    } catch (error) {
+      // Without Blobs enabled the temp directory still gives per-instance
+      // persistence, which is worse than shared state but far better than a
+      // dashboard whose switches throw.
+      console.warn(`store: Netlify Blobs unavailable (${error.message}); writing to the filesystem instead`);
+      await fileBackend.write(key, value);
+    }
   },
 };
 
