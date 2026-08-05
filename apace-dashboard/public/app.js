@@ -90,6 +90,8 @@ function factorBar(factor) {
 }
 
 /* --- row rendering -------------------------------------------------------- */
+const tradingEnabled = () => state?.tradingEnabled !== false;
+
 function actionPill(candidate) {
   const map = {
     TRADEABLE: ['pill--good', '▲', 'Tradeable'],
@@ -260,11 +262,15 @@ function renderRow(candidate, limits) {
             ${planBlock(candidate)}
             <div class="execute">
               <button class="btn btn--primary" data-execute="${candidate.symbol}"
-                ${candidate.action === 'HELD' ? 'disabled' : ''}>
-                ${candidate.action === 'HELD' ? 'Already held' : 'Check &amp; execute'}
+                ${candidate.action === 'HELD' || !tradingEnabled() ? 'disabled' : ''}>
+                ${!tradingEnabled() ? 'Read-only' : candidate.action === 'HELD' ? 'Already held' : 'Check &amp; execute'}
               </button>
               <span class="execute__note" data-execute-note="${candidate.symbol}">
-                Runs the risk check again server-side before anything is sent.
+                ${
+                  tradingEnabled()
+                    ? 'Runs the risk check again server-side before anything is sent.'
+                    : 'This deployment cannot place orders.'
+                }
               </span>
             </div>
             <ul class="blockers" data-blockers="${candidate.symbol}"></ul>
@@ -285,6 +291,12 @@ function renderBanners(data, meta) {
 
   if (data.mode === 'live') {
     banners.push(['bad', '<strong>Live account.</strong> Orders placed here move real money.']);
+  }
+  if (!tradingEnabled()) {
+    banners.push([
+      'info',
+      '<strong>Read-only deployment.</strong> Scores, reasoning and positions are live; order placement is disabled here. Run the dashboard locally to trade.',
+    ]);
   }
   if (!data.session.isCurrent) {
     banners.push(['warn', `<strong>Market closed.</strong> Showing the ${escapeHtml(data.session.date)} session. Execution is disabled.`]);
@@ -339,7 +351,7 @@ function renderPositions(positions) {
           <div class="position__pl ${p.unrealizedPl >= 0 ? 'pl--up' : 'pl--down'}">${money(p.unrealizedPl)}</div>
           <div class="label" style="text-align:right">${pct(p.unrealizedPlPct)}</div>
         </div>
-        <button class="btn btn--sm" data-close="${escapeHtml(p.symbol)}">Close</button>
+        <button class="btn btn--sm" data-close="${escapeHtml(p.symbol)}" ${tradingEnabled() ? '' : 'disabled'}>Close</button>
       </div>`,
     )
     .join('');
@@ -391,6 +403,7 @@ function render() {
   renderRail(data, meta);
   renderBanners(data, meta);
   renderPositions(data.positions);
+  $('flattenBtn').disabled = !tradingEnabled();
   renderLog(state.trades || []);
   renderLimits(data.limits);
 
@@ -447,6 +460,29 @@ function rememberOpenRows() {
   document.querySelectorAll('details.row[open]').forEach((el) => openRows.add(el.dataset.symbol));
 }
 
+/**
+ * On a serverless deployment the analysis runs in a background function, so
+ * /api/analyze returns 202 and the result lands later. Poll until the timestamp
+ * moves rather than leaving the page on a stale run.
+ */
+async function pollForAnalysis(previousGeneratedAt, button) {
+  const deadline = Date.now() + 150000;
+  let attempt = 0;
+
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 4000 : 3000));
+    attempt += 1;
+    button.textContent = `Analysing… ${Math.round((Date.now() - (deadline - 150000)) / 1000)}s`;
+
+    const next = await api('/api/state');
+    if (next.analysis?.generatedAt && next.analysis.generatedAt !== previousGeneratedAt) return next;
+    if (next.analysis?.lastError) {
+      throw new Error(`Analysis failed: ${next.analysis.lastError.message}`);
+    }
+  }
+  throw new Error('Analysis is taking longer than expected. Check the function logs.');
+}
+
 async function loadState({ reanalyze = false } = {}) {
   const button = $('refreshBtn');
   rememberOpenRows();
@@ -454,7 +490,13 @@ async function loadState({ reanalyze = false } = {}) {
   button.textContent = reanalyze ? 'Analysing…' : 'Loading…';
 
   try {
-    state = reanalyze ? await api('/api/analyze', { method: 'POST' }) : await api('/api/state');
+    if (reanalyze) {
+      const previous = state?.analysis?.generatedAt ?? null;
+      const result = await api('/api/analyze', { method: 'POST' });
+      state = result.started ? await pollForAnalysis(previous, button) : result;
+    } else {
+      state = await api('/api/state');
+    }
     render();
     announce(reanalyze ? 'Analysis refreshed.' : 'Loaded.');
   } catch (error) {

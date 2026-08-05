@@ -35,6 +35,8 @@ cp .env.example .env      # then fill in your paper keys
 docker compose up --build # → http://localhost:8080
 ```
 
+Deploying to Netlify instead? See [NETLIFY.md](NETLIFY.md).
+
 Without Docker: `npm install && npm start` (Node 20.6+), or `npm run mock` for the
 synthetic market.
 
@@ -44,8 +46,8 @@ synthetic market.
 npm test
 ```
 
-25 offline checks covering the indicator math, the scoring, session resolution,
-the order payload, and every risk blocker.
+36 offline checks covering the indicator math, the scoring, session resolution,
+the order payload, every risk blocker, and the serverless auth boundary.
 
 ## What it shows
 

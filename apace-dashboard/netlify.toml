@@ -1,0 +1,30 @@
+[build]
+  publish = "public"
+  command = "npm install --omit=dev"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # The dashboard's HTML, CSS and JS are served through the function so basic auth
+  # covers them too. esbuild only bundles what is imported, so they have to be
+  # named explicitly.
+  included_files = ["public/**"]
+
+[functions."analyze-background"]
+  # Several Alpaca calls plus a model call; well past a normal request budget.
+  timeout = 300
+
+# Everything, including the page itself, goes through the function. force = true
+# stops Netlify serving the static files directly and skipping authentication.
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"

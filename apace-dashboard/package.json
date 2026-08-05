@@ -11,10 +11,12 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/smoke.mjs",
+    "test": "node test/smoke.mjs && node test/netlify.mjs",
     "mock": "node test/serve-mock.mjs"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "@netlify/blobs": "^10.7.12",
+    "express": "^4.19.2",
+    "serverless-http": "^4.0.0"
   }
 }

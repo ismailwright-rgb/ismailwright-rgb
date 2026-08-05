@@ -54,7 +54,29 @@ export const config = {
   port: num('PORT', 8080),
   dashboardUser: process.env.DASHBOARD_USER || '',
   dashboardPassword: process.env.DASHBOARD_PASSWORD || '',
+
+  // Netlify sets NETLIFY=true in both builds and function runtimes.
+  isServerless: process.env.NETLIFY === 'true' || Boolean(process.env.NETLIFY_DEV),
+
+  // Order placement is opt-in. On a public host it stays off unless explicitly
+  // enabled, so a deploy cannot quietly expose a trade button to the internet.
+  enableTrading: process.env.ENABLE_TRADING
+    ? process.env.ENABLE_TRADING === 'true'
+    : !(process.env.NETLIFY === 'true' || Boolean(process.env.NETLIFY_DEV)),
 };
+
+// A public URL with no gate in front of it is not acceptable, whatever it serves:
+// the dashboard exposes account equity and positions even with trading disabled.
+if (config.isServerless && !config.dashboardUser) {
+  throw new Error(
+    'DASHBOARD_USER and DASHBOARD_PASSWORD are required when deploying to a public host. ' +
+      'Set them in your Netlify site environment variables.',
+  );
+}
+
+if (config.dashboardUser && !config.dashboardPassword) {
+  throw new Error('DASHBOARD_USER is set but DASHBOARD_PASSWORD is empty.');
+}
 
 if (!config.keyId || !config.secretKey) {
   throw new Error('ALPACA_KEY_ID and ALPACA_SECRET_KEY are required. Copy .env.example to .env.');
