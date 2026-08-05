@@ -568,53 +568,89 @@ function renderAutopilot(data) {
   const halted = Boolean(data.day?.haltedReason);
   const running = data.enabled && data.tradingEnabled && !halted;
 
-  badge.textContent = halted ? 'halted' : data.enabled ? (data.tradingEnabled ? 'running' : 'blocked') : 'off';
+  badge.textContent = halted ? 'halted' : data.enabled ? (data.tradingEnabled ? 'on' : 'blocked') : 'off';
   badge.className = `pill ${halted ? 'pill--bad' : running ? 'pill--good' : 'pill--neutral'}`;
 
-  stop.hidden = !data.enabled;
-  stop.textContent = halted ? 'Resume' : 'Stop';
-  stop.className = `btn btn--sm ${halted ? '' : 'btn--danger'}`;
-
-  if (!data.enabled) {
-    body.innerHTML =
-      '<p class="empty">Off. Set <code>AUTOPILOT=true</code> to let it trade on its own — read the journal it writes before trusting it.</p>';
-    return;
-  }
+  stop.hidden = false;
+  stop.dataset.next = halted ? 'resume' : data.enabled ? 'off' : 'on';
+  stop.textContent = halted ? 'Resume' : data.enabled ? 'Turn off' : 'Turn on';
+  stop.className = `btn btn--sm ${data.enabled && !halted ? 'btn--danger' : 'btn--primary'}`;
+  stop.disabled = !data.enabled && !data.tradingEnabled;
+  stop.title = !data.tradingEnabled ? 'ENABLE_TRADING is not true on this deployment' : '';
 
   const rows = [
-    ['Trades today', `${data.day.tradesPlaced} / ${data.maxTradesPerDay}`],
+    ['Trades today', `${data.day?.tradesPlaced ?? 0} / ${data.maxTradesPerDay}`],
     ['Day P&L', data.dayPnlPct == null ? '—' : pct(data.dayPnlPct)],
     ['Loss limit', `${data.dailyLossLimitPct}%`],
     ['Min score', data.minScore],
     ['Runs every', `${data.intervalMinutes} min`],
   ];
 
-  const lastFew = (data.journal || []).slice(0, 6);
-  const journalHtml = lastFew.length
-    ? lastFew
+  // What it would buy next, and how far short the rest are.
+  const watchHtml = (data.watching || []).length
+    ? data.watching
+        .map((w) => {
+          const state = w.held
+            ? '<span class="pill pill--accent">◆ held</span>'
+            : w.qualifies
+              ? '<span class="pill pill--good">▲ would buy</span>'
+              : `<span class="label">needs +${w.shortfall}</span>`;
+          return `<div class="log__row">
+            <span><span class="log__sym">${escapeHtml(w.symbol)}</span> <span class="num">${w.score}</span></span>
+            ${state}
+          </div>`;
+        })
+        .join('')
+    : '<p class="empty">No analysis yet — hit Refresh analysis.</p>';
+
+  const journalHtml = (data.journal || []).length
+    ? data.journal
+        .slice(0, 8)
         .map((item) => {
           const detail =
             item.action === 'trade'
-              ? `bought ${item.qty} ${escapeHtml(item.symbol)} at score ${item.score}`
+              ? `bought <strong>${item.qty} ${escapeHtml(item.symbol)}</strong> at score ${item.score}`
               : item.action === 'flatten'
                 ? `flattened: ${escapeHtml(item.reason || '')}`
                 : item.action === 'halt'
                   ? `halted: ${escapeHtml(item.reason || '')}`
-                  : escapeHtml((item.blockers || [])[0] || 'skipped');
+                  : item.action === 'enabled'
+                    ? 'switched on'
+                    : item.action === 'disabled'
+                      ? 'switched off'
+                      : item.action === 'resume'
+                        ? 'resumed'
+                        : escapeHtml((item.blockers || [])[0] || 'skipped');
           return `<div class="log__row">
-            <div><span class="label" style="text-transform:none">${detail}</span></div>
+            <div style="min-width:0"><span class="journal__detail">${detail}</span></div>
             <span class="log__time">${clockTime(item.at)}</span>
           </div>`;
         })
         .join('')
-    : '<p class="empty">No decisions logged yet.</p>';
+    : '<p class="empty">Nothing logged yet. Every decision it makes lands here, taken or skipped.</p>';
+
+  const blockerHtml = data.blockers?.length
+    ? `<ul class="blockers" style="margin-bottom:9px">${data.blockers
+        .map((b) => `<li>${escapeHtml(b)}</li>`)
+        .join('')}</ul>`
+    : data.enabled
+      ? '<p class="empty" style="color:var(--good)">Clear to trade — waiting for the next cycle.</p>'
+      : '';
 
   body.innerHTML = `
     ${halted ? `<p class="banner banner--bad" style="margin:0 0 9px">Halted: ${escapeHtml(data.day.haltedReason)}</p>` : ''}
+    ${
+      data.enabled
+        ? ''
+        : '<p class="empty">Off. Switching it on lets it place trades on its own, using the limits below.</p>'
+    }
+    ${blockerHtml}
     <div class="log">
       ${rows.map(([k, v]) => `<div class="log__row"><span>${escapeHtml(k)}</span><span class="num">${escapeHtml(String(v))}</span></div>`).join('')}
     </div>
-    <div class="panel__title">Recent decisions</div>
+    <div class="panel__title">Next up</div>
+    <div class="log">${watchHtml}</div>
+    <div class="panel__title">Journal</div>
     <div class="log">${journalHtml}</div>`;
 }
 
@@ -896,16 +932,31 @@ $('flattenBtn').addEventListener('click', async () => {
 
 $('autopilotHalt').addEventListener('click', async (event) => {
   const button = event.currentTarget;
-  const resuming = button.textContent === 'Resume';
-  if (!resuming && !confirm('Stop the autopilot for the rest of the session?')) return;
+  const next = button.dataset.next;
+
+  if (
+    next === 'on' &&
+    !confirm(
+      'Turn the autopilot on?\n\n' +
+        'It will place trades by itself, with no further confirmation, until you turn it off ' +
+        'or it hits a limit. The scoring has never been validated against history.',
+    )
+  ) {
+    return;
+  }
+  if (next === 'off' && !confirm('Turn the autopilot off? Open positions are left as they are.')) return;
 
   button.disabled = true;
   try {
-    await api(`/api/autopilot/${resuming ? 'resume' : 'halt'}`, {
-      method: 'POST',
-      body: JSON.stringify({ reason: 'stopped from the dashboard' }),
-    });
-    announce(resuming ? 'Autopilot resumed.' : 'Autopilot halted.');
+    if (next === 'resume') {
+      await api('/api/autopilot/resume', { method: 'POST' });
+    } else {
+      await api('/api/autopilot/enabled', {
+        method: 'POST',
+        body: JSON.stringify({ enabled: next === 'on' }),
+      });
+    }
+    announce(`Autopilot ${next === 'on' ? 'on' : next === 'off' ? 'off' : 'resumed'}.`);
     await pollAutopilot();
   } catch (error) {
     alert(`Could not change the autopilot: ${error.message}`);

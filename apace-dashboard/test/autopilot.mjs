@@ -175,6 +175,38 @@ await check('every decision is journalled, not just the trades', async () => {
   }
 });
 
+await check('the dashboard toggle overrides the environment default', async () => {
+  await resetDay();
+  assert.equal(await autopilot.isEnabled(), true, 'AUTOPILOT=true should be the starting point');
+
+  await autopilot.setEnabled(false);
+  assert.equal(await autopilot.isEnabled(), false);
+
+  orders.length = 0;
+  const result = await autopilot.tick({ refreshAnalysis, now: minutesIn(60) });
+  assert.equal(result.action, 'idle', 'a disabled autopilot must not reach the market');
+  assert.equal(orders.length, 0);
+
+  await autopilot.setEnabled(true);
+  assert.equal(await autopilot.isEnabled(), true);
+});
+
+await check('status says exactly what is blocking it and what it would buy', async () => {
+  await resetDay();
+  await refreshAnalysis();
+  const status = await autopilot.status();
+
+  assert.ok(Array.isArray(status.blockers), 'blockers must always be present');
+  assert.ok(status.watching.length > 0, 'the watch list is empty');
+  assert.ok(
+    status.watching.every((w) => typeof w.qualifies === 'boolean' && typeof w.score === 'number'),
+    'each watched symbol needs a score and a verdict',
+  );
+  const wouldBuy = status.watching.filter((w) => w.qualifies);
+  assert.ok(wouldBuy.every((w) => w.score >= config.autopilot.minScore));
+  assert.equal(status.source, 'dashboard', 'the override should be reported as coming from the dashboard');
+});
+
 await check('status reports the limits it is enforcing', async () => {
   const status = await autopilot.status();
   assert.equal(status.enabled, true);

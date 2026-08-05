@@ -25,6 +25,23 @@ import { tradeWindow } from './windows.js';
 
 const DAY_STATE_KEY = 'autopilot-day';
 const JOURNAL_KEY = 'autopilot-journal';
+const ENABLED_KEY = 'autopilot-enabled';
+
+/**
+ * AUTOPILOT sets the default; the dashboard toggle overrides it and persists.
+ * Requiring a redeploy to stop a trading loop would be a poor kill switch.
+ */
+export async function isEnabled() {
+  const override = await store.readKey(ENABLED_KEY, undefined);
+  return typeof override === 'boolean' ? override : config.autopilot.enabled;
+}
+
+export async function setEnabled(value) {
+  const next = Boolean(value);
+  await store.writeKey(ENABLED_KEY, next);
+  await journal({ action: next ? 'enabled' : 'disabled', by: 'dashboard' });
+  return next;
+}
 
 function todayKey(session) {
   return session.date;
@@ -58,11 +75,11 @@ export const readJournal = () => store.readKey(JOURNAL_KEY, []);
 export const readDayState = () => store.readKey(DAY_STATE_KEY, null);
 
 /** Reasons the autopilot will not trade at all right now, regardless of symbol. */
-function globalBlockers({ day, session, window, account, positions, analysisAgeSeconds }) {
+function globalBlockers({ day, session, window, account, positions, analysisAgeSeconds, enabled }) {
   const blockers = [];
 
-  if (!config.autopilot.enabled) blockers.push('Autopilot is off.');
-  if (!config.enableTrading) blockers.push('Order placement is disabled on this deployment.');
+  if (!enabled) blockers.push('Autopilot is off.');
+  if (!config.enableTrading) blockers.push('Order placement is disabled on this deployment (ENABLE_TRADING).');
   if (day.haltedReason) blockers.push(`Halted for the day: ${day.haltedReason}`);
 
   if (!session.isCurrent) blockers.push('Market is closed.');
@@ -106,6 +123,10 @@ function globalBlockers({ day, session, window, account, positions, analysisAgeS
  * the data is and so tests can drive it without the network.
  */
 export async function tick({ refreshAnalysis, now = Date.now() }) {
+  // Checked before any network call, so an idle loop costs nothing.
+  const enabled = await isEnabled();
+  if (!enabled) return { action: 'idle', reason: 'autopilot is off' };
+
   const resolved = await resolveSession(new Date(now));
   // Recompute against the injected clock so a test can place itself anywhere in
   // the session without waiting for it.
@@ -132,8 +153,7 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
     positions.length > 0 &&
     session.minutesToClose <= config.autopilot.flattenMinutesBeforeClose &&
     !day.flattened &&
-    config.enableTrading &&
-    config.autopilot.enabled
+    config.enableTrading
   ) {
     await alpaca.closeAllPositions();
     day.flattened = true;
@@ -151,7 +171,7 @@ export async function tick({ refreshAnalysis, now = Date.now() }) {
   const analysis = store.getAnalysis();
   const analysisAgeSeconds = store.analysisAgeSeconds();
 
-  const blockers = globalBlockers({ day, session, window, account, positions, analysisAgeSeconds });
+  const blockers = globalBlockers({ day, session, window, account, positions, analysisAgeSeconds, enabled });
   if (blockers.length) {
     await journal({ action: 'skip', scope: 'session', blockers, window: window.key });
     return { action: 'skip', blockers };
@@ -271,13 +291,50 @@ export async function resume() {
 
 export async function status() {
   const session = await resolveSession();
-  const [day, account] = await Promise.all([loadDay(session), alpaca.getAccount().catch(() => ({}))]);
+  const [day, enabled, account, positions] = await Promise.all([
+    loadDay(session),
+    isEnabled(),
+    alpaca.getAccount().catch(() => ({})),
+    alpaca.getPositions().catch(() => []),
+  ]);
+
   const equity = Number(account.equity) || 0;
   const window = tradeWindow(Date.now(), { open: session.open, close: session.close });
+  const analysis = store.getAnalysis();
+
+  // Exactly what is stopping it right now, so the panel never just says "idle".
+  const blockers = globalBlockers({
+    day,
+    session,
+    window,
+    account,
+    positions,
+    analysisAgeSeconds: store.analysisAgeSeconds(),
+    enabled,
+  });
+
+  const held = new Set(positions.map((p) => p.symbol));
+
+  // What it would take, in the order it would take them.
+  const watching = (analysis?.candidates || [])
+    .filter((c) => c.factors?.length)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+    .map((c) => ({
+      symbol: c.symbol,
+      score: c.score,
+      action: c.action,
+      held: held.has(c.symbol),
+      qualifies: c.action === 'TRADEABLE' && !held.has(c.symbol) && c.score >= config.autopilot.minScore,
+      shortfall: Math.max(0, config.autopilot.minScore - c.score),
+    }));
 
   return {
-    enabled: config.autopilot.enabled,
+    enabled,
+    source: typeof (await store.readKey(ENABLED_KEY, undefined)) === 'boolean' ? 'dashboard' : 'environment',
+    envDefault: config.autopilot.enabled,
     tradingEnabled: config.enableTrading,
+    paper: config.isPaper,
     intervalMinutes: config.autopilot.intervalMinutes,
     minScore: config.autopilot.minScore,
     minWindowQuality: config.autopilot.minWindowQuality,
@@ -286,5 +343,12 @@ export async function status() {
     day,
     window: { key: window.key, label: window.label, quality: window.quality },
     dayPnlPct: day.startEquity && equity ? ((equity - day.startEquity) / day.startEquity) * 100 : null,
+    blockers,
+    watching,
+    positions: positions.map((p) => ({
+      symbol: p.symbol,
+      qty: Number(p.qty),
+      unrealizedPl: Number(p.unrealized_pl),
+    })),
   };
 }

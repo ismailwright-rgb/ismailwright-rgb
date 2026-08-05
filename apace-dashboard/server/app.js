@@ -369,6 +369,22 @@ export function createApp() {
     }),
   );
 
+  // Switching it on or off from the dashboard. Persisted, so it takes effect
+  // without a redeploy and survives a restart.
+  app.post(
+    '/api/autopilot/enabled',
+    asyncRoute(async (req, res) => {
+      if (req.body?.enabled === true && !config.enableTrading) {
+        return res.status(409).json({
+          error: 'Order placement is disabled on this deployment',
+          blockers: ['Set ENABLE_TRADING=true before the autopilot can place anything.'],
+        });
+      }
+      const enabled = await autopilot.setEnabled(req.body?.enabled === true);
+      res.json({ ok: true, enabled, ...(await autopilot.status()) });
+    }),
+  );
+
   // The kill switch. Halting takes effect for the rest of the session and
   // survives a restart; it clears itself at the next open.
   app.post(

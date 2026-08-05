@@ -15,11 +15,13 @@ createApp().listen(config.port, '0.0.0.0', () => {
   console.log(`  auth        ${config.dashboardUser ? 'basic auth on' : 'OFF — bind to localhost only'}`);
 });
 
-if (config.autopilot.enabled) {
-  console.log(
-    '\n  Autopilot is trading without supervision.\n' +
-      '  The scoring has never been validated against history. Read the journal.\n',
-  );
+{
+  if (config.autopilot.enabled) {
+    console.log(
+      '\n  Autopilot is trading without supervision.\n' +
+        '  The scoring has never been validated against history. Read the journal.\n',
+    );
+  }
 
   const runTick = async () => {
     try {

@@ -18,12 +18,15 @@ import * as autopilot from '../../server/autopilot.js';
 export const config = { schedule: '*/5 * * * *' };
 
 export default async () => {
-  if (!appConfig.autopilot.enabled || !appConfig.enableTrading) {
-    return new Response('autopilot off', { status: 200 });
+  if (!appConfig.enableTrading) {
+    return new Response('trading disabled on this deployment', { status: 200 });
   }
 
   try {
     await store.init({ force: true });
+    if (!(await autopilot.isEnabled())) {
+      return new Response('autopilot off', { status: 200 });
+    }
     const result = await autopilot.tick({ refreshAnalysis });
     console.log('autopilot:', JSON.stringify(result).slice(0, 400));
     return new Response(JSON.stringify(result), { status: 200 });
