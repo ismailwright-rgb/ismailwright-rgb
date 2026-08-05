@@ -105,16 +105,23 @@ const backend = config.isServerless ? blobBackend : fileBackend;
  * analysis that was computed and thrown away.
  */
 let blobsWorking = null;
+let probedAt = 0;
 
 export async function storeInfo() {
   if (!config.isServerless) return { backend: 'filesystem', shared: true };
 
-  if (blobsWorking === null) {
+  // A failure is re-checked rather than remembered: the Blobs context is wired
+  // up per invocation, so an early probe can fail on an instance where a later
+  // one succeeds.
+  const stale = blobsWorking === false && Date.now() - probedAt > 30_000;
+  if (blobsWorking === null || stale) {
+    probedAt = Date.now();
     try {
       const store = await getBlobStore();
       await store.setJSON('__probe', { at: Date.now() });
       blobsWorking = true;
     } catch {
+      blobStore = null; // force a fresh getStore() next time
       blobsWorking = false;
     }
   }

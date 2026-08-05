@@ -414,8 +414,10 @@ function renderBanners(data, meta) {
   }
   if (state?.store && state.store.shared === false) {
     banners.push([
-      'bad',
-      `<strong>State is not shared between functions.</strong> ${escapeHtml(state.store.hint || '')} Until then the analysis is computed and thrown away, so the candidate list stays empty.`,
+      'warn',
+      '<strong>State is not shared between server instances.</strong> Scores and reasoning work — each refresh is computed on demand. ' +
+        'What does not work is the autopilot and one-click trading, which need the analysis to survive between requests. ' +
+        'Enable Netlify Blobs under Site configuration → Blobs to fix it.',
     ]);
   }
   if (data.dataFeed === 'iex') {
@@ -696,7 +698,7 @@ function renderEmpty() {
     <p class="empty" style="padding:4px 0">
       ${
         failed
-          ? 'No analysis is reaching this page. See the banner above — until state is shared between functions, each run is written somewhere the dashboard cannot read.'
+          ? 'Running the analysis on demand, because state is not shared between instances. This takes a few seconds longer than usual.'
           : 'No analysis yet. Starting one now — it pulls bars, quotes and news for the whole watchlist, so give it up to a minute.'
       }
     </p>
@@ -812,11 +814,21 @@ async function loadState({ reanalyze = false } = {}) {
       const result = await api('/api/analyze', { method: 'POST' });
       state = result.started ? await pollForAnalysis(previous, button) : result;
     } else {
-      state = await api('/api/state');
+      const next = await api('/api/state');
 
-      // A deployment that has never run an analysis would otherwise sit on the
+      // With ephemeral state the next request may land on an instance that has
+      // never seen the analysis. Hold on to the one already on screen instead of
+      // blanking it.
+      if (!next.analysis && state?.analysis) {
+        next.analysis = state.analysis;
+        next.ageSeconds = state.ageSeconds;
+        next.stale = state.stale;
+      }
+      state = next;
+
+      // A deployment that has never analysed anything would otherwise sit on the
       // placeholder until someone thought to press the button.
-      if (!state.analysis && !firstAnalysisStarted && state.store?.shared !== false) {
+      if (!state.analysis && !firstAnalysisStarted) {
         firstAnalysisStarted = true;
         render();
         return loadState({ reanalyze: true });

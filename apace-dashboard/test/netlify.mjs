@@ -139,14 +139,14 @@ await check('preview still explains itself, with the block listed first', async 
   assert.ok(body.plan.qty >= 1, 'the plan is still shown so the reasoning stays visible');
 });
 
-await check('analyze hands off to the background function', async () => {
+await check('without shared state, analyze runs inline and returns the result', async () => {
   process.env.URL = 'https://example.netlify.app';
   const seen = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = String(typeof input === 'string' ? input : input.url);
     if (url.includes('analyze-background')) {
-      seen.push({ url, auth: init?.headers?.Authorization });
+      seen.push(url);
       return new Response('', { status: 202 });
     }
     return realFetch(input, init);
@@ -155,10 +155,16 @@ await check('analyze hands off to the background function', async () => {
   const res = await call('/api/analyze', { method: 'POST' });
   globalThis.fetch = realFetch;
 
-  assert.equal(res.statusCode, 202);
-  assert.equal(JSON.parse(res.body).started, true);
-  assert.equal(seen.length, 1, 'background function was not invoked');
-  assert.equal(seen[0].auth, AUTH, 'credentials must be forwarded to the background function');
+  // Handing the run to a background function would write the result somewhere
+  // this instance can never read, so without shared state it has to happen here
+  // and come back in the response itself.
+  assert.equal(seen.length, 0, 'a background run would be computed and discarded');
+  assert.equal(res.statusCode, 200);
+
+  const body = JSON.parse(res.body);
+  assert.ok(body.analysis, 'the analysis must be returned directly');
+  assert.ok(body.analysis.candidates.length > 0);
+  assert.equal(body.store.shared, false);
 });
 
 await rm(process.env.DATA_DIR, { recursive: true, force: true });

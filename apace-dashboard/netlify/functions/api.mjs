@@ -56,7 +56,23 @@ function startupPage(error) {
   return lines.join('\n');
 }
 
+/**
+ * Netlify injects the Blobs context automatically into v2 functions, but this is
+ * a Lambda-compatible one — there it has to be wired up from the event, once per
+ * invocation, before anything calls getStore(). Without this, Blobs looks
+ * unavailable and state silently falls back to per-instance temp files.
+ */
+async function connectBlobs(event) {
+  try {
+    const { connectLambda } = await import('@netlify/blobs');
+    if (typeof connectLambda === 'function') connectLambda(event);
+  } catch {
+    // Older @netlify/blobs, or not running on Netlify. The store falls back.
+  }
+}
+
 export const handler = async (event, context) => {
+  await connectBlobs(event);
   await ensureApp();
 
   if (startupError) {

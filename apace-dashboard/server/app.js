@@ -178,9 +178,13 @@ export function createApp() {
   app.post(
     '/api/analyze',
     asyncRoute(async (req, res) => {
-      if (config.isServerless) {
-        // An analysis run outlives a request here: several Alpaca calls plus a
-        // model call. Hand it to a background function and let the page poll.
+      const storeState = await store.storeInfo();
+
+      // Handing off to a background function only works when both sides can see
+      // the same store. Without that, the run would be computed and discarded,
+      // so do it inline and return it directly - the page gets its analysis even
+      // if nothing can persist it.
+      if (config.isServerless && storeState.shared) {
         await triggerBackgroundAnalysis(req);
         return res.status(202).json({ started: true, poll: '/api/state' });
       }
@@ -192,7 +196,7 @@ export function createApp() {
         stale: false,
         trades: store.getTradeLog().slice(0, 20),
         tradingEnabled: await tradingEnabled(),
-        store: await store.storeInfo(),
+        store: storeState,
       });
     }),
   );

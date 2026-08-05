@@ -74,7 +74,10 @@ export async function analyzeNews(candidates) {
           { role: 'user', content: buildUserPrompt(candidates) },
         ],
       }),
-      signal: AbortSignal.timeout(90_000),
+      // Inside a serverless request the whole analysis shares one short budget,
+      // so the model gets a slice of it and the run degrades to technicals-only
+      // rather than timing the request out.
+      signal: AbortSignal.timeout(config.isServerless ? 7_000 : 90_000),
     });
 
     if (!response.ok) {
