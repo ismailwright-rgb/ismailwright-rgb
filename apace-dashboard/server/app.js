@@ -13,6 +13,7 @@ import { resolveSession } from './session.js';
 import { tradeWindow } from './windows.js';
 import * as autopilot from './autopilot.js';
 import { flags, setFlags, tradingEnabled } from './runtime.js';
+import { runDiagnostics } from './diagnostics.js';
 
 /**
  * Locate the static files under both module systems.
@@ -398,6 +399,13 @@ export function createApp() {
   );
 
   app.get('/api/flags', asyncRoute(async (req, res) => res.json(await flags())));
+
+  // Read-only. Tests every dependency one at a time, with timings, so a failure
+  // names itself instead of surfacing as an empty page.
+  app.get(
+    '/api/diagnostics',
+    asyncRoute(async (req, res) => res.json(await runDiagnostics({ publicDir: PUBLIC_DIR }))),
+  );
 
   // The kill switch. Halting takes effect for the rest of the session and
   // survives a restart; it clears itself at the next open.

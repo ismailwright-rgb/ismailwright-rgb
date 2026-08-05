@@ -1,0 +1,9 @@
+This directory is published as the site root, and is empty on purpose.
+
+Nothing should be served statically: every request has to reach the api
+function so that authentication covers the page as well as the API. With an
+empty publish directory that happens naturally - no static file matches, so
+the catch-all redirect takes over.
+
+The alternative, force = true on /*, also captures /.netlify/functions/*,
+which makes the background and scheduled functions unreachable.

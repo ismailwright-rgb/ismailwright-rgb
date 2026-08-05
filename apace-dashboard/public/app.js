@@ -968,6 +968,56 @@ document.addEventListener('click', async (event) => {
   }
 });
 
+function renderDiagnostics(report) {
+  const rows = report.checks
+    .map((check) => {
+      const glyph = check.ok ? '<span style="color:var(--good)">\u2713</span>' : '<span style="color:var(--bad)">\u2715</span>';
+      const detail = check.ok ? check.detail || '' : check.error || 'failed';
+      return `<tr>
+        <td>${glyph}</td>
+        <td><strong>${escapeHtml(check.name)}</strong><div class="label" style="text-transform:none">${escapeHtml(check.what)}</div></td>
+        <td class="num">${check.ms}ms</td>
+        <td style="color:${check.ok ? 'var(--ink-soft)' : 'var(--bad)'}">${escapeHtml(String(detail))}</td>
+      </tr>`;
+    })
+    .join('');
+
+  $('diagPanel').hidden = false;
+  $('diagPanel').innerHTML = `
+    <div class="banner banner--${report.ok ? 'info' : 'bad'}" style="display:block">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+        <strong>Diagnostics — ${report.ok ? 'all dependencies responded' : 'something is failing'}</strong>
+        <button class="btn btn--sm" id="diagClose" type="button">Close</button>
+      </div>
+      <p style="margin:6px 0 10px">${report.verdict.map(escapeHtml).join(' ')}</p>
+      <div style="overflow-x:auto">
+        <table class="diag">${rows}</table>
+      </div>
+      <p class="label" style="margin-top:8px;text-transform:none">
+        Upstream calls totalled ${report.upstreamMs}ms of ${report.totalMs}ms. Read-only — nothing here places an order.
+      </p>
+    </div>`;
+
+  document.getElementById('diagClose')?.addEventListener('click', () => {
+    $('diagPanel').hidden = true;
+  });
+}
+
+$('diagBtn').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = 'Checking…';
+  try {
+    renderDiagnostics(await api('/api/diagnostics'));
+  } catch (error) {
+    $('diagPanel').hidden = false;
+    $('diagPanel').innerHTML = `<div class="banner banner--bad"><strong>Diagnostics failed to run.</strong> ${escapeHtml(error.message)}</div>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Diagnostics';
+  }
+});
+
 $('refreshBtn').addEventListener('click', () => loadState({ reanalyze: true }));
 
 $('flattenBtn').addEventListener('click', async () => {

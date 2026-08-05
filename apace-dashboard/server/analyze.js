@@ -135,7 +135,14 @@ export async function runAnalysis() {
       news: c.newsArticles,
     }));
 
-  const newsRead = await analyzeNews(shortlist);
+  // Inside a serverless request the whole run shares one short budget. If the
+  // data fetches have already eaten it, return the technicals rather than
+  // spending what is left on the model and timing the request out.
+  const elapsedMs = Date.now() - startedAt;
+  const budgetSpent = config.isServerless && elapsedMs > 6000;
+  const newsRead = budgetSpent
+    ? { available: false, reason: `skipped: data fetches took ${(elapsedMs / 1000).toFixed(1)}s`, bySymbol: {} }
+    : await analyzeNews(shortlist);
 
   const equity = Number(account.equity) || 0;
   for (const candidate of candidates) {

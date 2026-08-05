@@ -1,27 +1,28 @@
 [build]
-  publish = "public"
+  # Deliberately empty. Nothing is served statically: every request must reach
+  # the api function so basic auth covers the page as well as the API, and the
+  # function serves public/ from its own bundle.
+  #
+  # The obvious alternative - publishing public/ and forcing /* to the function -
+  # is a trap. A forced /* also matches /.netlify/functions/*, so the api
+  # function intercepts calls meant for the background and scheduled functions
+  # and they silently never run.
+  publish = "netlify/site"
   command = "npm install --omit=dev"
 
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  # The dashboard's HTML, CSS and JS are served through the function so basic auth
-  # covers them too. esbuild only bundles what is imported, so they have to be
-  # named explicitly.
+  # esbuild only bundles what is imported, so the page's files are named here.
   included_files = ["public/**"]
 
-# analyze-background gets the long budget from its name alone - any function
-# whose name ends in "-background" may run for up to 15 minutes. There is no
-# per-function timeout key in netlify.toml, and an unrecognised one can fail
-# config validation and take the whole build with it.
-
-# Everything, including the page itself, goes through the function. force = true
-# stops Netlify serving the static files directly and skipping authentication.
+# No force: with an empty publish directory nothing static matches, so this
+# takes every request except Netlify's own /.netlify/* paths, which stay
+# reachable for the background and scheduled functions.
 [[redirects]]
   from = "/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
-  force = true
 
 [[headers]]
   for = "/*"
