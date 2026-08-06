@@ -306,6 +306,94 @@ for r in rows:
   printf '\n'
 }
 
+# Ask Apollo directly whether the key works, using the EXACT query and the exact
+# endpoint W1 uses. A people-search costs no credits (only enrichment does), so
+# this is free to run as often as you like. Worth its own command because the
+# alternative was a five-minute scrape that ends in an empty table, which looks
+# identical whether the cause is a bad key, a plan without API access, or a
+# query that genuinely matches nobody.
+cmd_apollo() {
+  ensure_config APOLLO_KEY
+  need_cmd python3
+  head1 "Apollo preflight"
+
+  _q='{"person_titles":["Owner","Founder","Managing Partner","Partner","Practice Owner","Practice Manager","Office Manager","General Manager","President"],"person_locations":["United States"],"organization_locations":["Los Angeles, California, US"],"organization_num_employees_ranges":["2,100"],"contact_email_status":["verified"],"q_organization_keyword_tags":["personal injury law"],"per_page":3,"page":1}'
+
+  say "Asking Apollo for LA personal-injury firms (the real W1 query, 3 results)..."
+  _resp=$(printf '%s' "$_q" | curl -sS -m 40 -w '\n%{http_code}' \
+    -X POST "https://api.apollo.io/api/v1/mixed_people/search" \
+    -H "x-api-key: $APOLLO_KEY" \
+    -H "Content-Type: application/json" \
+    -H "accept: application/json" \
+    --data-binary @- 2>&1) || true
+
+  printf '%s' "$_resp" | python3 -c '
+import json, sys
+raw = sys.stdin.read().rsplit("\n", 1)
+body, code = (raw[0], raw[1].strip()) if len(raw) == 2 else (raw[0], "?")
+try:
+    d = json.loads(body)
+except Exception:
+    d = None
+
+if code == "200" and isinstance(d, dict):
+    pag = d.get("pagination") or {}
+    people = d.get("people") or []
+    print("  KEY WORKS. api/v1/mixed_people/search is live on this plan.")
+    print("  %s people match this query (%s pages)." % (
+        pag.get("total_entries", "?"), pag.get("total_pages", "?")))
+    if not people:
+        print("  ...but this page came back empty. The key is fine; the FILTERS are")
+        print("  too tight. Widen organization_locations in W1s Run Config.")
+    for p in people[:3]:
+        org = p.get("organization") or {}
+        print("   - %-22s %-26s %s" % (
+            (p.get("name") or "?")[:22],
+            (p.get("title") or "?")[:26],
+            (org.get("name") or "?")[:34]))
+        print("     %s | %s, %s" % (
+            org.get("primary_domain") or "no domain",
+            org.get("city") or "?", org.get("state") or "?"))
+    if people:
+        print("")
+        print("  Check those are LOCAL BUSINESSES, not people who merely live in LA.")
+        print("  That is what organization_locations is there to enforce.")
+    sys.exit(0)
+
+msg = ""
+if isinstance(d, dict):
+    msg = str(d.get("error") or d.get("message") or d.get("error_code") or "")[:300]
+if "API_INACCESSIBLE" in body or "not included in your" in body:
+    print("  Your Apollo plan does NOT include API access.")
+    print("  Search works in Apollos own web app on every plan; the API is paid only.")
+    print("  Upgrade, then re-run this. Nothing else needs changing.")
+elif code in ("401", "403"):
+    print("  Apollo rejected the key (HTTP %s). %s" % (code, msg))
+    print("  Get the API key from apollo.io > Settings > Integrations > API - it is")
+    print("  NOT your login password and NOT the OAuth app secret.")
+    print("  Then:  sh ~/sanaku.sh set APOLLO_KEY <key>")
+elif code == "404":
+    print("  HTTP 404 on api/v1/mixed_people/search.")
+    print("  Apollo has moved this endpoint before (mixed_people/api_search).")
+    print("  Tell me and I will repoint W1 - do not assume the key is bad.")
+else:
+    print("  Unexpected response (HTTP %s): %s" % (code, (msg or body)[:300]))
+sys.exit(1)
+'
+  _rc=$?
+  printf '\n'
+  if [ "$_rc" -eq 0 ]; then
+    ok "Apollo is ready. Re-import the scraper so it turns on:"
+    say "    sh ~/sanaku.sh scrape"
+    say ""
+    say "  Reveals per run default to 25. To change it:"
+    say "    APOLLO_REVEALS=40 sh ~/sanaku.sh scrape"
+    say "  Search is free; only email reveals cost credits, and only Tier 1-2"
+    say "  prospects are ever revealed."
+  fi
+  return $_rc
+}
+
 cmd_scrape() {
   ensure_config N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SERPAPI_KEY OWNER_EMAIL
   need_cmd python3
@@ -1219,6 +1307,7 @@ sanaku - control script
   sh ~/sanaku.sh audit       check the project for gaps before you go live
   sh ~/sanaku.sh logs        show what the last scraper run did, node by node
   sh ~/sanaku.sh scrape      run the prospect scraper now
+  sh ~/sanaku.sh apollo      test the Apollo key + targeting (free, no credits)
   sh ~/sanaku.sh import NAME  install a workflow into n8n (see list below)
   sh ~/sanaku.sh voice       install the AI phone agent + how to wire VAPI
   sh ~/sanaku.sh demo        a throwaway client to film and to demo on calls
@@ -1271,6 +1360,7 @@ case "${1:-}" in
   logs)      cmd_logs ;;
   next)      cmd_next ;;
   scrape)    cmd_scrape ;;
+  apollo)    cmd_apollo ;;
   import)    shift; cmd_import "$@" ;;
   voice)     cmd_voice ;;
   sellsheet) cmd_sellsheet ;;

@@ -34,6 +34,7 @@ DASHBOARD_URL="${DASHBOARD_URL:-https://sanaku-command-center.netlify.app}"
 OWNER_EMAIL="${OWNER_EMAIL:-}"
 SERPAPI_KEY="${SERPAPI_KEY:-}"
 APOLLO_KEY="${APOLLO_KEY:-}"   # optional: Apollo's free plan has no API access
+APOLLO_REVEALS="${APOLLO_REVEALS:-}"   # email reveals per run when Apollo is on (default 25)
 SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}"
 ACTIVATE="${ACTIVATE:-1}"
 
@@ -57,7 +58,7 @@ jsonget() { python3 -c "import sys,json;d=json.load(sys.stdin);print(eval(sys.ar
 
 # Printed so a stale cached copy is visible immediately, rather than being
 # diagnosed from an identical-looking traceback.
-BUILD="8"
+BUILD="9"
 echo "import-workflow.sh build $BUILD"
 
 echo "==> Checking n8n API access..."
@@ -101,7 +102,7 @@ print(json.dumps({
 fi
 
 echo "==> Patching for this instance..."
-export SUPA_CRED_ID APOLLO_CRED_ID DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY SUPABASE_ANON_KEY TMPDIR_WF="$TMP"
+export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY SUPABASE_ANON_KEY TMPDIR_WF="$TMP"
 python3 <<'PY'
 import json, os, re, sys
 
@@ -178,6 +179,16 @@ for node in wf["nodes"]:
         if n != 1:
             print(f"    !! Run Config has {n} useApollo flags, expected 1 - aborting", file=sys.stderr)
             sys.exit(1)
+        # 12 was sized for a free-tier credit ceiling that does not exist (the
+        # free plan has no API at all). On a paid plan the cap is the pipeline
+        # bottleneck: an unrevealed prospect has no email, and W2's queue is
+        # filtered on contact_email IS NOT NULL, so it is never contacted.
+        if apollo_id:
+            want = os.environ.get("APOLLO_REVEALS", "").strip()
+            want = int(want) if want.isdigit() and int(want) > 0 else 25
+            code, n = re.subn(r"maxRevealsPerRun:\s*\d+", f"maxRevealsPerRun: {want}", code)
+            if n != 1:
+                raise SystemExit(f"    !! Run Config has {n} maxRevealsPerRun settings, expected 1")
         node["parameters"]["jsCode"] = code
         print("    apollo people-search: " + ("on" if apollo_id else "off (no APOLLO_KEY)"))
 

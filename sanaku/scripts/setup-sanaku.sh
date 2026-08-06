@@ -30,6 +30,7 @@ set -euo pipefail
 : "${SUPABASE_SERVICE_KEY:?Set SUPABASE_SERVICE_KEY (service_role key)}"
 : "${SERPAPI_KEY:?Set SERPAPI_KEY (serpapi.com key - free tier, the primary data source)}"
 APOLLO_KEY="${APOLLO_KEY:-}"   # optional: Apollo's free plan has no API access
+APOLLO_REVEALS="${APOLLO_REVEALS:-}"   # email reveals per run when Apollo is on (default 25)
 : "${OWNER_EMAIL:?Set OWNER_EMAIL (your email for digests)}"
 MAX_NEW="${MAX_NEW:-20}"
 
@@ -84,7 +85,7 @@ print(json.dumps({
 fi
 echo "    supabase cred: $SUPA_CRED_ID | apollo cred: ${APOLLO_CRED_ID:-skipped (no APOLLO_KEY)}"
 if [ -n "$APOLLO_CRED_ID" ]; then
-  echo "    Apollo people-search ON - named decision makers, max 12 email reveals/run"
+  echo "    Apollo people-search ON - named decision makers, ${APOLLO_REVEALS:-25} email reveals/run"
 else
   echo "    Apollo people-search OFF - SerpAPI only, so prospects arrive without a"
   echo "    named contact. Turn it on:  sh ~/sanaku.sh set APOLLO_KEY <key>  (paid plan;"
@@ -93,7 +94,7 @@ fi
 
 echo "==> Downloading + patching W1..."
 curl -fsSL "$RAW_WF" -o "$TMP/w1.json"
-export SUPA_CRED_ID APOLLO_CRED_ID MAX_NEW TMPDIR_WF="$TMP"
+export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS MAX_NEW TMPDIR_WF="$TMP"
 python3 <<'PY'
 import json, os, re
 
@@ -153,6 +154,16 @@ for node in wf["nodes"]:
                           "useApollo: " + ("true" if apollo_id else "false"), code)
         if n != 1:
             raise SystemExit(f"    !! Run Config has {n} useApollo flags, expected 1 - refusing to guess")
+        # 12 was sized for a free-tier credit ceiling that does not exist (the
+        # free plan has no API at all). On a paid plan the cap is the pipeline
+        # bottleneck: an unrevealed prospect has no email, and W2's queue is
+        # filtered on contact_email IS NOT NULL, so it is never contacted.
+        if apollo_id:
+            want = os.environ.get("APOLLO_REVEALS", "").strip()
+            want = int(want) if want.isdigit() and int(want) > 0 else 25
+            code, n = re.subn(r"maxRevealsPerRun:\s*\d+", f"maxRevealsPerRun: {want}", code)
+            if n != 1:
+                raise SystemExit(f"    !! Run Config has {n} maxRevealsPerRun settings, expected 1")
         node["parameters"]["jsCode"] = code
     if node["name"] == "Send Digest":
         node["disabled"] = True          # no Gmail credential yet; data still saves
