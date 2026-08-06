@@ -64,6 +64,7 @@ SUPABASE_URL='https://YOUR-REF.supabase.co'
 SUPABASE_SERVICE_KEY='eyJ...'
 SUPABASE_ANON_KEY='eyJ...'
 SERPAPI_KEY='...'
+APOLLO_KEY=''            # optional; leave empty unless Apollo is on a PAID plan
 OWNER_EMAIL='you@example.com'
 EOF
 chmod 600 ~/.sanaku.env
@@ -216,10 +217,15 @@ baked in at build time. `netlify.toml` handles the SPA redirect.
 | Fee structures | Law firms: flat or retainer+per-lead only. Medical: flat only. Home services: anything. Encode it in `pricing_model` when you close. |
 
 ## Free-tier ceilings to watch
-- **Apollo**: search is cheap; `people/match` (email reveal) burns the ~50–100/mo
-  free credits. W1 caps at 12 reveals/run, Tier 1 only. You WILL hit the
-  ceiling by week 2–3 — that's fine, prioritize by intent score; first client
-  pays for the $49 plan.
+- **Apollo**: there is no free tier *for the API*. A free-plan key returns
+  `API_INACCESSIBLE` on every call — verified against the live account, not
+  read off a pricing page. The in-app free credits are usable in Apollo's own
+  UI only. So W1 ships with Apollo off and SerpAPI as the source; the trade is
+  that a SerpAPI-only prospect has a business but no named decision maker.
+  On a paid plan: `sh ~/sanaku.sh set APOLLO_KEY <key>` and re-import — the
+  installer creates the credential and turns `useApollo` on. Search is cheap;
+  `people/match` (email reveal) is what costs credits, so W1 caps at 12
+  reveals/run, Tier 1 only, best intent score first.
 - **Google Places**: needs a billing-enabled GCP project but the monthly $200
   credit covers this volume ~free. Leave the key unset until then — W1 degrades
   gracefully (no reviews signal, slightly weaker scoring).

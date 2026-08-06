@@ -33,6 +33,7 @@ set -eu
 DASHBOARD_URL="${DASHBOARD_URL:-https://sanaku-command-center.netlify.app}"
 OWNER_EMAIL="${OWNER_EMAIL:-}"
 SERPAPI_KEY="${SERPAPI_KEY:-}"
+APOLLO_KEY="${APOLLO_KEY:-}"   # optional: Apollo's free plan has no API access
 SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}"
 ACTIVATE="${ACTIVATE:-1}"
 
@@ -56,7 +57,7 @@ jsonget() { python3 -c "import sys,json;d=json.load(sys.stdin);print(eval(sys.ar
 
 # Printed so a stale cached copy is visible immediately, rather than being
 # diagnosed from an identical-looking traceback.
-BUILD="7"
+BUILD="8"
 echo "import-workflow.sh build $BUILD"
 
 echo "==> Checking n8n API access..."
@@ -82,14 +83,32 @@ print(json.dumps({
 }))')" | jsonget 'd["id"]')
 echo "    credential: $SUPA_CRED_ID"
 
+# Apollo is opt-in. Without a key the workflow's Apollo nodes must lose their
+# credential reference entirely: pointing at an id that does not exist in this
+# instance fails at run time with "credential not found", which reads like an
+# n8n problem rather than a missing key.
+APOLLO_CRED_ID=""
+if [ -n "$APOLLO_KEY" ]; then
+  echo "==> Creating the Apollo credential in n8n..."
+  APOLLO_CRED_ID=$(api POST "/credentials" "$(python3 -c '
+import json, os
+print(json.dumps({
+  "name": "Apollo API Key (Header Auth)",
+  "type": "httpHeaderAuth",
+  "data": {"name": "x-api-key", "value": os.environ["APOLLO_KEY"]},
+}))')" | jsonget 'd["id"]')
+  echo "    credential: $APOLLO_CRED_ID"
+fi
+
 echo "==> Patching for this instance..."
-export SUPA_CRED_ID DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY SUPABASE_ANON_KEY TMPDIR_WF="$TMP"
+export SUPA_CRED_ID APOLLO_CRED_ID DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY SUPABASE_ANON_KEY TMPDIR_WF="$TMP"
 python3 <<'PY'
 import json, os, re, sys
 
 tmp = os.environ["TMPDIR_WF"]
 wf = json.load(open(f"{tmp}/wf.json"))
 supa_id = os.environ["SUPA_CRED_ID"]
+apollo_id = os.environ.get("APOLLO_CRED_ID", "")
 
 # Known values, by the env var name the workflows use.
 VALUES = {
@@ -140,6 +159,27 @@ for node in wf["nodes"]:
         creds["httpCustomAuth"] = {"id": supa_id, "name": "Supabase Service Role (Custom Auth)"}
     elif "httpCustomAuth" in creds:
         creds["httpCustomAuth"] = {"id": supa_id, "name": "Supabase Service Role (Custom Auth)"}
+    if "httpHeaderAuth" in creds and "Apollo" in creds["httpHeaderAuth"].get("name", ""):
+        if apollo_id:
+            creds["httpHeaderAuth"] = {"id": apollo_id, "name": "Apollo API Key (Header Auth)"}
+        else:
+            del creds["httpHeaderAuth"]
+            node["parameters"].pop("authentication", None)
+            node["parameters"].pop("genericAuthType", None)
+
+# W1 only. The flag is a CONSEQUENCE of having a key, never a hand-edit: true
+# with no credential fails every Apollo node mid-run, after the SerpAPI branch
+# it replaced has already been skipped.
+for node in wf["nodes"]:
+    if node["name"] == "Run Config" and "useApollo" in node.get("parameters", {}).get("jsCode", ""):
+        code, n = re.subn(r"useApollo:\s*(?:true|false)",
+                          "useApollo: " + ("true" if apollo_id else "false"),
+                          node["parameters"]["jsCode"])
+        if n != 1:
+            print(f"    !! Run Config has {n} useApollo flags, expected 1 - aborting", file=sys.stderr)
+            sys.exit(1)
+        node["parameters"]["jsCode"] = code
+        print("    apollo people-search: " + ("on" if apollo_id else "off (no APOLLO_KEY)"))
 
 # Anything still referencing $env would resolve to undefined at run time.
 # Fail on the ones that break the workflow; report the rest, since several are

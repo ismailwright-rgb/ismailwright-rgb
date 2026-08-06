@@ -154,6 +154,7 @@ SUPABASE_URL='$SUPABASE_URL'
 SUPABASE_SERVICE_KEY='$SUPABASE_SERVICE_KEY'
 SUPABASE_ANON_KEY='$SUPABASE_ANON_KEY'
 SERPAPI_KEY='$SERPAPI_KEY'
+APOLLO_KEY='$APOLLO_KEY'
 OWNER_EMAIL='$OWNER_EMAIL'
 SUPABASE_PAT='$SUPABASE_PAT'
 SMTP_PASS='$SMTP_PASS'
@@ -163,7 +164,7 @@ EOF
   ok "saved to $CONFIG (readable only by you)"
 }
 
-KEYS="N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY OWNER_EMAIL DASHBOARD_URL SUPABASE_PAT SMTP_PASS"
+KEYS="N8N_URL N8N_KEY SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY SERPAPI_KEY APOLLO_KEY OWNER_EMAIL DASHBOARD_URL SUPABASE_PAT SMTP_PASS"
 
 load_config() {
   # Values passed in the environment win over the stored file, so a fully
@@ -201,6 +202,7 @@ ensure_config() { # ensure_config key1 key2 ...
       SUPABASE_SERVICE_KEY) ask SUPABASE_SERVICE_KEY "Supabase service_role key (Project Settings > API)" jwt;;
       SUPABASE_ANON_KEY)    ask SUPABASE_ANON_KEY "Supabase anon public key (Project Settings > API)" jwt;;
       SERPAPI_KEY)          ask SERPAPI_KEY "SerpAPI key (serpapi.com/manage-api-key)" key;;
+      APOLLO_KEY)           ask APOLLO_KEY "Apollo API key (apollo.io > Settings > Integrations > API) - PAID plans only" key;;
       OWNER_EMAIL)          ask OWNER_EMAIL "Your email (for digests/alerts)" email;;
       DASHBOARD_URL)        ask DASHBOARD_URL "Command center URL (where client invite links land)" url;;
       SMTP_PASS)            ask SMTP_PASS "App password for sending client emails - 16 letters from Google, not your own password" apppass;;
@@ -311,6 +313,7 @@ cmd_scrape() {
   N8N_URL="$N8N_URL" N8N_KEY="$N8N_KEY" \
   SUPABASE_URL="$SUPABASE_URL" SUPABASE_SERVICE_KEY="$SUPABASE_SERVICE_KEY" \
   SERPAPI_KEY="$SERPAPI_KEY" OWNER_EMAIL="$OWNER_EMAIL" \
+  APOLLO_KEY="${APOLLO_KEY:-}" \
   MAX_NEW="${MAX_NEW:-20}" \
     sh "$_engine"
 }
@@ -850,6 +853,7 @@ cmd_import() { # cmd_import WORKFLOW-NAME
   N8N_URL="$N8N_URL" N8N_KEY="$N8N_KEY" \
   SUPABASE_URL="$SUPABASE_URL" SUPABASE_SERVICE_KEY="$SUPABASE_SERVICE_KEY" \
   OWNER_EMAIL="${OWNER_EMAIL:-}" SERPAPI_KEY="${SERPAPI_KEY:-}" \
+  APOLLO_KEY="${APOLLO_KEY:-}" \
   SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
   DASHBOARD_URL="${DASHBOARD_URL:-https://sanaku-command-center.netlify.app}" \
   WF_FILE="$_wf" \
@@ -1063,6 +1067,14 @@ cmd_next() {
   esac
   ok "scraper key is set"
 
+  # Apollo is optional and off by default, but a scrape without it returns
+  # businesses with no named contact - worth saying once, not warning about.
+  case "${APOLLO_KEY:-}" in
+    '') say "  (Apollo off - prospects arrive without a named decision maker."
+        say "   Paid Apollo plan?  sh ~/sanaku.sh set APOLLO_KEY <key>  then re-run scrape)" ;;
+    *)  ok "Apollo key is set - decision-maker names and up to 12 email reveals per run" ;;
+  esac
+
   # 3. any prospects?
   _n=$(sb "sanaku_prospects?select=id" 2>/dev/null | tr -cd '{' | wc -c | tr -d ' ')
   if [ "${_n:-0}" -lt 1 ]; then
@@ -1132,7 +1144,7 @@ cmd_set() { # cmd_set KEYNAME VALUE
     SMTP_PASS)    _kind=apppass ;;
     *URL)        _kind=url ;;
     *EMAIL)      _kind=email ;;
-    SERPAPI_KEY) _kind=key ;;
+    SERPAPI_KEY|APOLLO_KEY) _kind=key ;;
     *KEY)        _kind=jwt ;;
     *)           _kind=key ;;
   esac
@@ -1172,7 +1184,7 @@ cmd_paste() { # cmd_paste KEYNAME
     SMTP_PASS)    _kind=apppass ;;
     *URL)   _kind=url ;;
     *EMAIL) _kind=email ;;
-    SERPAPI_KEY) _kind=key ;;
+    SERPAPI_KEY|APOLLO_KEY) _kind=key ;;
     *KEY)   _kind=jwt ;;
     *)      _kind=key ;;
   esac

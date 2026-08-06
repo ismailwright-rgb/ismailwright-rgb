@@ -83,12 +83,19 @@ print(json.dumps({
 }))')" | jsonget 'd["id"]')
 fi
 echo "    supabase cred: $SUPA_CRED_ID | apollo cred: ${APOLLO_CRED_ID:-skipped (no APOLLO_KEY)}"
+if [ -n "$APOLLO_CRED_ID" ]; then
+  echo "    Apollo people-search ON - named decision makers, max 12 email reveals/run"
+else
+  echo "    Apollo people-search OFF - SerpAPI only, so prospects arrive without a"
+  echo "    named contact. Turn it on:  sh ~/sanaku.sh set APOLLO_KEY <key>  (paid plan;"
+  echo "    Apollo's free plan returns API_INACCESSIBLE on every call)"
+fi
 
 echo "==> Downloading + patching W1..."
 curl -fsSL "$RAW_WF" -o "$TMP/w1.json"
 export SUPA_CRED_ID APOLLO_CRED_ID MAX_NEW TMPDIR_WF="$TMP"
 python3 <<'PY'
-import json, os
+import json, os, re
 
 tmp = os.environ["TMPDIR_WF"]
 wf = json.load(open(f"{tmp}/w1.json"))
@@ -136,8 +143,17 @@ for node in wf["nodes"]:
                 node["parameters"].pop("authentication", None)
                 node["parameters"].pop("genericAuthType", None)
     if node["name"] == "Run Config":
-        node["parameters"]["jsCode"] = node["parameters"]["jsCode"].replace(
+        code = node["parameters"]["jsCode"].replace(
             "maxNewPerRun: 50", f"maxNewPerRun: {max_new}")
+        # useApollo is a CONSEQUENCE of having a key, never a hand-edit. True
+        # with no credential fails every Apollo node mid-run, after the SerpAPI
+        # branch it replaced has already been skipped - so the run looks like a
+        # scraper outage rather than a missing key.
+        code, n = re.subn(r"useApollo:\s*(?:true|false)",
+                          "useApollo: " + ("true" if apollo_id else "false"), code)
+        if n != 1:
+            raise SystemExit(f"    !! Run Config has {n} useApollo flags, expected 1 - refusing to guess")
+        node["parameters"]["jsCode"] = code
     if node["name"] == "Send Digest":
         node["disabled"] = True          # no Gmail credential yet; data still saves
         node.pop("credentials", None)
