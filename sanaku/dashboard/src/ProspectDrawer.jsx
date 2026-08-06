@@ -20,25 +20,21 @@ const PHONE_SOURCE = {
 };
 const tel = (s) => String(s || '').replace(/[^\d+]/g, '');
 
-// How much authority the named contact has, and therefore what the call is
-// for. Apollo is asked for owners, C-suite, partners and marketing/intake
-// directors in that order; when it has nobody at a company we fall back to the
-// business itself, and that fallback has to be visible rather than looking
-// like a decision maker we simply forgot to name.
+// What the contact's title is. Whether that band can APPROVE is per-vertical
+// and already decided by W1 into decision_maker - an office manager is the
+// de-facto approver for back-office tools at a dental practice and a gatekeeper
+// at a plumbing shop, on the identical title. So the label comes from here and
+// the verdict comes from the row; this table never overrides it.
 const AUTHORITY = {
-  owner:     { label: 'Owner / CEO',        decides: true,
-               hint: 'Can say yes on the call.' },
-  c_suite:   { label: 'C-suite',            decides: true,
-               hint: 'Signs it, or walks it to the owner the same day.' },
-  partner:   { label: 'Partner',            decides: true,
-               hint: 'One of several owners — expect "let me talk to my partners".' },
-  marketing: { label: 'Marketing / intake', decides: true,
-               hint: 'Owns the missed-call problem even if they do not own the firm.' },
-  leader:    { label: 'Dept. lead',         decides: false,
-               hint: 'Real, but they route you rather than buy. Ask who owns intake.' },
-  staff:     { label: 'Office staff',       decides: false,
-               hint: 'A gatekeeper. Use them to get the owner\'s name, not to pitch.' },
-  none:      { label: 'Business only',      decides: false, hint: '' },
+  owner:      { label: 'Owner / CEO',        hint: 'Can say yes on the call.' },
+  partner:    { label: 'Partner',            hint: 'One of several owners — expect "let me talk to my partners".' },
+  operations: { label: 'Operations',         hint: 'Runs the phones day to day. Owns this problem even when the owner signs.' },
+  office:     { label: 'Office manager',     hint: 'Runs the front desk. For back-office tools, usually the real decision.' },
+  c_suite:    { label: 'C-suite',            hint: 'Signs it, or walks it to the owner the same day.' },
+  marketing:  { label: 'Marketing / intake', hint: 'Owns the missed-call problem even if they do not own the firm.' },
+  leader:     { label: 'Dept. lead',         hint: 'Real, but they route you rather than buy. Ask who owns intake.' },
+  staff:      { label: 'Staff',              hint: 'A gatekeeper. Use them to get the owner\'s name, not to pitch.' },
+  none:       { label: 'Business only',      hint: '' },
 };
 
 /**
@@ -62,7 +58,7 @@ function WhoYouAreCalling({ p }) {
           <b>{p.contact_name}</b>
           {p.contact_title && <span className="whotitle">{p.contact_title}</span>}
           {auth && (
-            <span className={'pill ' + (auth.decides ? 'dm' : 'notdm')} title={auth.hint}>
+            <span className={'pill ' + (p.decision_maker ? 'dm' : 'notdm')} title={auth.hint}>
               {auth.label}
             </span>
           )}

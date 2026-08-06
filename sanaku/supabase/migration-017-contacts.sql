@@ -37,34 +37,38 @@ comment on column sanaku_prospects.contact_linkedin_url is
 comment on column sanaku_prospects.contact_phone_source is
   'Whose number contact_phone is. Only apollo_direct means it reaches the person.';
 comment on column sanaku_prospects.contact_authority is
-  'How much authority the named contact has. owner/c_suite/partner/marketing can approve; leader and staff route you; none means we have no person at all.';
+  'What the contact''s title is: owner, partner, operations, office, c_suite, marketing, leader, staff, or none when we have no person. Whether that band can APPROVE is per-vertical and set by W1 into decision_maker - an office manager approves at a dental practice and does not at a plumbing shop.';
 
 -- A CHECK rather than an enum: adding a value to an enum cannot run inside a
 -- transaction on older Postgres, which would make this file unsafe to re-run
 -- as part of a bundle.
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'sanaku_prospects_phone_source_ck') then
-    alter table sanaku_prospects add constraint sanaku_prospects_phone_source_ck
-      check (contact_phone_source is null or contact_phone_source in
-             ('apollo_direct', 'apollo_company', 'google_places', 'website', 'manual'));
-  end if;
-end $$;
+-- DROP then ADD, not "add if the name is free". The guarded form is re-runnable
+-- in the sense of not erroring, but it silently keeps the OLD list when the set
+-- of allowed values grows - which is exactly what happened when the authority
+-- bands were extended, and it fails as an insert error days later rather than
+-- as a migration error now.
+alter table sanaku_prospects drop constraint if exists sanaku_prospects_phone_source_ck;
+alter table sanaku_prospects add constraint sanaku_prospects_phone_source_ck
+  check (contact_phone_source is null or contact_phone_source in
+         ('apollo_direct', 'apollo_company', 'google_places', 'website', 'manual'));
 
--- The bands, in the order they matter on a call. 'marketing' is a band rather
--- than a footnote because a Director of Marketing or of Intake owns the
--- missed-call problem at a firm that has outgrown the owner answering the
--- phone - on the live LA query, one firm was reachable through no other role.
--- 'leader' (director of operations, HR, IT) is a real person but routes you
--- rather than buying, and decision_maker stays false for them.
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'sanaku_prospects_authority_ck') then
-    alter table sanaku_prospects add constraint sanaku_prospects_authority_ck
-      check (contact_authority is null or contact_authority in
-             ('owner', 'c_suite', 'partner', 'marketing', 'leader', 'staff', 'none'));
-  end if;
-end $$;
+-- The band records what the title IS. What it MEANS is per-vertical and lives
+-- in W1, because the answer genuinely differs: an 'office' contact is the
+-- de-facto approver for back-office tools at a dental practice and a gatekeeper
+-- at a plumbing shop, so decision_maker is true for one and false for the
+-- other on the identical title. Storing the band rather than a bare boolean is
+-- what makes that expressible at all.
+--
+-- 'operations' covers the COO or practice-group leader at a larger firm, the
+-- head of operations at a practice, and the GM or dispatch manager at a
+-- multi-truck shop - the people who own the phone once the owner stops
+-- answering it. 'leader' is a director of something else (HR, IT): a real
+-- person, but they route you rather than buy.
+alter table sanaku_prospects drop constraint if exists sanaku_prospects_authority_ck;
+alter table sanaku_prospects add constraint sanaku_prospects_authority_ck
+  check (contact_authority is null or contact_authority in
+         ('owner', 'partner', 'operations', 'office', 'c_suite',
+          'marketing', 'leader', 'staff', 'none'));
 
 -- Backfill. Every existing contact_phone is a main line - no direct dial has
 -- ever been revealed, so there is nothing to guess at and nothing is lost.
