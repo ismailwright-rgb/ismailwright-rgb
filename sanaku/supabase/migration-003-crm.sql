@@ -56,7 +56,13 @@ create trigger sanaku_notes_touch
 -- ----------------------------------------------------------------------------
 -- What needs working today. Excludes finished and suppressed records.
 -- ----------------------------------------------------------------------------
-create or replace view v_followups_due as
+-- DROP, not CREATE OR REPLACE. migration-017 widens this view, and on any
+-- re-run of the bundles this statement then tries to shrink it back -
+-- "cannot drop columns from view" aborts RUN-THIS-NOW.sql here. Dropping
+-- first is safe in either order; migration-004's loop restores
+-- security_invoker further down this same file.
+drop view if exists v_followups_due;
+create view v_followups_due as
 select
   id, company_name, vertical, tier, intent_score, status,
   contact_name, contact_phone, contact_email,

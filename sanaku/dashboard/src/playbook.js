@@ -200,7 +200,12 @@ export function buildScript(p, rec) {
 /** Flatten a script into copy-paste text for notes or a CRM. */
 export function scriptToText(p, rec, sc) {
   return [
-    `${p.company_name} — ${p.contact_phone || 'no phone'} — ${p.website_url || p.domain}`,
+    `${p.company_name} — ${p.website_url || p.domain}`,
+    p.contact_name
+      ? `ASK FOR: ${p.contact_name}${p.contact_title ? ', ' + p.contact_title : ''} — ${
+          p.contact_phone || 'no phone'}${
+          p.contact_phone_source === 'apollo_direct' ? ' (direct line)' : ' (main line — ask for them by name)'}`
+      : `ASK FOR: nobody named — ${p.contact_phone || 'no phone'} (main line). Get the owner's name first.`,
     `Best fit: ${WORKFLOWS[rec.key].name} (${rec.confidence} confidence)`,
     `Why: ${rec.why}`,
     '',

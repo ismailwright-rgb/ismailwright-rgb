@@ -144,13 +144,53 @@ const migs = sqlFiles.filter((f) => /migration-\d+/.test(f)).sort();
 const bundles = sqlFiles.filter((f) => /RUN-THIS|ADDONS-RUN/.test(f))
   .map((f) => readFileSync(f, 'utf8')).join('\n');
 const before5 = problems;
+// A migration is "in a bundle" only if its actual DDL is, not if the bundle
+// happens to mention a word from it. The old rule looked for a bare table or
+// function name, which failed twice over:
+//
+//   silently skipped   a migration that only ALTERs matched no pattern at all,
+//                      so `marker` was undefined and the `if` never fired -
+//                      four files were reported as covered without being
+//                      checked, including the one that adds every pricing
+//                      column the statement function reads.
+//   false positives    'setup_fee' exists on two different tables, so
+//                      migration-002 would have passed on a column belonging
+//                      to sanaku_addons rather than its own on sanaku_clients.
+//
+// Bundles are concatenations of the migration files, so the DDL statement
+// itself appears verbatim in one of them. Match on that, require EVERY
+// statement to be present, and fail loudly when a file yields none - an
+// unverifiable migration must not read as a passing one.
+const ddlSignatures = (body) => {
+  const sigs = [];
+  const grab = (re, fmt) => {
+    for (const mm of body.matchAll(re)) sigs.push(fmt(mm));
+  };
+  grab(/add column if not exists\s+([a-z0-9_]+)/g, (mm) => `add column if not exists ${mm[1]}`);
+  grab(/create table if not exists\s+([a-z0-9_]+)/g, (mm) => `create table if not exists ${mm[1]}`);
+  grab(/create or replace function public\.([a-z0-9_]+)/g, (mm) => `function public.${mm[1]}`);
+  grab(/create or replace view\s+([a-z0-9_]+)/g, (mm) => `create or replace view ${mm[1]}`);
+  grab(/add constraint\s+([a-z0-9_]+)/g, (mm) => `add constraint ${mm[1]}`);
+  // Seed-data migrations (the bundle catalog, the logo storage bucket) contain
+  // no DDL at all. Their identity is the rows they insert, so match on the
+  // longest literal they write — 'bundle_voice_home', 'client-logos'. A bare
+  // "insert into sanaku_addons" would collide across four different files.
+  if (!sigs.length) {
+    const literals = [...body.matchAll(/'([a-z][a-z0-9_-]{7,})'/g)].map((mm) => mm[0]);
+    if (literals.length) sigs.push(literals.sort((a, b) => b.length - a.length)[0]);
+  }
+  return [...new Set(sigs)];
+};
 for (const m of migs) {
-  const body = readFileSync(m, 'utf8');
-  const marker = (body.match(/create table if not exists ([a-z0-9_]+)/) ||
-                  body.match(/insert into ([a-z0-9_]+)/) ||
-                  body.match(/create or replace function public\.([a-z0-9_]+)/) || [])[1];
-  if (marker && !bundles.includes(marker)) {
-    bad(m.split('/').pop(), 'is in no RUN-THIS bundle — it can only be applied by hand');
+  const name = m.split('/').pop();
+  const sigs = ddlSignatures(readFileSync(m, 'utf8'));
+  if (!sigs.length) {
+    bad(name, 'has no DDL this check can recognise — it cannot be verified as bundled');
+    continue;
+  }
+  const missing = sigs.filter((s) => !bundles.includes(s));
+  if (missing.length) {
+    bad(name, `is in no RUN-THIS bundle — it can only be applied by hand (missing: ${missing[0]})`);
   }
 }
 if (problems === before5) ok(`all ${migs.length} migrations appear in a paste-in-one-go file`);

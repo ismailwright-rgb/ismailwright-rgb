@@ -3,6 +3,76 @@ import { supabase } from './supabase.js';
 import { WORKFLOWS, recommendWorkflow, buildScript, scriptToText } from './playbook.js';
 
 const STATUSES = ['new', 'queued', 'contacted', 'replied', 'demo_booked', 'won', 'lost', 'dnc'];
+
+// What each number actually reaches. Only one of these puts you through to the
+// person whose name is on the card, and the difference decides your first
+// sentence: "Hi Elaine" or "could I speak with Elaine".
+const PHONE_SOURCE = {
+  apollo_direct:  { label: 'Direct line',   good: true,
+                    hint: 'Apollo direct dial — this should reach them.' },
+  apollo_company: { label: 'Main line',     good: false,
+                    hint: 'Company switchboard. Ask for them by name.' },
+  google_places:  { label: 'Main line',     good: false,
+                    hint: 'Google listing number. Ask for them by name.' },
+  website:        { label: 'Main line',     good: false,
+                    hint: 'Scraped off their homepage. Ask for them by name.' },
+  manual:         { label: 'Entered by hand', good: false, hint: '' },
+};
+const tel = (s) => String(s || '').replace(/[^\d+]/g, '');
+
+/**
+ * The header of a call. Who picks up, whether the number reaches them, and a
+ * way to check they still work there before you dial.
+ *
+ * Prospects arriving without a named contact are the ones the scraper found on
+ * Google Maps rather than in Apollo. Showing that plainly is the point: a blank
+ * where a name should be is a different call, not a smaller one.
+ */
+function WhoYouAreCalling({ p }) {
+  const src = PHONE_SOURCE[p.contact_phone_source] || null;
+  const main = p.company_phone && p.company_phone !== p.contact_phone ? p.company_phone : null;
+  return (
+    <section className="dsec who">
+      <span className="k">Who you're calling</span>
+      {p.contact_name ? (
+        <div className="whoname">
+          <b>{p.contact_name}</b>
+          {p.contact_title && <span className="whotitle">{p.contact_title}</span>}
+          {p.decision_maker && <span className="pill dm" title="Apollo seniority: owner, founder, partner or C-suite">decision maker</span>}
+          {p.contact_linkedin_url && (
+            <a className="wholink" href={p.contact_linkedin_url} target="_blank" rel="noreferrer">
+              verify on LinkedIn ↗
+            </a>
+          )}
+        </div>
+      ) : (
+        <div className="whoname none">
+          <b>No named contact</b>
+          <span className="whotitle">
+            Found on Google Maps, not Apollo — you will be calling the business, not a person.
+          </span>
+        </div>
+      )}
+      <div className="whophones">
+        {p.contact_phone ? (
+          <div className={'whophone' + (src?.good ? ' direct' : '')}>
+            <a href={`tel:${tel(p.contact_phone)}`}>{p.contact_phone}</a>
+            {src && <span className="phlabel">{src.label}</span>}
+            {src?.hint && <span className="phhint">{src.hint}</span>}
+          </div>
+        ) : (
+          <div className="whophone"><span className="phlabel">No phone number</span></div>
+        )}
+        {main && (
+          <div className="whophone">
+            <a href={`tel:${tel(main)}`}>{main}</a>
+            <span className="phlabel">Main line</span>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 const CHANNELS = [['call', 'Call'], ['email', 'Email'], ['sms', 'Text']];
 const fmt = (d) => (d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 const inDays = (n) => {
@@ -111,7 +181,6 @@ export default function ProspectDrawer({ prospect, onClose, onChanged }) {
           <b>{p.company_name}</b>
           <div className="muted">
             <a href={p.website_url || `https://${p.domain}`} target="_blank" rel="noreferrer">{p.domain}</a>
-            {p.contact_phone && <> · <a href={`tel:${p.contact_phone.replace(/[^\d+]/g, '')}`}>{p.contact_phone}</a></>}
             {p.contact_email && <> · <a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></>}
           </div>
         </div>
@@ -119,6 +188,7 @@ export default function ProspectDrawer({ prospect, onClose, onChanged }) {
       </header>
 
       <div className="drawer-body">
+        <WhoYouAreCalling p={p} />
         {/* --- what to sell them, and the script --- */}
         <section className="dsec">
           <div className="dsec-head">

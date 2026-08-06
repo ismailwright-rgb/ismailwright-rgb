@@ -40,8 +40,26 @@ comment on constraint sanaku_clients_pricing_legal on sanaku_clients is
 -- ----------------------------------------------------------------------------
 -- What a client owes for a period, computed from the lead meter rather than
 -- from anything the client self-reports.
+--
+-- migration-013 replaces this with a wider return type, and Postgres will not
+-- let CREATE OR REPLACE change a return type in place - it raises and aborts
+-- the whole paste. So on any re-run of the bundles this file would kill
+-- RUN-THIS-NOW.sql before it reached the CRM tables. Skipping when the
+-- function already exists is the only option that is safe in every order:
+-- dropping it first would silently drag a newer definition backwards.
 -- ----------------------------------------------------------------------------
-create or replace function sanaku_period_due(_client_id uuid, _from date, _to date)
+do $guard$
+begin
+  if exists (
+    select 1 from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = 'sanaku_period_due'
+  ) then
+    raise notice 'sanaku_period_due already exists - leaving it to the later migration';
+    return;
+  end if;
+  execute $fn$
+create function sanaku_period_due(_client_id uuid, _from date, _to date)
 returns table (
   leads_captured   int,
   qualified_leads  int,
@@ -75,5 +93,7 @@ language sql stable as $$
       coalesce((select per_lead_monthly_cap from c), 1e9)
     )
 $$;
+  $fn$;
+end $guard$;
 
 -- Usage:  select * from sanaku_period_due('<client-uuid>', '2026-08-01', '2026-08-31');

@@ -525,3 +525,42 @@ tbody tr:hover { background: var(--line-soft); }
   padding: 16px 18px; margin: 0; white-space: pre-wrap; word-break: break-word;
   font-family: inherit; font-size: 14px; line-height: 1.55; user-select: text;
 }
+
+/* ---------------------------------------------------------------------------
+   Who you're calling.
+
+   The name is set at the size of a heading because it is the first thing you
+   need and used to be absent entirely — the drawer showed a domain, a phone
+   number and an email, and left you to infer a human. The number carries a
+   label saying what it reaches: only an Apollo direct dial puts you through to
+   the person, and everything else is a switchboard where the opening line has
+   to be "could I speak with…". Getting that wrong on the first sentence is the
+   difference between a conversation and a screen.
+--------------------------------------------------------------------------- */
+.dsec.who { border-left: 3px solid var(--accent); padding-left: 12px; }
+.whoname { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+.whoname > b { font-size: 17px; letter-spacing: -0.01em; }
+.whoname.none > b { color: var(--sub); font-weight: 600; }
+.whotitle { color: var(--sub); font-size: 13px; }
+.pill.dm { background: var(--accent-wash); color: var(--accent); }
+.wholink { font-size: 12.5px; }
+
+.whophones { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.whophone { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.whophone a { font-size: 15px; font-variant-numeric: tabular-nums; }
+.whophone.direct a { font-weight: 650; }
+.phlabel {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--sub); background: var(--line-soft); border-radius: 4px; padding: 2px 6px;
+}
+.whophone.direct .phlabel { background: var(--accent-wash); color: var(--accent); }
+.phhint { color: var(--sub); font-size: 12.5px; flex-basis: 100%; }
+
+/* the same distinction, compressed, in the pipeline list */
+.who-in { color: var(--ink); }
+.who-none { color: var(--signal); }
+.phtag {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--sub); margin-left: 4px;
+}
+.phtag.direct { color: var(--accent); font-weight: 600; }

@@ -261,8 +261,15 @@ function Row({ p, expanded, onExpand, checked, onCheck, onApprove, onThread }) {
           <b>{p.company_name}</b>
           <div className="muted">
             <a href={p.website_url || `https://${p.domain}`} target="_blank" rel="noreferrer">{p.domain}</a>
-            {p.contact_name ? ` · ${p.contact_name}` : ''}{p.contact_title ? ` (${p.contact_title})` : ''}
-            {p.contact_phone ? <> · <a href={`tel:${p.contact_phone.replace(/[^\d+]/g, '')}`}>{p.contact_phone}</a></> : ''}
+            {p.contact_name
+              ? <> · <b className="who-in">{p.contact_name}</b>{p.contact_title ? ` (${p.contact_title})` : ''}</>
+              : <> · <span className="who-none">no named contact</span></>}
+            {p.contact_phone
+              ? <> · <a href={`tel:${p.contact_phone.replace(/[^\d+]/g, '')}`}>{p.contact_phone}</a>
+                  <span className={'phtag' + (p.contact_phone_source === 'apollo_direct' ? ' direct' : '')}>
+                    {p.contact_phone_source === 'apollo_direct' ? 'direct' : 'main line'}
+                  </span></>
+              : ''}
             {p.contact_email
               ? <> · <a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></>
               : ' · no email yet'}
