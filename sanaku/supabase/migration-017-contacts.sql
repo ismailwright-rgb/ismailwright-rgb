@@ -28,6 +28,7 @@
 alter table sanaku_prospects add column if not exists company_phone        text;
 alter table sanaku_prospects add column if not exists contact_linkedin_url text;
 alter table sanaku_prospects add column if not exists contact_phone_source text;
+alter table sanaku_prospects add column if not exists contact_authority     text;
 
 comment on column sanaku_prospects.company_phone is
   'The business main line. Always the switchboard - never assume a person answers it.';
@@ -35,6 +36,8 @@ comment on column sanaku_prospects.contact_linkedin_url is
   'Apollo person profile. Open it before dialling to confirm the human is still there.';
 comment on column sanaku_prospects.contact_phone_source is
   'Whose number contact_phone is. Only apollo_direct means it reaches the person.';
+comment on column sanaku_prospects.contact_authority is
+  'How much authority the named contact has. owner/c_suite/partner/marketing can approve; leader and staff route you; none means we have no person at all.';
 
 -- A CHECK rather than an enum: adding a value to an enum cannot run inside a
 -- transaction on older Postgres, which would make this file unsafe to re-run
@@ -48,12 +51,37 @@ begin
   end if;
 end $$;
 
+-- The bands, in the order they matter on a call. 'marketing' is a band rather
+-- than a footnote because a Director of Marketing or of Intake owns the
+-- missed-call problem at a firm that has outgrown the owner answering the
+-- phone - on the live LA query, one firm was reachable through no other role.
+-- 'leader' (director of operations, HR, IT) is a real person but routes you
+-- rather than buying, and decision_maker stays false for them.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sanaku_prospects_authority_ck') then
+    alter table sanaku_prospects add constraint sanaku_prospects_authority_ck
+      check (contact_authority is null or contact_authority in
+             ('owner', 'c_suite', 'partner', 'marketing', 'leader', 'staff', 'none'));
+  end if;
+end $$;
+
 -- Backfill. Every existing contact_phone is a main line - no direct dial has
 -- ever been revealed, so there is nothing to guess at and nothing is lost.
 update sanaku_prospects
    set company_phone = contact_phone
  where company_phone is null
    and contact_phone is not null;
+
+-- Old rows: W1 set decision_maker true for anything Apollo returned, which was
+-- as fine-grained as the data then allowed. Nothing recorded WHICH kind, and
+-- re-deriving it from a title string here would be guessing at the one thing
+-- this column exists to stop guessing at. 'none' where there is no name;
+-- everything else waits for the next scrape to say so properly.
+update sanaku_prospects
+   set contact_authority = 'none'
+ where contact_authority is null
+   and contact_name is null;
 
 update sanaku_prospects
    set contact_phone_source = case source
@@ -76,7 +104,7 @@ drop view if exists v_followups_due;
 create view v_followups_due as
 select
   id, company_name, vertical, tier, intent_score, status,
-  contact_name, contact_title, contact_phone, contact_email,
+  contact_name, contact_title, contact_authority, contact_phone, contact_email,
   company_phone, contact_phone_source, contact_linkedin_url, decision_maker,
   next_action, next_action_at, last_activity_at
 from sanaku_prospects

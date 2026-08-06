@@ -20,17 +20,40 @@ const PHONE_SOURCE = {
 };
 const tel = (s) => String(s || '').replace(/[^\d+]/g, '');
 
+// How much authority the named contact has, and therefore what the call is
+// for. Apollo is asked for owners, C-suite, partners and marketing/intake
+// directors in that order; when it has nobody at a company we fall back to the
+// business itself, and that fallback has to be visible rather than looking
+// like a decision maker we simply forgot to name.
+const AUTHORITY = {
+  owner:     { label: 'Owner / CEO',        decides: true,
+               hint: 'Can say yes on the call.' },
+  c_suite:   { label: 'C-suite',            decides: true,
+               hint: 'Signs it, or walks it to the owner the same day.' },
+  partner:   { label: 'Partner',            decides: true,
+               hint: 'One of several owners — expect "let me talk to my partners".' },
+  marketing: { label: 'Marketing / intake', decides: true,
+               hint: 'Owns the missed-call problem even if they do not own the firm.' },
+  leader:    { label: 'Dept. lead',         decides: false,
+               hint: 'Real, but they route you rather than buy. Ask who owns intake.' },
+  staff:     { label: 'Office staff',       decides: false,
+               hint: 'A gatekeeper. Use them to get the owner\'s name, not to pitch.' },
+  none:      { label: 'Business only',      decides: false, hint: '' },
+};
+
 /**
  * The header of a call. Who picks up, whether the number reaches them, and a
  * way to check they still work there before you dial.
  *
- * Prospects arriving without a named contact are the ones the scraper found on
- * Google Maps rather than in Apollo. Showing that plainly is the point: a blank
- * where a name should be is a different call, not a smaller one.
+ * A prospect with no name is one Apollo had nobody for, so the business itself
+ * is the contact. Saying that plainly is the point - a blank where a name
+ * should be is a different call, not a smaller one, and must never read as a
+ * decision maker we simply forgot to fill in.
  */
 function WhoYouAreCalling({ p }) {
   const src = PHONE_SOURCE[p.contact_phone_source] || null;
   const main = p.company_phone && p.company_phone !== p.contact_phone ? p.company_phone : null;
+  const auth = AUTHORITY[p.contact_authority] || null;
   return (
     <section className="dsec who">
       <span className="k">Who you're calling</span>
@@ -38,7 +61,11 @@ function WhoYouAreCalling({ p }) {
         <div className="whoname">
           <b>{p.contact_name}</b>
           {p.contact_title && <span className="whotitle">{p.contact_title}</span>}
-          {p.decision_maker && <span className="pill dm" title="Apollo seniority: owner, founder, partner or C-suite">decision maker</span>}
+          {auth && (
+            <span className={'pill ' + (auth.decides ? 'dm' : 'notdm')} title={auth.hint}>
+              {auth.label}
+            </span>
+          )}
           {p.contact_linkedin_url && (
             <a className="wholink" href={p.contact_linkedin_url} target="_blank" rel="noreferrer">
               verify on LinkedIn ↗
@@ -47,12 +74,14 @@ function WhoYouAreCalling({ p }) {
         </div>
       ) : (
         <div className="whoname none">
-          <b>No named contact</b>
+          <b>No decision maker found</b>
           <span className="whotitle">
-            Found on Google Maps, not Apollo — you will be calling the business, not a person.
+            Apollo has nobody at this company. Falling back to the business line —
+            your first job on the call is to get the owner's name.
           </span>
         </div>
       )}
+      {auth?.hint && <p className="whohint">{auth.hint}</p>}
       <div className="whophones">
         {p.contact_phone ? (
           <div className={'whophone' + (src?.good ? ' direct' : '')}>

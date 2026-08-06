@@ -564,3 +564,10 @@ tbody tr:hover { background: var(--line-soft); }
   color: var(--sub); margin-left: 4px;
 }
 .phtag.direct { color: var(--accent); font-weight: 600; }
+
+/* A contact who can approve reads differently from one who can only route you
+   to someone who can. Same shape, different weight — the list stays scannable
+   and the distinction survives a glance. */
+.pill.notdm { background: var(--line-soft); color: var(--sub); }
+.whohint { color: var(--sub); font-size: 12.5px; margin: -4px 0 10px; }
+.who-in.decides { color: var(--accent); }

@@ -205,7 +205,7 @@ export function scriptToText(p, rec, sc) {
       ? `ASK FOR: ${p.contact_name}${p.contact_title ? ', ' + p.contact_title : ''} — ${
           p.contact_phone || 'no phone'}${
           p.contact_phone_source === 'apollo_direct' ? ' (direct line)' : ' (main line — ask for them by name)'}`
-      : `ASK FOR: nobody named — ${p.contact_phone || 'no phone'} (main line). Get the owner's name first.`,
+      : `ASK FOR: no decision maker found — ${p.contact_phone || 'no phone'} (main line). First job on this call is to get the owner's name.`,
     `Best fit: ${WORKFLOWS[rec.key].name} (${rec.confidence} confidence)`,
     `Why: ${rec.why}`,
     '',
