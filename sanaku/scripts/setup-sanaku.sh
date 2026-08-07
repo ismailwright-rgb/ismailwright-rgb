@@ -31,6 +31,7 @@ set -euo pipefail
 : "${SERPAPI_KEY:?Set SERPAPI_KEY (serpapi.com key - free tier, the primary data source)}"
 APOLLO_KEY="${APOLLO_KEY:-}"   # optional: Apollo's free plan has no API access
 APOLLO_REVEALS="${APOLLO_REVEALS:-}"   # email reveals per run when Apollo is on (default 25)
+APOLLO_PHONE_REVEALS="${APOLLO_PHONE_REVEALS:-}"   # direct-dial reveals per run (default 6; costs 8 credits each, not 1)
 : "${OWNER_EMAIL:?Set OWNER_EMAIL (your email for digests)}"
 MAX_NEW="${MAX_NEW:-20}"
 
@@ -86,6 +87,7 @@ fi
 echo "    supabase cred: $SUPA_CRED_ID | apollo cred: ${APOLLO_CRED_ID:-skipped (no APOLLO_KEY)}"
 if [ -n "$APOLLO_CRED_ID" ]; then
   echo "    Apollo people-search ON - named decision makers, ${APOLLO_REVEALS:-25} email reveals/run"
+  echo "    phone reveal: ${APOLLO_PHONE_REVEALS:-6}/run at 8 credits each - a separate, much tighter budget than email"
 else
   echo "    Apollo people-search OFF - SerpAPI only, so prospects arrive without a"
   echo "    named contact. Turn it on:  sh ~/sanaku.sh set APOLLO_KEY <key>  (paid plan;"
@@ -94,7 +96,7 @@ fi
 
 echo "==> Downloading + patching W1..."
 curl -fsSL "$RAW_WF" -o "$TMP/w1.json"
-export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS MAX_NEW TMPDIR_WF="$TMP"
+export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS APOLLO_PHONE_REVEALS MAX_NEW TMPDIR_WF="$TMP"
 python3 <<'PY'
 import json, os, re
 
@@ -164,6 +166,12 @@ for node in wf["nodes"]:
             code, n = re.subn(r"maxRevealsPerRun:\s*\d+", f"maxRevealsPerRun: {want}", code)
             if n != 1:
                 raise SystemExit(f"    !! Run Config has {n} maxRevealsPerRun settings, expected 1")
+        want_phone = os.environ.get("APOLLO_PHONE_REVEALS", "").strip()
+        want_phone = int(want_phone) if want_phone.isdigit() and int(want_phone) > 0 else 6
+        want_phone = want_phone if apollo_id else 0
+        code, n = re.subn(r"maxPhoneRevealsPerRun:\s*\d+", f"maxPhoneRevealsPerRun: {want_phone}", code)
+        if n != 1:
+            raise SystemExit(f"    !! Run Config has {n} maxPhoneRevealsPerRun settings, expected 1")
         node["parameters"]["jsCode"] = code
     if node["name"] == "Send Digest":
         node["disabled"] = True          # no Gmail credential yet; data still saves

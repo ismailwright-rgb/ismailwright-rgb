@@ -50,7 +50,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Central run config. Azusa CA = 34.1336, -117.9075; 40km ~ 25 miles.\n//\n// We want whoever can APPROVE a workflow, not whoever would use it. Apollo has\n// two ways to express that and they are not equally good:\n//\n//   person_titles      free text, matched loosely. Asking for the nine titles\n//                      this used to list returned 40% \"Office Manager\" on the\n//                      live LA personal-injury query - people who recommend,\n//                      not people who sign.\n//   person_seniorities Apollo's own normalised buckets. The same query with\n//                      owner/founder/partner/c_suite returned partners,\n//                      founders and CEOs, and 10/10 owners on home services.\n//\n// So seniority, not titles. excludeTitleRe below stays as the backstop.\n//\n// The bands, in the order we want them: owner/founder first, then C-suite\n// (the CFO counts), then partners, then directors and VPs. Directors are in\n// deliberately, not as dilution - on the live LA query they surfaced a\n// \"Director of Intake and Marketing\" and a \"Director of Marketing\", who are\n// the exact people who own an intake problem at a firm too big for the owner\n// to answer the phone. More to the point, Vaziri Law appears ONLY through its\n// directors: Apollo has no owner or partner there, so without this band that\n// firm is either missed entirely or arrives as a nameless Google Maps row.\n//\n// Breadth here does not cost priority. Filter & Dedupe keeps ONE person per\n// company and keeps the most senior, so a firm with both an owner and a\n// marketing director still arrives as the owner - Brock & Gonzales returns\n// four partners plus a director and comes through as the Senior Partner.\nconst DM_SENIORITIES = ['owner', 'founder', 'c_suite', 'partner', 'vp', 'director'];\n\n// A SECOND pass, by explicit title, for the operational people who approve or\n// veto this purchase but do not carry a senior title. They cannot be reached\n// by widening the seniority list: adding 'manager' to the search above turned\n// the healthcare pool from 83 to 167 and filled it with IT Help Desk Manager,\n// Project Manager and Account Manager - and returned no office managers at\n// all, because Apollo ranks by relevance to the seniority band, not by role.\n//\n// Asked for by title instead, the same query returns office managers at\n// Kids2Dentist, Larchmont Pediatrics and Jamie Sands DDS, and in the trades a\n// GM at Lords of Plumbing, a Dispatch Manager at NRG and Directors of\n// Operations at A-1 and All Temperatures. None of those companies appear in\n// the owner pass at all - this is reach, not redundancy.\n//\n// Search costs no Apollo credits, so two calls per vertical costs nothing but\n// wall-clock. Which of the two people represents a company is settled later by\n// the per-vertical ranking in Filter & Dedupe, not by which search found them.\nconst OPS_TITLES = {\n  // Bigger firms put a COO or a practice-group lead between the managing\n  // partner and the phones.\n  law_firm: ['Chief Operating Officer', 'Director of Operations', 'Practice Group Leader',\n             'Firm Administrator', 'Legal Administrator', 'Director of Intake'],\n  // The office manager runs the front desk, and for back-office tools is\n  // usually the one who decides and often the one who signs.\n  medical: ['Office Manager', 'Practice Manager', 'Practice Administrator',\n            'Dental Office Manager', 'Head of Operations', 'Director of Operations'],\n  // Multi-truck shops: whoever owns the dispatch board owns the missed call.\n  home_services: ['General Manager', 'Operations Manager', 'Director of Operations',\n                  'Dispatcher', 'Dispatch Manager', 'Service Manager'],\n};\nconst apolloBase = {\n  person_seniorities: DM_SENIORITIES,\n  // Apollo ANDs these two, and they mean different things:\n  //   person_locations       - where the PERSON lives\n  //   organization_locations - where their EMPLOYER is headquartered\n  // We sell to a local business, so the HQ is the filter that matters. Setting\n  // only person_locations (what this used to do) matches an owner who lives in\n  // LA but whose practice is in Phoenix - not a prospect, and a wasted reveal\n  // credit once it scored Tier 1. Person stays country-wide on purpose: an\n  // owner who lives an hour outside the metro still owns the LA business.\n  person_locations: ['United States'],\n  organization_locations: ['Los Angeles, California, US'],\n  organization_num_employees_ranges: ['2,100'],\n  contact_email_status: ['verified'],\n  // 50, not 25: one firm can occupy several rows of a page - Brock & Gonzales\n  // returned four partners in a page of ten - and we keep one prospect per\n  // company, so a small page yields far fewer distinct businesses than its\n  // size suggests. Search costs no Apollo credits; only the reveal does.\n  per_page: 50,\n  page: 1,\n};\n// The ops pass filters by title INSTEAD of seniority - Apollo ANDs the two, so\n// sending both would ask for an office manager who is also a founder.\nconst { person_seniorities: _drop, ...opsBase } = apolloBase;\n\nreturn [{\n  json: {\n    currentYear: new Date().getFullYear(),\n    maxNewPerRun: 50,\n    maxPerVertical: 17,\n    // Apollo credits per run. The installer raises this when a key is present\n    // (APOLLO_REVEALS, default 25) - 12 was sized for a free-tier credit\n    // ceiling that does not exist, because the free plan has no API at all.\n    maxRevealsPerRun: 12,\n    // Set by the installer from whether APOLLO_KEY is configured - do NOT flip\n    // this by hand. True with no credential fails every Apollo node mid-run,\n    // after the SerpAPI branch has already been skipped. Apollo's free plan\n    // has no API access at all, so a key means a paid plan.\n    useApollo: false,\n    // 'content|editor|publish' catches trade media, which a company-name regex\n    // cannot: 'Spa & Beauty Today' looks exactly like a med spa until you read\n    // the title beside it, Chief Content Officer. Whoever runs a publication is\n    // not buying missed-call recovery for a clinic.\n    // 'chief content', not bare 'content': the rule is here to catch trade\n    // media ('Spa & Beauty Today', Chief Content Officer), and a bare match\n    // would also throw away a Director of Content Marketing - who is a buyer.\n    excludeTitleRe: 'receptionist|paralegal|assistant|chief content|content officer|editor-in-chief|publisher',\n    // Everything after 'lead gen' came from contaminants seen in live Apollo\n    // results: suppliers and distributors, dental software ('DDS Cloud'), a\n    // telecom company, trade media ('Spa & Beauty Today'). They sell INTO\n    // our verticals, so they carry the same tags and survive every filter\n    // upstream of here.\n    excludeCompanyRe: 'marketing|agency|agencies|automation|\\\\bai\\\\b|artificial intelligence|software|saas|consult|growth partner|lead gen|supplies|\\\\bsupply\\\\b|wholesale|distribut|telecom|networking|\\\\bcloud\\\\b|\\\\blabs\\\\b|magazine|association',\n    verticals: [\n      {\n        vertical: 'law_firm',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['personal injury law'] },\n        apolloOpsBody: { ...opsBase, q_organization_keyword_tags: ['personal injury law'], person_titles: OPS_TITLES.law_firm },\n        serpQuery: 'personal injury law firm near Azusa, CA',\n      },\n      {\n        vertical: 'medical',\n        // 'dental practice' / 'medical clinic' matched the wrong side of the\n        // market. On the live query 8 of 10 results were vendors TO practices\n        // - a dental supply company, dental software, a dental AI startup, a\n        // telecom firm - because Apollo tags a company with the market it\n        // sells into as readily as with what it is. Naming what the business\n        // IS fixed it: 8 of 10 became owner-dentists at real practices, and\n        // the pool grew from 38 to 83. NAICS codes 6211/6212 were tried and\n        // were worse still, returning venture-backed health tech.\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['dentist', 'dental office', 'orthodontist', 'family dentistry', 'cosmetic dentistry', 'med spa', 'medical spa', 'chiropractic clinic', 'physical therapy clinic', 'urgent care'] },\n        apolloOpsBody: { ...opsBase, q_organization_keyword_tags: ['dentist', 'dental office', 'orthodontist', 'family dentistry', 'cosmetic dentistry', 'med spa', 'medical spa', 'chiropractic clinic', 'physical therapy clinic', 'urgent care'], person_titles: OPS_TITLES.medical },\n        serpQuery: 'dentist med spa clinic near Azusa, CA',\n      },\n      {\n        vertical: 'home_services',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['plumbing', 'hvac', 'electrical contractor'] },\n        apolloOpsBody: { ...opsBase, q_organization_keyword_tags: ['plumbing', 'hvac', 'electrical contractor'], person_titles: OPS_TITLES.home_services },\n        serpQuery: 'plumber hvac electrician near Azusa, CA',\n      },\n    ],\n  },\n}];"
+        "jsCode": "// Central run config. Azusa CA = 34.1336, -117.9075; 40km ~ 25 miles.\n//\n// We want whoever can APPROVE a workflow, not whoever would use it. Apollo has\n// two ways to express that and they are not equally good:\n//\n//   person_titles      free text, matched loosely. Asking for the nine titles\n//                      this used to list returned 40% \"Office Manager\" on the\n//                      live LA personal-injury query - people who recommend,\n//                      not people who sign.\n//   person_seniorities Apollo's own normalised buckets. The same query with\n//                      owner/founder/partner/c_suite returned partners,\n//                      founders and CEOs, and 10/10 owners on home services.\n//\n// So seniority, not titles. excludeTitleRe below stays as the backstop.\n//\n// The bands, in the order we want them: owner/founder first, then C-suite\n// (the CFO counts), then partners, then directors and VPs. Directors are in\n// deliberately, not as dilution - on the live LA query they surfaced a\n// \"Director of Intake and Marketing\" and a \"Director of Marketing\", who are\n// the exact people who own an intake problem at a firm too big for the owner\n// to answer the phone. More to the point, Vaziri Law appears ONLY through its\n// directors: Apollo has no owner or partner there, so without this band that\n// firm is either missed entirely or arrives as a nameless Google Maps row.\n//\n// Breadth here does not cost priority. Filter & Dedupe keeps ONE person per\n// company and keeps the most senior, so a firm with both an owner and a\n// marketing director still arrives as the owner - Brock & Gonzales returns\n// four partners plus a director and comes through as the Senior Partner.\nconst DM_SENIORITIES = ['owner', 'founder', 'c_suite', 'partner', 'vp', 'director'];\n\n// A SECOND pass, by explicit title, for the operational people who approve or\n// veto this purchase but do not carry a senior title. They cannot be reached\n// by widening the seniority list: adding 'manager' to the search above turned\n// the healthcare pool from 83 to 167 and filled it with IT Help Desk Manager,\n// Project Manager and Account Manager - and returned no office managers at\n// all, because Apollo ranks by relevance to the seniority band, not by role.\n//\n// Asked for by title instead, the same query returns office managers at\n// Kids2Dentist, Larchmont Pediatrics and Jamie Sands DDS, and in the trades a\n// GM at Lords of Plumbing, a Dispatch Manager at NRG and Directors of\n// Operations at A-1 and All Temperatures. None of those companies appear in\n// the owner pass at all - this is reach, not redundancy.\n//\n// Search costs no Apollo credits, so two calls per vertical costs nothing but\n// wall-clock. Which of the two people represents a company is settled later by\n// the per-vertical ranking in Filter & Dedupe, not by which search found them.\nconst OPS_TITLES = {\n  // Bigger firms put a COO or a practice-group lead between the managing\n  // partner and the phones.\n  law_firm: ['Chief Operating Officer', 'Director of Operations', 'Practice Group Leader',\n             'Firm Administrator', 'Legal Administrator', 'Director of Intake'],\n  // The office manager runs the front desk, and for back-office tools is\n  // usually the one who decides and often the one who signs.\n  medical: ['Office Manager', 'Practice Manager', 'Practice Administrator',\n            'Dental Office Manager', 'Head of Operations', 'Director of Operations'],\n  // Multi-truck shops: whoever owns the dispatch board owns the missed call.\n  home_services: ['General Manager', 'Operations Manager', 'Director of Operations',\n                  'Dispatcher', 'Dispatch Manager', 'Service Manager'],\n};\nconst apolloBase = {\n  person_seniorities: DM_SENIORITIES,\n  // Apollo ANDs these two, and they mean different things:\n  //   person_locations       - where the PERSON lives\n  //   organization_locations - where their EMPLOYER is headquartered\n  // We sell to a local business, so the HQ is the filter that matters. Setting\n  // only person_locations (what this used to do) matches an owner who lives in\n  // LA but whose practice is in Phoenix - not a prospect, and a wasted reveal\n  // credit once it scored Tier 1. Person stays country-wide on purpose: an\n  // owner who lives an hour outside the metro still owns the LA business.\n  person_locations: ['United States'],\n  organization_locations: ['Los Angeles, California, US'],\n  organization_num_employees_ranges: ['2,100'],\n  contact_email_status: ['verified'],\n  // 50, not 25: one firm can occupy several rows of a page - Brock & Gonzales\n  // returned four partners in a page of ten - and we keep one prospect per\n  // company, so a small page yields far fewer distinct businesses than its\n  // size suggests. Search costs no Apollo credits; only the reveal does.\n  per_page: 50,\n  page: 1,\n};\n// The ops pass filters by title INSTEAD of seniority - Apollo ANDs the two, so\n// sending both would ask for an office manager who is also a founder.\nconst { person_seniorities: _drop, ...opsBase } = apolloBase;\n\nreturn [{\n  json: {\n    currentYear: new Date().getFullYear(),\n    maxNewPerRun: 50,\n    maxPerVertical: 17,\n    // Apollo credits per run. The installer raises this when a key is present\n    // (APOLLO_REVEALS, default 25) - 12 was sized for a free-tier credit\n    // ceiling that does not exist, because the free plan has no API at all.\n    maxRevealsPerRun: 12,\n    // Set by the installer from whether APOLLO_KEY is configured - do NOT flip\n    // this by hand. True with no credential fails every Apollo node mid-run,\n    // after the SerpAPI branch has already been skipped. Apollo's free plan\n    // has no API access at all, so a key means a paid plan.\n    useApollo: false,\n    // Direct-dial/mobile reveal. A DIFFERENT cost than email: a live call\n    // against this account billed 8 credits for one phone reveal, against\n    // ~1 for email - so this is not \"the same feature, more of it\". Default 0\n    // in the repo; the installer sets it from APOLLO_PHONE_REVEALS (default 6\n    // on a paid plan) so it never runs with no credential either.\n    maxPhoneRevealsPerRun: 0,\n    // 'content|editor|publish' catches trade media, which a company-name regex\n    // cannot: 'Spa & Beauty Today' looks exactly like a med spa until you read\n    // the title beside it, Chief Content Officer. Whoever runs a publication is\n    // not buying missed-call recovery for a clinic.\n    // 'chief content', not bare 'content': the rule is here to catch trade\n    // media ('Spa & Beauty Today', Chief Content Officer), and a bare match\n    // would also throw away a Director of Content Marketing - who is a buyer.\n    excludeTitleRe: 'receptionist|paralegal|assistant|chief content|content officer|editor-in-chief|publisher',\n    // Everything after 'lead gen' came from contaminants seen in live Apollo\n    // results: suppliers and distributors, dental software ('DDS Cloud'), a\n    // telecom company, trade media ('Spa & Beauty Today'). They sell INTO\n    // our verticals, so they carry the same tags and survive every filter\n    // upstream of here.\n    excludeCompanyRe: 'marketing|agency|agencies|automation|\\\\bai\\\\b|artificial intelligence|software|saas|consult|growth partner|lead gen|supplies|\\\\bsupply\\\\b|wholesale|distribut|telecom|networking|\\\\bcloud\\\\b|\\\\blabs\\\\b|magazine|association',\n    verticals: [\n      {\n        vertical: 'law_firm',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['personal injury law'] },\n        apolloOpsBody: { ...opsBase, q_organization_keyword_tags: ['personal injury law'], person_titles: OPS_TITLES.law_firm },\n        serpQuery: 'personal injury law firm near Azusa, CA',\n      },\n      {\n        vertical: 'medical',\n        // 'dental practice' / 'medical clinic' matched the wrong side of the\n        // market. On the live query 8 of 10 results were vendors TO practices\n        // - a dental supply company, dental software, a dental AI startup, a\n        // telecom firm - because Apollo tags a company with the market it\n        // sells into as readily as with what it is. Naming what the business\n        // IS fixed it: 8 of 10 became owner-dentists at real practices, and\n        // the pool grew from 38 to 83. NAICS codes 6211/6212 were tried and\n        // were worse still, returning venture-backed health tech.\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['dentist', 'dental office', 'orthodontist', 'family dentistry', 'cosmetic dentistry', 'med spa', 'medical spa', 'chiropractic clinic', 'physical therapy clinic', 'urgent care'] },\n        apolloOpsBody: { ...opsBase, q_organization_keyword_tags: ['dentist', 'dental office', 'orthodontist', 'family dentistry', 'cosmetic dentistry', 'med spa', 'medical spa', 'chiropractic clinic', 'physical therapy clinic', 'urgent care'], person_titles: OPS_TITLES.medical },\n        serpQuery: 'dentist med spa clinic near Azusa, CA',\n      },\n      {\n        vertical: 'home_services',\n        apolloBody: { ...apolloBase, q_organization_keyword_tags: ['plumbing', 'hvac', 'electrical contractor'] },\n        apolloOpsBody: { ...opsBase, q_organization_keyword_tags: ['plumbing', 'hvac', 'electrical contractor'], person_titles: OPS_TITLES.home_services },\n        serpQuery: 'plumber hvac electrician near Azusa, CA',\n      },\n    ],\n  },\n}];"
       },
       "id": "f1000000-0000-4000-8000-000000000003",
       "name": "Run Config",
@@ -539,7 +539,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Reveal decision-maker emails for prospects Apollo found, best intent first.\n// HARD CAP: this is the only place in the workflow that spends Apollo credits.\n//\n// Tier 1 fills the cap first, then Tier 2. It used to be Tier 1 only, which\n// silently wasted the difference: a run that turns up 5 Tier 1 prospects spent\n// 5 of the 12 slots and left every Tier 2 prospect without an email - and W2's\n// queue is filtered on contact_email IS NOT NULL, so those never get contacted\n// at all. They just accumulate in the dashboard. Tier 3 is never revealed.\nconst cfg = $('Run Config').first().json;\nconst items = $input.all().map((i) => i.json);\n// Within a tier, authority breaks the tie before intent does. Two prospects\n// scoring the same, one an owner and one an office manager, are not equally\n// worth a credit - the reveal buys a conversation, and only one of them can\n// end it with a yes.\n// Mirrors the per-vertical ladder in Filter & Dedupe: an office manager\n// outranks a marketing director at a dental practice and does not at a\n// plumbing shop, so the credit follows the vertical, not the job title.\nconst RANK = {\n  law_firm:      { owner: 9, partner: 8, operations: 7, c_suite: 6, marketing: 5, office: 4, leader: 3, staff: 2 },\n  medical:       { owner: 9, office: 8, operations: 7, c_suite: 6, marketing: 5, partner: 5, leader: 3, staff: 2 },\n  home_services: { owner: 9, operations: 8, c_suite: 6, marketing: 5, partner: 5, office: 4, leader: 3, staff: 2 },\n};\nconst rank = (x) => ((RANK[x.vertical] || RANK.home_services)[x.contact_authority] || 0);\nconst byAuthorityThenIntent = (a, b) => rank(b) - rank(a) || b.intent_score - a.intent_score;\nconst byIntent = byAuthorityThenIntent;\nconst found = items.filter((x) => x.apollo_person_id);\nconst eligible = [\n  ...found.filter((x) => x.tier === 1).sort(byIntent),\n  ...found.filter((x) => x.tier === 2).sort(byIntent),\n].slice(0, cfg.maxRevealsPerRun);\nconst revealSet = new Set(eligible.map((x) => x.domain));\nreturn items.map((x) => ({ json: { ...x, needsReveal: revealSet.has(x.domain) } }));"
+        "jsCode": "// Reveal decision-maker emails for prospects Apollo found, best intent first.\n// HARD CAP: this is the only place in the workflow that spends Apollo credits.\n//\n// Tier 1 fills the cap first, then Tier 2. It used to be Tier 1 only, which\n// silently wasted the difference: a run that turns up 5 Tier 1 prospects spent\n// 5 of the 12 slots and left every Tier 2 prospect without an email - and W2's\n// queue is filtered on contact_email IS NOT NULL, so those never get contacted\n// at all. They just accumulate in the dashboard. Tier 3 is never revealed.\nconst cfg = $('Run Config').first().json;\nconst items = $input.all().map((i) => i.json);\n// Within a tier, authority breaks the tie before intent does. Two prospects\n// scoring the same, one an owner and one an office manager, are not equally\n// worth a credit - the reveal buys a conversation, and only one of them can\n// end it with a yes.\n// Mirrors the per-vertical ladder in Filter & Dedupe: an office manager\n// outranks a marketing director at a dental practice and does not at a\n// plumbing shop, so the credit follows the vertical, not the job title.\nconst RANK = {\n  law_firm:      { owner: 9, partner: 8, operations: 7, c_suite: 6, marketing: 5, office: 4, leader: 3, staff: 2 },\n  medical:       { owner: 9, office: 8, operations: 7, c_suite: 6, marketing: 5, partner: 5, leader: 3, staff: 2 },\n  home_services: { owner: 9, operations: 8, c_suite: 6, marketing: 5, partner: 5, office: 4, leader: 3, staff: 2 },\n};\nconst rank = (x) => ((RANK[x.vertical] || RANK.home_services)[x.contact_authority] || 0);\nconst byAuthorityThenIntent = (a, b) => rank(b) - rank(a) || b.intent_score - a.intent_score;\nconst byIntent = byAuthorityThenIntent;\nconst found = items.filter((x) => x.apollo_person_id);\nconst eligible = [\n  ...found.filter((x) => x.tier === 1).sort(byIntent),\n  ...found.filter((x) => x.tier === 2).sort(byIntent),\n].slice(0, cfg.maxRevealsPerRun);\nconst revealSet = new Set(eligible.map((x) => x.domain));\n\n// Phone is a SUBSET of the email-reveal set, never a separate selection - the\n// front of the SAME best-first list, not a new one. We have already spent\n// effort confirming these are the right people (verified email, real title);\n// upgrading THEIR number to a real line is the highest-value use of a credit\n// that costs 8x what email does. Reveal a phone for someone we did not even\n// bother to email is exactly the \"reach the front desk\" outcome this exists\n// to avoid.\nconst phoneRevealSet = new Set(eligible.slice(0, cfg.maxPhoneRevealsPerRun || 0).map((x) => x.domain));\n\nreturn items.map((x) => ({ json: {\n  ...x,\n  needsReveal: revealSet.has(x.domain),\n  needsPhoneReveal: phoneRevealSet.has(x.domain),\n} }));"
       },
       "id": "f1000000-0000-4000-8000-000000000022",
       "name": "Cap Reveals",
@@ -605,9 +605,14 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ id: $json.apollo_person_id, reveal_personal_emails: false }) }}",
+        "jsonBody": "={{ JSON.stringify({ id: $json.apollo_person_id, reveal_personal_emails: false, reveal_phone_number: $json.needsPhoneReveal === true }) }}",
         "options": {
-          "timeout": 30000
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
         }
       },
       "id": "f1000000-0000-4000-8000-000000000025",
@@ -633,7 +638,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Attach the revealed business email (never personal) to the prospect.\nconst company = $('Per Reveal').first().json;\nconst resp = $input.first().json || {};\nconst person = resp.person || {};\nconst email = person.email && !String(person.email).includes('email_not_unlocked') ? person.email : null;\n\n// The person's own number wins. This used to read\n//   company.contact_phone || person.sanitized_phone\n// so the org's main line, already set upstream, always won - and a reveal that\n// DID return the decision maker's direct line was thrown away every time.\nconst direct = person.sanitized_phone || null;\nreturn [{ json: {\n  ...company,\n  contact_email: email || company.contact_email || null,\n  contact_phone: direct || company.contact_phone || null,\n  contact_phone_source: direct ? 'apollo_direct' : (company.contact_phone_source || null),\n  company_phone: company.company_phone || company.contact_phone || null,\n  contact_linkedin_url: company.contact_linkedin_url || person.linkedin_url || null,\n} }];"
+        "jsCode": "// Attach the revealed business email (never personal) to the prospect.\nconst company = $('Per Reveal').first().json;\nconst parsed = $input.first().json || {};\nconst person = parsed.person || {};\nconst email = person.email && !String(person.email).includes('email_not_unlocked') ? person.email : null;\n\n// Phone is never in this response. Verified live twice: with\n// reveal_phone_number:true the number comes back status 'pending' (async\n// only); with it false there is no per-person phone field on the sync\n// response at all. contact_phone/company_phone/contact_phone_source are\n// therefore left exactly as they arrived via the ...company spread - the\n// old code's `person.sanitized_phone` fallback checked a field that does\n// not exist on a live sync response and always silently fell through.\n//\n// The pending id, if one was requested, rides along on the row so the NEXT\n// run's 'Get Pending Phone Reveals' branch can resolve it once Apollo has\n// finished the async lookup.\nconst nowIso = new Date().toISOString();\nreturn [{ json: {\n  ...company,\n  contact_email: email || company.contact_email || null,\n  contact_linkedin_url: company.contact_linkedin_url || person.linkedin_url || null,\n  phone_reveal_request_id: parsed.phoneRequestId || company.phone_reveal_request_id || null,\n  phone_reveal_requested_at: parsed.phoneRequestId ? nowIso : (company.phone_reveal_requested_at || null),\n} }];"
       },
       "id": "f1000000-0000-4000-8000-000000000026",
       "name": "Attach Contact",
@@ -647,7 +652,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Build the upsert payload + the digest email.\nconst items = $input.all().map((i) => i.json).filter((x) => x && x.scored);\nconst nowIso = new Date().toISOString();\nconst rows = items.map((x) => ({\n  company_name: x.company_name,\n  vertical: x.vertical,\n  website_url: x.website_url || null,\n  domain: x.domain,\n  contact_name: x.contact_name || null,\n  contact_title: x.contact_title || null,\n  contact_email: x.contact_email || null,\n  contact_phone: x.contact_phone || null,\n  contact_phone_source: x.contact_phone_source || null,\n  company_phone: x.company_phone || x.contact_phone || null,\n  contact_linkedin_url: x.contact_linkedin_url || null,\n  contact_authority: x.contact_authority || 'none',\n  decision_maker: !!x.decision_maker,\n  city: x.city || null,\n  state: x.state || 'California',\n  employee_count: x.employee_count ?? null,\n  ai_maturity_score: x.ai_maturity_score,\n  intent_score: x.intent_score,\n  tech_stack: x.tech_stack || [],\n  signals: x.signals || {},\n  tier: x.tier,\n  status: 'new',\n  source: x.source,\n}));\n\nconst byVertical = {};\nfor (const r of rows) byVertical[r.vertical] = (byVertical[r.vertical] || 0) + 1;\nconst tier1 = rows.filter((r) => r.tier === 1).sort((a, b) => b.intent_score - a.intent_score);\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst top10 = tier1.slice(0, 10).map((r, i) =>\n  '<tr><td style=\"padding:4px 8px;\">' + (i + 1) + '</td>' +\n  '<td style=\"padding:4px 8px;\"><b>' + esc(r.company_name) + '</b><br>' + esc(r.domain) + '</td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_name || '-') + '<br><small>' + esc(r.contact_title || '') + '</small></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_phone || '-') + '<br>' + esc(r.contact_email || '(no email yet)') + '</td>' +\n  '<td style=\"padding:4px 8px;text-align:center;\"><b>' + r.intent_score + '</b></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc((r.signals && r.signals.reason) || '') + '</td></tr>'\n).join('');\n\nconst html =\n  '<h2>Sanaku scraper run - ' + nowIso.slice(0, 10) + '</h2>' +\n  '<p><b>' + rows.length + '</b> new prospects stored. ' +\n  Object.entries(byVertical).map(([v, n]) => v + ': ' + n).join(' | ') +\n  ' | Tier 1: <b>' + tier1.length + '</b></p>' +\n  (top10\n    ? '<table border=\"1\" cellspacing=\"0\" style=\"border-collapse:collapse;font-family:sans-serif;font-size:13px;\">' +\n      '<tr style=\"background:#f5f5f5;\"><th>#</th><th>Company</th><th>Contact</th><th>Phone / Email</th><th>Intent</th><th>Why they scored</th></tr>' +\n      top10 + '</table>'\n    : '<p>No Tier 1 prospects this run.</p>') +\n  '<p>Review and approve in the Pipeline dashboard. Nothing is contacted until you approve it.</p>';\n\nreturn [{ json: { rows, digestHtml: html, digestSubject: 'Sanaku: ' + rows.length + ' new prospects, ' + tier1.length + ' Tier 1 (' + nowIso.slice(0, 10) + ')' } }];"
+        "jsCode": "// Build the upsert payload + the digest email.\nconst items = $input.all().map((i) => i.json).filter((x) => x && x.scored);\nconst nowIso = new Date().toISOString();\nconst rows = items.map((x) => ({\n  company_name: x.company_name,\n  vertical: x.vertical,\n  website_url: x.website_url || null,\n  domain: x.domain,\n  contact_name: x.contact_name || null,\n  contact_title: x.contact_title || null,\n  contact_email: x.contact_email || null,\n  contact_phone: x.contact_phone || null,\n  contact_phone_source: x.contact_phone_source || null,\n  company_phone: x.company_phone || x.contact_phone || null,\n  contact_linkedin_url: x.contact_linkedin_url || null,\n  contact_authority: x.contact_authority || 'none',\n  decision_maker: !!x.decision_maker,\n  phone_reveal_request_id: x.phone_reveal_request_id || null,\n  phone_reveal_requested_at: x.phone_reveal_requested_at || null,\n  city: x.city || null,\n  state: x.state || 'California',\n  employee_count: x.employee_count ?? null,\n  ai_maturity_score: x.ai_maturity_score,\n  intent_score: x.intent_score,\n  tech_stack: x.tech_stack || [],\n  signals: x.signals || {},\n  tier: x.tier,\n  status: 'new',\n  source: x.source,\n}));\n\nconst byVertical = {};\nfor (const r of rows) byVertical[r.vertical] = (byVertical[r.vertical] || 0) + 1;\nconst tier1 = rows.filter((r) => r.tier === 1).sort((a, b) => b.intent_score - a.intent_score);\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst top10 = tier1.slice(0, 10).map((r, i) =>\n  '<tr><td style=\"padding:4px 8px;\">' + (i + 1) + '</td>' +\n  '<td style=\"padding:4px 8px;\"><b>' + esc(r.company_name) + '</b><br>' + esc(r.domain) + '</td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_name || '-') + '<br><small>' + esc(r.contact_title || '') + '</small></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_phone || '-') + '<br>' + esc(r.contact_email || '(no email yet)') + '</td>' +\n  '<td style=\"padding:4px 8px;text-align:center;\"><b>' + r.intent_score + '</b></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc((r.signals && r.signals.reason) || '') + '</td></tr>'\n).join('');\n\nconst html =\n  '<h2>Sanaku scraper run - ' + nowIso.slice(0, 10) + '</h2>' +\n  '<p><b>' + rows.length + '</b> new prospects stored. ' +\n  Object.entries(byVertical).map(([v, n]) => v + ': ' + n).join(' | ') +\n  ' | Tier 1: <b>' + tier1.length + '</b></p>' +\n  (top10\n    ? '<table border=\"1\" cellspacing=\"0\" style=\"border-collapse:collapse;font-family:sans-serif;font-size:13px;\">' +\n      '<tr style=\"background:#f5f5f5;\"><th>#</th><th>Company</th><th>Contact</th><th>Phone / Email</th><th>Intent</th><th>Why they scored</th></tr>' +\n      top10 + '</table>'\n    : '<p>No Tier 1 prospects this run.</p>') +\n  '<p>Review and approve in the Pipeline dashboard. Nothing is contacted until you approve it.</p>';\n\nreturn [{ json: { rows, digestHtml: html, digestSubject: 'Sanaku: ' + rows.length + ' new prospects, ' + tier1.length + ' Tier 1 (' + nowIso.slice(0, 10) + ')' } }];"
       },
       "id": "f1000000-0000-4000-8000-000000000027",
       "name": "Build Upsert Rows",
@@ -771,6 +776,247 @@
       "waitBetweenTries": 5000,
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// n8n's text-format output lands the raw body under different keys across\n// versions ('data' in current builds, 'body' in older ones) - Fetch Robots\n// and Fetch Website hit the same inconsistency; same fallback here.\nconst item = $input.item.json || {};\nlet raw = item.data ?? item.body ?? (typeof item === 'string' ? item : '');\nif (raw && typeof raw === 'object') raw = JSON.stringify(raw);\nraw = String(raw || '');\n\nlet parsed = {};\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = {}; }\nconst person = parsed.person || {};\n\n// request_id can exceed Number.MAX_SAFE_INTEGER (a live call returned a\n// 19-digit, signed value) - pulled as a STRING straight from the raw text,\n// never through JSON.parse, which would round it to the wrong id.\nconst idMatch = raw.match(/\"request_id\"\\s*:\\s*(-?\\d+)/);\nconst requestId = idMatch ? idMatch[1] : null;\n\n// phone_enrichment is present ONLY when reveal_phone_number was true on this\n// call. request_id itself is present on EVERY match call regardless (verified\n// live with reveal_phone_number:false, which still returned a top-level\n// request_id but no phone_enrichment key) - so request_id's presence cannot be\n// used to decide whether a reveal was actually requested.\nconst phoneRequested = !!parsed.phone_enrichment;\n\nreturn { json: { person, phoneRequested, phoneRequestId: phoneRequested ? requestId : null } };"
+      },
+      "id": "a5000000-0000-4000-8000-0000000000d1",
+      "name": "Parse Enrich Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2650,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?select=id,domain,phone_reveal_request_id,phone_reveal_requested_at&phone_reveal_request_id=not.is.null&order=phone_reveal_requested_at.asc&limit=50",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a5000000-0000-4000-8000-0000000000e1",
+      "name": "Get Pending Phone Reveals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        940
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "a5000000-0000-4000-8000-0000000000e2",
+      "name": "Per Pending Phone",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        780,
+        940
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apollo.io/api/v1/webhook_result/{{ $('Per Pending Phone').first().json.phone_reveal_request_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a5000000-0000-4000-8000-0000000000e3",
+      "name": "Poll Phone Reveal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        940
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "apollo-header-auth",
+          "name": "Apollo API Key (Header Auth)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Decide what to do with a reveal we kicked off on a PREVIOUS run. Polling\n// costs no Apollo credit either way - only the original reveal call was\n// billed, back when 'Apollo Enrich Person' first requested it.\nconst pending = $('Per Pending Phone').first().json;\nconst resp = $input.item.json || {};\n\n// 7 days, not Apollo's full 30-day retention window: bounded so a request\n// that failed or expired on Apollo's side does not sit in the queue and get\n// re-polled every run indefinitely. Comfortably survives one missed weekly\n// run before giving up.\nconst GIVE_UP_DAYS = 7;\nconst requestedAt = pending.phone_reveal_requested_at ? new Date(pending.phone_reveal_requested_at).getTime() : 0;\nconst ageDays = (Date.now() - requestedAt) / 86400000;\n\nconst wr = resp.webhook_result || {};\nconst status = wr.status || (resp.error_code === 'result_pending' ? 'pending' : (resp.error ? 'failed' : 'pending'));\n\nif (status === 'success') {\n  const person = (wr.people || [])[0] || {};\n  // A business-registered line first when Apollo has one; mobile as the\n  // fallback that is often the ONLY number on file for a solo owner - which\n  // is fine here, never invented: only what the poll actually returned.\n  const pick = (arr) => (Array.isArray(arr) && arr[0] && arr[0].sanitized_number) || null;\n  const number = pick(person.direct_phone) || pick(person.corporate_phone) || pick(person.mobile_phone) || pick(person.other_phone);\n  return { json: { id: pending.id, resolved: true, number, giveUp: false } };\n}\n\nif (status === 'failed' || ageDays > GIVE_UP_DAYS) {\n  return { json: { id: pending.id, resolved: true, number: null, giveUp: true,\n    reason: status === 'failed' ? 'Apollo reported the reveal failed' : `no result after ${GIVE_UP_DAYS} days` } };\n}\n\n// still pending and not yet expired - leave it queued for the next run\nreturn { json: { id: pending.id, resolved: false } };"
+      },
+      "id": "a5000000-0000-4000-8000-0000000000e4",
+      "name": "Resolve Phone Reveal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        940
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "phone-resolved",
+              "leftValue": "={{ $json.resolved === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a5000000-0000-4000-8000-0000000000e5",
+      "name": "Phone Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        940
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?id=eq.{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.number ? { contact_phone: $json.number, contact_phone_source: 'apollo_direct', phone_reveal_request_id: null, phone_reveal_requested_at: null } : { phone_reveal_request_id: null, phone_reveal_requested_at: null }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a5000000-0000-4000-8000-0000000000e6",
+      "name": "Update Prospect Phone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1660,
+        880
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "phone-giveup",
+              "leftValue": "={{ $('Resolve Phone Reveal').first().json.giveUp === true && !$('Resolve Phone Reveal').first().json.number }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a5000000-0000-4000-8000-0000000000e7",
+      "name": "Needs Giveup Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'Phone reveal gave up: ' + String($('Resolve Phone Reveal').first().json.reason || 'unknown').slice(0, 300), payload: { prospect_id: $('Resolve Phone Reveal').first().json.id } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a5000000-0000-4000-8000-0000000000e8",
+      "name": "Log Phone Reveal Giveup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2100,
+        820
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -801,6 +1047,11 @@
         [
           {
             "node": "Get Existing Prospects",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Pending Phone Reveals",
             "type": "main",
             "index": 0
           }
@@ -1109,7 +1360,7 @@
       "main": [
         [
           {
-            "node": "Attach Contact",
+            "node": "Parse Enrich Response",
             "type": "main",
             "index": 0
           }
@@ -1165,6 +1416,120 @@
         [
           {
             "node": "Maps Search (SerpAPI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Phone Reveals": {
+      "main": [
+        [
+          {
+            "node": "Per Pending Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Per Pending Phone": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Poll Phone Reveal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Phone Reveal": {
+      "main": [
+        [
+          {
+            "node": "Resolve Phone Reveal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Phone Reveal": {
+      "main": [
+        [
+          {
+            "node": "Phone Resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phone Resolved?": {
+      "main": [
+        [
+          {
+            "node": "Update Prospect Phone",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Per Pending Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Prospect Phone": {
+      "main": [
+        [
+          {
+            "node": "Needs Giveup Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Giveup Log?": {
+      "main": [
+        [
+          {
+            "node": "Log Phone Reveal Giveup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Per Pending Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Phone Reveal Giveup": {
+      "main": [
+        [
+          {
+            "node": "Per Pending Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Enrich Response": {
+      "main": [
+        [
+          {
+            "node": "Attach Contact",
             "type": "main",
             "index": 0
           }

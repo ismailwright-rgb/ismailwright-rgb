@@ -224,8 +224,15 @@ baked in at build time. `netlify.toml` handles the SPA redirect.
   that a SerpAPI-only prospect has a business but no named decision maker.
   On a paid plan: `sh ~/sanaku.sh set APOLLO_KEY <key>` and re-import — the
   installer creates the credential and turns `useApollo` on. Search is cheap;
-  `people/match` (email reveal) is what costs credits, so W1 caps at 12
-  reveals/run, Tier 1 only, best intent score first.
+  `people/match` (email reveal) is what costs credits, so W1 caps email
+  reveals at 25/run by default (`APOLLO_REVEALS=`), best-ranked contact first.
+  Direct-dial/mobile reveal is a SEPARATE, much tighter budget — confirmed
+  live at **8 credits per reveal**, not 1. It's async: Apollo can take
+  several minutes, so W1 kicks it off on one run and resolves it on a later
+  one (`phone_reveal_request_id` on `sanaku_prospects`). Defaults to 6/run
+  (`APOLLO_PHONE_REVEALS=`), and only for prospects already selected for
+  email reveal — never spend a phone credit on someone we haven't already
+  confirmed is the right person.
 - **Google Places**: needs a billing-enabled GCP project but the monthly $200
   credit covers this volume ~free. Leave the key unset until then — W1 degrades
   gracefully (no reviews signal, slightly weaker scoring).

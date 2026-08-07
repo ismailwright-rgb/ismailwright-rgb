@@ -35,6 +35,7 @@ OWNER_EMAIL="${OWNER_EMAIL:-}"
 SERPAPI_KEY="${SERPAPI_KEY:-}"
 APOLLO_KEY="${APOLLO_KEY:-}"   # optional: Apollo's free plan has no API access
 APOLLO_REVEALS="${APOLLO_REVEALS:-}"   # email reveals per run when Apollo is on (default 25)
+APOLLO_PHONE_REVEALS="${APOLLO_PHONE_REVEALS:-}"   # direct-dial reveals per run (default 6; costs 8 credits each, not 1)
 SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}"
 ACTIVATE="${ACTIVATE:-1}"
 
@@ -102,7 +103,7 @@ print(json.dumps({
 fi
 
 echo "==> Patching for this instance..."
-export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY SUPABASE_ANON_KEY TMPDIR_WF="$TMP"
+export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS APOLLO_PHONE_REVEALS DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY SUPABASE_ANON_KEY TMPDIR_WF="$TMP"
 python3 <<'PY'
 import json, os, re, sys
 
@@ -189,8 +190,20 @@ for node in wf["nodes"]:
             code, n = re.subn(r"maxRevealsPerRun:\s*\d+", f"maxRevealsPerRun: {want}", code)
             if n != 1:
                 raise SystemExit(f"    !! Run Config has {n} maxRevealsPerRun settings, expected 1")
+        # Phone is a SEPARATE, much smaller cap - 8 credits/reveal vs ~1 for
+        # email, confirmed against a live call, not assumed from Apollo's docs
+        # (which quote no number at all). 6/run keeps a full week's runs well
+        # under the ~312 reveals/cycle a 2,500-credit plan actually affords.
+        want_phone = os.environ.get("APOLLO_PHONE_REVEALS", "").strip()
+        want_phone = int(want_phone) if want_phone.isdigit() and int(want_phone) > 0 else 6
+        want_phone = want_phone if apollo_id else 0
+        code, n = re.subn(r"maxPhoneRevealsPerRun:\s*\d+", f"maxPhoneRevealsPerRun: {want_phone}", code)
+        if n != 1:
+            raise SystemExit(f"    !! Run Config has {n} maxPhoneRevealsPerRun settings, expected 1")
         node["parameters"]["jsCode"] = code
         print("    apollo people-search: " + ("on" if apollo_id else "off (no APOLLO_KEY)"))
+        if apollo_id:
+            print(f"    apollo phone reveal: {want_phone}/run (8 credits each - not the same budget as email)")
 
 # Anything still referencing $env would resolve to undefined at run time.
 # Fail on the ones that break the workflow; report the rest, since several are

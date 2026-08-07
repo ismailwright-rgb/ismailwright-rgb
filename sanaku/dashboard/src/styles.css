@@ -571,3 +571,7 @@ tbody tr:hover { background: var(--line-soft); }
 .pill.notdm { background: var(--line-soft); color: var(--sub); }
 .whohint { color: var(--sub); font-size: 12.5px; margin: -4px 0 10px; }
 .who-in.decides { color: var(--accent); }
+
+/* Apollo's direct-dial reveal resolves on a LATER run, not this one - staff
+   should see "in progress", not conclude the feature silently did nothing. */
+.whopending { color: var(--sub); font-size: 12.5px; font-style: italic; margin: -4px 0 10px; }

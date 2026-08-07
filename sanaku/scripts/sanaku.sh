@@ -390,6 +390,12 @@ sys.exit(1)
     say "    APOLLO_REVEALS=40 sh ~/sanaku.sh scrape"
     say "  Search is free; only email reveals cost credits, and only Tier 1-2"
     say "  prospects are ever revealed."
+    say ""
+    say "  Direct-dial (phone) reveal is a SEPARATE, tighter budget - confirmed"
+    say "  live at 8 credits per reveal, not 1. Defaults to 6/run:"
+    say "    APOLLO_PHONE_REVEALS=10 sh ~/sanaku.sh scrape"
+    say "  It resolves over the NEXT run or two, not instantly - Apollo delivers"
+    say "  the number asynchronously, sometimes several minutes later."
   fi
   return $_rc
 }

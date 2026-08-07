@@ -78,6 +78,12 @@ function WhoYouAreCalling({ p }) {
         </div>
       )}
       {auth?.hint && <p className="whohint">{auth.hint}</p>}
+      {p.phone_reveal_request_id && p.contact_phone_source !== 'apollo_direct' && (
+        <p className="whopending">
+          Direct-line reveal requested — Apollo can take several minutes.
+          Check back after the next scrape.
+        </p>
+      )}
       <div className="whophones">
         {p.contact_phone ? (
           <div className={'whophone' + (src?.good ? ' direct' : '')}>
