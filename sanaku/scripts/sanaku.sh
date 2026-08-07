@@ -375,7 +375,32 @@ console.log(JSON.stringify(calls));
 ") || { say "Run Config's own code failed to run - see the error above. Not guessing at a query; fix that first."; return 1; }
 
   APOLLO_KEY="$APOLLO_KEY" python3 -c '
-import json, os, sys, urllib.request, urllib.error
+import json, os, subprocess, sys
+
+# curl, not urllib. urllib.request opens its own TLS connection using
+# Pythons bundled/absent cert store, which on macOS commonly cannot find a
+# local issuer even though curl - and every other https:// call this whole
+# script makes - works fine, because curl uses the OS trust store directly.
+# Confirmed live: this exact code with urllib failed
+# "CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate" on a
+# real Mac. Never make our own TLS connection in Python here; shell out to
+# the same curl every other network call in this script already trusts.
+def curl_post(url, headers, body_bytes, timeout):
+    cmd = ["curl", "-sS", "-m", str(timeout), "-w", "\\n%{http_code}", "-X", "POST", url]
+    for k, v in headers.items():
+        cmd += ["-H", f"{k}: {v}"]
+    cmd += ["--data-binary", "@-"]
+    r = subprocess.run(cmd, input=body_bytes, capture_output=True)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr.decode(errors="replace") or "curl exited %d" % r.returncode).strip())
+    # ONE backslash here, not two: curl already decoded its own "\n" (the
+    # literal two characters passed to -w above) into a real newline byte in
+    # its actual output - this has to split on that real byte, not search for
+    # the literal two-char sequence again. Getting this backwards makes rsplit
+    # never find a split point, so every response (success included) falls
+    # through to the final "unexpected response" branch below with code="?".
+    raw = r.stdout.decode(errors="replace").rsplit("\n", 1)
+    return (raw[1].strip(), raw[0]) if len(raw) == 2 else ("?", raw[0])
 
 calls = json.loads(sys.argv[1])
 key = os.environ["APOLLO_KEY"]
@@ -383,17 +408,14 @@ fatal = False
 
 for c in calls:
     label = "%-13s / %-9s" % (c["vertical"], c["pass"])
-    req = urllib.request.Request(
-        "https://api.apollo.io/api/v1/mixed_people/search",
-        data=json.dumps(c["body"]).encode(),
-        headers={"x-api-key": key, "Content-Type": "application/json", "accept": "application/json"},
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(req, timeout=40) as r:
-            code, body = r.status, r.read().decode()
-    except urllib.error.HTTPError as e:
-        code, body = e.code, e.read().decode()
+        code_s, body = curl_post(
+            "https://api.apollo.io/api/v1/mixed_people/search",
+            {"x-api-key": key, "Content-Type": "application/json", "accept": "application/json"},
+            json.dumps(c["body"]).encode(),
+            40,
+        )
+        code = int(code_s) if code_s.isdigit() else code_s
     except Exception as e:
         print("  %s  COULD NOT REACH APOLLO: %s" % (label, e))
         fatal = True
