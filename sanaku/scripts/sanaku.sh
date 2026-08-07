@@ -266,7 +266,7 @@ cmd_status() {
   fi
 
   head1 "Pipeline"
-  sb "sanaku_prospects?select=tier,status,contact_email,contact_phone,first_seen" 2>/dev/null | python3 -c '
+  sb "sanaku_prospects?select=tier,status,contact_email,contact_phone,contact_name,vertical,source,first_seen" 2>/dev/null | python3 -c '
 import sys, json
 try:
     rows = json.load(sys.stdin)
@@ -292,6 +292,49 @@ if tiers.get(None):
 print("  contactable: %d with email, %d with phone" % (have_email, have_phone))
 print("  status: " + ", ".join("%s=%d" % kv for kv in sorted(statuses.items())))
 print("  newest row: " + (last[:19].replace("T", " ") if last else "?"))
+
+# The one question that keeps coming up: did the LATEST batch actually get
+# named decision makers, or only businesses. Grouped by the newest calendar
+# day present, not by an exact timestamp - a run spans several minutes.
+latest_day = last[:10] if last else None
+if latest_day:
+    todays = [r for r in rows if (r.get("first_seen") or "")[:10] == latest_day]
+    by_vertical = {}
+    for r in todays:
+        v = r.get("vertical") or "?"
+        s = r.get("source") or "?"
+        named = bool(r.get("contact_name"))
+        e = by_vertical.setdefault(v, {"apollo_named": 0, "apollo_unnamed": 0, "places": 0})
+        if s == "apollo":
+            e["apollo_named" if named else "apollo_unnamed"] += 1
+        elif s == "google_places":
+            e["places"] += 1
+    print("")
+    print("  Latest batch (%s), by vertical - named contact vs business only:" % latest_day)
+    for v, e in sorted(by_vertical.items()):
+        total = e["apollo_named"] + e["apollo_unnamed"] + e["places"]
+        print("    %-15s %2d named (Apollo)   %2d business-only (Places)   of %d" % (
+            v, e["apollo_named"], e["places"], total))
+'
+
+  head1 "Apollo - recent activity"
+  # A SEPARATE, wider query from the general error log below - Apollo events
+  # fire at most 6 times per run (one per vertical/pass), so ordinary website-
+  # fetch failures (which fire far more often) can push them out of a plain
+  # top-5 view even on a run where Apollo genuinely broke.
+  sb "sanaku_errors?select=occurred_at,error,payload&error=ilike.*Apollo*&order=occurred_at.desc&limit=10" 2>/dev/null | python3 -c '
+import sys, json
+try:
+    rows = json.load(sys.stdin)
+except Exception:
+    rows = []
+if not rows:
+    print("  no Apollo errors or zero-result events logged - either it is working,")
+    print("  or a scrape has not run since this logging was added. Run a fresh")
+    print("  scrape if in doubt:  sh ~/sanaku.sh scrape")
+for r in rows:
+    v = (r.get("payload") or {}).get("vertical") or "?"
+    print("  %s  [%s]  %s" % ((r.get("occurred_at") or "")[:19].replace("T", " "), v, (r.get("error") or "")[:90]))
 '
 
   head1 "Recent errors / skips"
