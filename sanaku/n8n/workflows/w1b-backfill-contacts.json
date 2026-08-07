@@ -1,0 +1,708 @@
+{
+  "name": "Sanaku - W1b Backfill Contacts",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## W1b - Backfill contacts on existing prospects\n\nCompanion to W1. W1's dedupe is permanent and by domain: once a company is in\n`sanaku_prospects`, W1 will never look at it again, even after Apollo people\nsearch comes back online. That leaves the whole existing backlog stuck at\n\"business-only\" (Google Places, no named contact) forever - W1 alone can\nnever fix rows it already wrote.\n\nThis workflow closes that gap. Per run:\n1. Pull existing prospects with no named contact (`contact_name IS NULL`,\n   `source = 'google_places'`, `status = 'new'`, not do-not-contact),\n   best first (Tier 1 before Tier 2/3, highest intent first), capped at\n   `maxRevealsPerRun` - the same budget name and meaning as W1's, just\n   spent against the backlog instead of fresh discoveries.\n2. Per company: Apollo people search SCOPED TO ITS DOMAIN\n   (`q_organization_domains_list`) - both passes, seniority then ops-title,\n   same authority ranking as W1's Filter & Dedupe (kept in sync by hand -\n   no shared code between separate workflow files). Search is free.\n3. Best-ranked person found -> reveal (paid: ~1 credit email, 8 credits\n   phone - phone only for the front of the same list, same as W1). Update\n   the EXISTING row in place - never a new row, never touching its score,\n   tier, or tech signals. Phone reveal is async exactly like W1's: this\n   only kicks it off (`phone_reveal_request_id`), and W1's own\n   'Get Pending Phone Reveals' side-branch resolves it on its next run,\n   whichever workflow set the pending id.\n4. Nobody found for a company -> row is left untouched. Not every business\n   has anyone in Apollo; this is a normal, common, unlogged outcome, not\n   a failure (matches W1: company-level zero results are routine).\n\nMeant to be run on demand against the backlog, not on a weekly schedule -\ntrigger via Manual Trigger in the editor, or the `sanaku-run-w1b-backfill`\nwebhook GET. Uses the SAME Apollo/Supabase credentials as W1, and the SAME\nenv-driven install pattern: `sh ~/sanaku.sh import w1b-backfill-contacts`\nturns Apollo on/off and sizes the reveal budgets exactly like W1's import\ndoes, because this file's Run Config node uses the identical\nuseApollo / maxRevealsPerRun / maxPhoneRevealsPerRun field names the\ninstaller's generic patcher already knows how to rewrite.\n\nIf a run does nothing, check `sh ~/sanaku.sh status` for a\n'Apollo backfill skipped: useApollo is false' line - that means no\nAPOLLO_KEY was present when this was last imported, so re-import with the\nkey set: `sh ~/sanaku.sh import w1b-backfill-contacts`.",
+        "height": 620,
+        "width": 620
+      },
+      "id": "b6000000-0000-4000-8000-000000000000",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        40,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b6000000-0000-4000-8000-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        120,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "sanaku-run-w1b-backfill",
+        "options": {}
+      },
+      "id": "b6000000-0000-4000-8000-000000000002",
+      "name": "Backfill Run Hook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        120,
+        820
+      ],
+      "webhookId": "b6000000-0000-4000-8000-0000000000ab"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Backfill Run Config. Same authority/seniority/exclusion rules as W1's Run\n// Config - kept in sync BY HAND, since separate n8n workflow files share no\n// code. If W1's Run Config changes DM_SENIORITIES, OPS_TITLES, or the\n// exclude regexes, mirror the change here too.\nconst DM_SENIORITIES = ['owner', 'founder', 'c_suite', 'partner', 'vp', 'director'];\nconst OPS_TITLES = {\n  law_firm: ['Chief Operating Officer', 'Director of Operations', 'Practice Group Leader',\n             'Firm Administrator', 'Legal Administrator', 'Director of Intake'],\n  medical: ['Office Manager', 'Practice Manager', 'Practice Administrator',\n            'Dental Office Manager', 'Head of Operations', 'Director of Operations'],\n  home_services: ['General Manager', 'Operations Manager', 'Director of Operations',\n                  'Dispatcher', 'Dispatch Manager', 'Service Manager'],\n};\n\nreturn [{\n  json: {\n    // Set by the installer from whether APOLLO_KEY is configured - do NOT\n    // flip this by hand, same rule as W1's Run Config: true with no\n    // credential fails every Apollo node mid-run.\n    useApollo: false,\n    // How many existing business-only prospects to reveal an email for this\n    // run. Search (step 2) is free regardless of this cap - only the reveal\n    // in step 3 spends a credit. Same name, same meaning as W1's own cap,\n    // just spent against the backlog instead of fresh discoveries. Installer\n    // sets it from APOLLO_REVEALS, same as W1.\n    maxRevealsPerRun: 25,\n    // Phone is the front of the SAME best-first list, a separate and much\n    // tighter budget - confirmed live at 8 credits a reveal, not ~1 like\n    // email. Installer sets it from APOLLO_PHONE_REVEALS, same as W1.\n    maxPhoneRevealsPerRun: 0,\n    excludeTitleRe: 'receptionist|paralegal|assistant|chief content|content officer|editor-in-chief|publisher',\n    excludeCompanyRe: 'marketing|agency|agencies|automation|\\\\bai\\\\b|artificial intelligence|software|saas|consult|growth partner|lead gen|supplies|\\\\bsupply\\\\b|wholesale|distribut|telecom|networking|\\\\bcloud\\\\b|\\\\blabs\\\\b|magazine|association',\n    personSeniorities: DM_SENIORITIES,\n    opsTitles: OPS_TITLES,\n  },\n}];"
+      },
+      "id": "b6000000-0000-4000-8000-000000000003",
+      "name": "Run Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "apollo-enabled",
+              "leftValue": "={{ $json.useApollo === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b6000000-0000-4000-8000-000000000004",
+      "name": "Apollo Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        560,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'Apollo backfill skipped: useApollo is false - no APOLLO_KEY was configured when this workflow was last imported. Re-import with the key set: sh ~/sanaku.sh import w1b-backfill-contacts', payload: {} }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "b6000000-0000-4000-8000-000000000005",
+      "name": "Log Apollo Disabled",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        900
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?select=id,domain,company_name,vertical,city,state,contact_name,contact_email,contact_email_personal,contact_linkedin_url,tier,intent_score&contact_name=is.null&source=eq.google_places&status=eq.new&do_not_contact=eq.false&order=tier.asc.nullslast,intent_score.desc.nullslast&limit={{ $json.maxRevealsPerRun }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "b6000000-0000-4000-8000-000000000006",
+      "name": "Get Backfill Candidates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        750
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Candidates already arrive best-first (tier asc, intent desc - the SQL\n// query in 'Get Backfill Candidates' did that sort and applied the cap), so\n// position in this list IS priority order. Phone reveal is a subset of that\n// SAME order, the front maxPhoneRevealsPerRun of it - never a separate\n// selection, same rule as W1's Cap Reveals.\nconst cfg = $('Run Config').first().json;\nconst items = $input.all().map((i) => i.json);\nreturn items.map((x, i) => ({ json: { ...x, needsPhoneReveal: i < (cfg.maxPhoneRevealsPerRun || 0) } }));"
+      },
+      "id": "b6000000-0000-4000-8000-000000000007",
+      "name": "Stamp Reveal Budget",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "b6000000-0000-4000-8000-000000000008",
+      "name": "Per Backfill Candidate",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1220,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/api/v1/mixed_people/api_search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ q_organization_domains_list: [$json.domain], person_seniorities: $('Run Config').first().json.personSeniorities, per_page: 10, page: 1 }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "b6000000-0000-4000-8000-000000000009",
+      "name": "Apollo Search By Domain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        620
+      ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "apollo-header-auth",
+          "name": "Apollo API Key (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'Apollo backfill search failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000), payload: { domain: $('Per Backfill Candidate').first().json.domain, vertical: $('Per Backfill Candidate').first().json.vertical } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "b6000000-0000-4000-8000-00000000000a",
+      "name": "Log Backfill Apollo Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        480
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/api/v1/mixed_people/api_search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ q_organization_domains_list: [$('Per Backfill Candidate').first().json.domain], person_titles: ($('Run Config').first().json.opsTitles[$('Per Backfill Candidate').first().json.vertical] || []), per_page: 10, page: 1 }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "b6000000-0000-4000-8000-00000000000b",
+      "name": "Apollo Search By Domain Ops",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1660,
+        620
+      ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "apollo-header-auth",
+          "name": "Apollo API Key (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'Apollo backfill ops search failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000), payload: { domain: $('Per Backfill Candidate').first().json.domain, vertical: $('Per Backfill Candidate').first().json.vertical } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "b6000000-0000-4000-8000-00000000000c",
+      "name": "Log Backfill Apollo Ops Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1660,
+        480
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Combine both Apollo passes for this ONE already-known company and pick\n// the best-ranked decision maker, using the EXACT same per-vertical\n// authority ranking as W1's Filter & Dedupe - kept in sync by hand, no\n// shared module between separate workflow files. No domain/phone dedupe\n// here: unlike W1, the point of this workflow IS to revisit a company\n// already in the table.\nconst cfg = $('Run Config').first().json;\nconst company = $('Per Backfill Candidate').first().json;\n\n// Distinguishes \"errored\" from \"ran fine, found nobody\" - same reasoning\n// as W1: conflating them is what made a silently-broken Apollo credential\n// impossible to tell apart from a company Apollo genuinely has nobody for.\nconst apolloRunInfo = (node) => {\n  try {\n    const j = $(node).first().json || {};\n    if (j && j.error) return { people: [], errored: true };\n    if (Array.isArray(j.people)) return { people: j.people, errored: false };\n    return { people: [], errored: false };\n  } catch (e) { return { people: [], errored: false }; }\n};\nconst seniorityInfo = apolloRunInfo('Apollo Search By Domain');\nconst opsInfo = apolloRunInfo('Apollo Search By Domain Ops');\nconst people = [...seniorityInfo.people, ...opsInfo.people];\n\nconst exTitle = new RegExp(cfg.excludeTitleRe, 'i');\nconst exCompany = new RegExp(cfg.excludeCompanyRe, 'i');\n\nconst AUTHORITY = [\n  ['owner',      /\\bowner\\b|founder|principal|(?<!vice )\\bpresident\\b|\\bceo\\b|chief executive|managing (partner|attorney|director)|sole (attorney|practitioner)/],\n  ['operations', /\\bcoo\\b|chief operating|(director|vp|vice president|head)\\s+(of\\s+)?operations|operations (manager|director)|general manager|\\bgm\\b|dispatch|service manager|practice group (leader|lead)|firm administrator|legal administrator/],\n  ['office',     /office manager|practice (manager|administrator)|business manager|office administrator/],\n  ['c_suite',    /\\bchief\\b|\\bcfo\\b|\\bcmo\\b|\\bcto\\b|\\bcso\\b/],\n  ['partner',    /\\bpartner\\b/],\n  ['marketing',  /marketing|\\bintake\\b|growth|business development|\\bbiz dev\\b|client relations|revenue/],\n  ['leader',     /director|\\bvp\\b|vice president|\\bhead of\\b/],\n  ['staff',      /manager|administrator|coordinator/],\n];\nconst authority = (title) => {\n  const t = String(title || '').toLowerCase();\n  for (const [band, re] of AUTHORITY) if (re.test(t)) return band;\n  return 'staff';\n};\nconst RANK = {\n  law_firm:      { owner: 9, partner: 8, operations: 7, c_suite: 6, marketing: 5, office: 4, leader: 3, staff: 2 },\n  medical:       { owner: 9, office: 8, operations: 7, c_suite: 6, marketing: 5, partner: 5, leader: 3, staff: 2 },\n  home_services: { owner: 9, operations: 8, c_suite: 6, marketing: 5, partner: 5, office: 4, leader: 3, staff: 2 },\n};\nconst DECIDES = {\n  law_firm:      new Set(['owner', 'partner', 'operations', 'c_suite', 'marketing']),\n  medical:       new Set(['owner', 'office', 'operations', 'c_suite', 'marketing']),\n  home_services: new Set(['owner', 'operations', 'c_suite', 'marketing']),\n};\nconst rankOf = (title) => (RANK[company.vertical] || RANK.home_services)[authority(title)] || 0;\nconst decides = (title) => (DECIDES[company.vertical] || DECIDES.home_services).has(authority(title));\n\nlet best = null;\nfor (const person of people) {\n  const org = person.organization || {};\n  if (exTitle.test(person.title || '')) continue;\n  if (exCompany.test(org.name || company.company_name || '')) continue;\n  const emp = org.estimated_num_employees ?? null;\n  if (emp !== null && emp < 2) continue;\n  if (!best || rankOf(person.title) > rankOf(best.title)) best = person;\n}\n\nif (!best) {\n  return [{ json: { ...company, found: false } }];\n}\n\nreturn [{ json: {\n  ...company,\n  apollo_person_id: best.id || null,\n  contact_name: best.name || [best.first_name, best.last_name].filter(Boolean).join(' ') || company.contact_name || null,\n  contact_title: best.title || null,\n  contact_authority: authority(best.title),\n  decision_maker: decides(best.title),\n  contact_linkedin_url: best.linkedin_url || company.contact_linkedin_url || null,\n  found: true,\n} }];"
+      },
+      "id": "b6000000-0000-4000-8000-00000000000d",
+      "name": "Pick Best Person",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "found-person",
+              "leftValue": "={{ $json.found === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b6000000-0000-4000-8000-00000000000e",
+      "name": "Found Person?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/api/v1/people/match",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $json.apollo_person_id, reveal_personal_emails: true, reveal_phone_number: $json.needsPhoneReveal === true }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "b6000000-0000-4000-8000-00000000000f",
+      "name": "Apollo Enrich Person",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2320,
+        620
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "apollo-header-auth",
+          "name": "Apollo API Key (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// n8n's text-format output lands the raw body under different keys across\n// versions ('data' in current builds, 'body' in older ones) - same fallback\n// W1 uses for the identical Apollo response shape.\nconst item = $input.item.json || {};\nlet raw = item.data ?? item.body ?? (typeof item === 'string' ? item : '');\nif (raw && typeof raw === 'object') raw = JSON.stringify(raw);\nraw = String(raw || '');\n\nlet parsed = {};\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = {}; }\nconst person = parsed.person || {};\n\n// request_id can exceed Number.MAX_SAFE_INTEGER - pulled as a STRING\n// straight from the raw text, never through JSON.parse, same reason as W1.\nconst idMatch = raw.match(/\"request_id\"\\s*:\\s*(-?\\d+)/);\nconst requestId = idMatch ? idMatch[1] : null;\nconst phoneRequested = !!parsed.phone_enrichment;\n\nconst rawPersonalEmails = Array.isArray(person.personal_emails) ? person.personal_emails : [];\nconst firstPersonal = rawPersonalEmails.length\n  ? (typeof rawPersonalEmails[0] === 'string'\n      ? rawPersonalEmails[0]\n      : (rawPersonalEmails[0].email || rawPersonalEmails[0].address || rawPersonalEmails[0].value || null))\n  : null;\n\nreturn { json: {\n  person, phoneRequested, phoneRequestId: phoneRequested ? requestId : null,\n  personalEmail: firstPersonal,\n} };"
+      },
+      "id": "b6000000-0000-4000-8000-000000000010",
+      "name": "Parse Enrich Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Attach the revealed business email (never personal) to the prospect.\n// Same logic as W1's Attach Contact, reading from THIS workflow's loop node.\nconst company = $('Pick Best Person').first().json;\nconst parsed = $input.first().json || {};\nconst person = parsed.person || {};\nconst email = person.email && !String(person.email).includes('email_not_unlocked') ? person.email : null;\n\n// Apollo obfuscates/omits last names in SEARCH results unless the plan\n// includes full-reveal-in-search - same behavior W1 documents. Only ever\n// upgrades a partial name to a fuller one; never downgrades.\nconst enrichedName = person.name || [person.first_name, person.last_name].filter(Boolean).join(' ') || null;\nconst looksPartial = (n) => !n || !String(n).trim().includes(' ');\nconst contactName = (enrichedName && looksPartial(company.contact_name) && !looksPartial(enrichedName))\n  ? enrichedName\n  : (company.contact_name || null);\n\n// Phone is never in this response (verified live on W1 twice). contact_phone\n// is deliberately NOT touched here or in the write step below - it is set\n// only once the async request_id resolves, by W1's OWN 'Update Prospect\n// Phone' side-branch, which polls ANY pending id regardless of which\n// workflow originally requested it.\nconst nowIso = new Date().toISOString();\nreturn [{ json: {\n  ...company,\n  contact_name: contactName,\n  contact_email: email || company.contact_email || null,\n  contact_email_personal: parsed.personalEmail || company.contact_email_personal || null,\n  contact_linkedin_url: company.contact_linkedin_url || person.linkedin_url || null,\n  phone_reveal_request_id: parsed.phoneRequestId || company.phone_reveal_request_id || null,\n  phone_reveal_requested_at: parsed.phoneRequestId ? nowIso : (company.phone_reveal_requested_at || null),\n} }];"
+      },
+      "id": "b6000000-0000-4000-8000-000000000011",
+      "name": "Attach Contact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?id=eq.{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contact_name: $json.contact_name, contact_title: $json.contact_title, contact_authority: $json.contact_authority, decision_maker: $json.decision_maker, contact_email: $json.contact_email, contact_email_personal: $json.contact_email_personal, contact_linkedin_url: $json.contact_linkedin_url, phone_reveal_request_id: $json.phone_reveal_request_id, phone_reveal_requested_at: $json.phone_reveal_requested_at }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "b6000000-0000-4000-8000-000000000012",
+      "name": "Update Prospect Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2980,
+        620
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "b6000000-0000-4000-8000-000000000013",
+      "name": "Backfill Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1220,
+        900
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backfill Run Hook": {
+      "main": [
+        [
+          {
+            "node": "Run Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Config": {
+      "main": [
+        [
+          {
+            "node": "Apollo Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apollo Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Get Backfill Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Apollo Disabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Backfill Candidates": {
+      "main": [
+        [
+          {
+            "node": "Stamp Reveal Budget",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stamp Reveal Budget": {
+      "main": [
+        [
+          {
+            "node": "Per Backfill Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Per Backfill Candidate": {
+      "main": [
+        [
+          {
+            "node": "Backfill Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Apollo Search By Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apollo Search By Domain": {
+      "main": [
+        [
+          {
+            "node": "Apollo Search By Domain Ops",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Backfill Apollo Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Backfill Apollo Error": {
+      "main": [
+        [
+          {
+            "node": "Apollo Search By Domain Ops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apollo Search By Domain Ops": {
+      "main": [
+        [
+          {
+            "node": "Pick Best Person",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Backfill Apollo Ops Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Backfill Apollo Ops Error": {
+      "main": [
+        [
+          {
+            "node": "Pick Best Person",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Best Person": {
+      "main": [
+        [
+          {
+            "node": "Found Person?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found Person?": {
+      "main": [
+        [
+          {
+            "node": "Apollo Enrich Person",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Per Backfill Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apollo Enrich Person": {
+      "main": [
+        [
+          {
+            "node": "Parse Enrich Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Enrich Response": {
+      "main": [
+        [
+          {
+            "node": "Attach Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Contact": {
+      "main": [
+        [
+          {
+            "node": "Update Prospect Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Prospect Contact": {
+      "main": [
+        [
+          {
+            "node": "Per Backfill Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  }
+}

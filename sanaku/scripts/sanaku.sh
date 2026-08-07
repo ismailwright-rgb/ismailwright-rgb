@@ -1487,6 +1487,12 @@ Workflow names for 'import' (the .json suffix is optional):
   t1-reply-handler       replies to those texts
   t2-voice-agent         the AI phone agent (use 'voice' instead - it also
                          prints the VAPI setup)
+  w1b-backfill-contacts  reveal named Apollo contacts for EXISTING business-
+                         only prospects W1 already stored (run on demand,
+                         not scheduled - w1's own dedupe never revisits a
+                         company once it is in the table, even after Apollo
+                         comes back on, so this is the only way to backfill
+                         the pre-Apollo backlog)
   w2-outreach-sequencer  cold outreach
   w2b-reply-handler      classifies prospect replies
   w3-demo-booking        booking page + calendar
