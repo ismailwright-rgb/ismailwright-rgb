@@ -360,7 +360,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ id: $json.apollo_person_id, reveal_personal_emails: true, reveal_phone_number: $json.needsPhoneReveal === true, webhook_url: $env.DASHBOARD_URL + '/apollo-phone-reveal-noop' }) }}",
+        "jsonBody": "={{ JSON.stringify({ id: $json.apollo_person_id, reveal_personal_emails: true, reveal_phone_number: $json.needsPhoneReveal === true, webhook_url: $env.N8N_URL + '/webhook/apollo-phone-webhook' }) }}",
         "options": {
           "timeout": 30000,
           "response": {
@@ -430,7 +430,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ contact_name: $json.contact_name, contact_title: $json.contact_title, contact_authority: $json.contact_authority, decision_maker: $json.decision_maker, contact_email: $json.contact_email, contact_email_personal: $json.contact_email_personal, contact_linkedin_url: $json.contact_linkedin_url, phone_reveal_request_id: $json.phone_reveal_request_id, phone_reveal_requested_at: $json.phone_reveal_requested_at }) }}",
+        "jsonBody": "={{ JSON.stringify({ contact_name: $json.contact_name, contact_title: $json.contact_title, contact_authority: $json.contact_authority, decision_maker: $json.decision_maker, contact_email: $json.contact_email, contact_email_personal: $json.contact_email_personal, contact_linkedin_url: $json.contact_linkedin_url, apollo_person_id: $json.apollo_person_id, phone_reveal_request_id: $json.phone_reveal_request_id, phone_reveal_requested_at: $json.phone_reveal_requested_at }) }}",
         "options": {
           "timeout": 15000
         }

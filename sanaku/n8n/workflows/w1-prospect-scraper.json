@@ -605,7 +605,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ id: $json.apollo_person_id, reveal_personal_emails: true, reveal_phone_number: $json.needsPhoneReveal === true, webhook_url: $env.DASHBOARD_URL + '/apollo-phone-reveal-noop' }) }}",
+        "jsonBody": "={{ JSON.stringify({ id: $json.apollo_person_id, reveal_personal_emails: true, reveal_phone_number: $json.needsPhoneReveal === true, webhook_url: $env.N8N_URL + '/webhook/apollo-phone-webhook' }) }}",
         "options": {
           "timeout": 30000,
           "response": {
@@ -638,7 +638,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Attach the revealed business email (never personal) to the prospect.\nconst company = $('Per Reveal').first().json;\nconst parsed = $input.first().json || {};\nconst person = parsed.person || {};\nconst email = person.email && !String(person.email).includes('email_not_unlocked') ? person.email : null;\n\n// Apollo obfuscates/omits last names in SEARCH results unless the plan\n// includes full-reveal-in-search - documented behavior, confirmed live: the\n// same account, same query, returned full last names via one access path and\n// first-name-only via another. contact_name was set from the search step in\n// Filter & Dedupe and never revisited here, so a prospect could be stuck at\n// \"Steve\" forever even though this very call - the one already being paid\n// for - has \"Steve Adler\" sitting right there in the response.\n//\n// Only ever upgrades a partial name to a fuller one; never touches an\n// already-complete name and never downgrades. If search already had the full\n// name, this is a no-op.\nconst enrichedName = person.name || [person.first_name, person.last_name].filter(Boolean).join(' ') || null;\nconst looksPartial = (n) => !n || !String(n).trim().includes(' ');\nconst contactName = (enrichedName && looksPartial(company.contact_name) && !looksPartial(enrichedName))\n  ? enrichedName\n  : (company.contact_name || null);\n\n// Phone is never in this response. Verified live twice: with\n// reveal_phone_number:true the number comes back status 'pending' (async\n// only); with it false there is no per-person phone field on the sync\n// response at all. contact_phone/company_phone/contact_phone_source are\n// therefore left exactly as they arrived via the ...company spread - the\n// old code's `person.sanitized_phone` fallback checked a field that does\n// not exist on a live sync response and always silently fell through.\n//\n// 'Apollo Enrich Person' also sends webhook_url whenever reveal_phone_number\n// is true - confirmed live 2026-08 that Apollo now hard-rejects the call\n// with 400 \"Please add a valid 'webhook_url' parameter\" without it, even\n// though nothing here ever receives that callback: retrieval is entirely by\n// polling 'Get Pending Phone Reveals' below, same as before this changed. A\n// URL under DASHBOARD_URL satisfies the validation; if Apollo ever does POST\n// to it, it 404s harmlessly on infrastructure we already own.\n//\n// The pending id, if one was requested, rides along on the row so the NEXT\n// run's 'Get Pending Phone Reveals' branch can resolve it once Apollo has\n// finished the async lookup.\nconst nowIso = new Date().toISOString();\nreturn [{ json: {\n  ...company,\n  contact_name: contactName,\n  contact_email: email || company.contact_email || null,\n  // A SEPARATE column from contact_email, never merged into it. contact_email\n  // is what W2's automated sender uses, unattended, from the same identity\n  // client statements go out on - a personal inbox does not get promoted into\n  // that pipeline just because Apollo happened to have one on file. Shown on\n  // the dashboard; used by hand, if at all.\n  contact_email_personal: parsed.personalEmail || company.contact_email_personal || null,\n  contact_linkedin_url: company.contact_linkedin_url || person.linkedin_url || null,\n  phone_reveal_request_id: parsed.phoneRequestId || company.phone_reveal_request_id || null,\n  phone_reveal_requested_at: parsed.phoneRequestId ? nowIso : (company.phone_reveal_requested_at || null),\n} }];"
+        "jsCode": "// Attach the revealed business email (never personal) to the prospect.\nconst company = $('Per Reveal').first().json;\nconst parsed = $input.first().json || {};\nconst person = parsed.person || {};\nconst email = person.email && !String(person.email).includes('email_not_unlocked') ? person.email : null;\n\n// Apollo obfuscates/omits last names in SEARCH results unless the plan\n// includes full-reveal-in-search - documented behavior, confirmed live: the\n// same account, same query, returned full last names via one access path and\n// first-name-only via another. contact_name was set from the search step in\n// Filter & Dedupe and never revisited here, so a prospect could be stuck at\n// \"Steve\" forever even though this very call - the one already being paid\n// for - has \"Steve Adler\" sitting right there in the response.\n//\n// Only ever upgrades a partial name to a fuller one; never touches an\n// already-complete name and never downgrades. If search already had the full\n// name, this is a no-op.\nconst enrichedName = person.name || [person.first_name, person.last_name].filter(Boolean).join(' ') || null;\nconst looksPartial = (n) => !n || !String(n).trim().includes(' ');\nconst contactName = (enrichedName && looksPartial(company.contact_name) && !looksPartial(enrichedName))\n  ? enrichedName\n  : (company.contact_name || null);\n\n// Phone is never in this response. Verified live twice: with\n// reveal_phone_number:true the number comes back status 'pending' (async\n// only); with it false there is no per-person phone field on the sync\n// response at all. contact_phone/company_phone/contact_phone_source are\n// therefore left exactly as they arrived via the ...company spread - the\n// old code's `person.sanitized_phone` fallback checked a field that does\n// not exist on a live sync response and always silently fell through.\n//\n// 'Apollo Enrich Person' also sends webhook_url whenever reveal_phone_number\n// is true - Apollo hard-rejects the call with 400 \"Please add a valid\n// 'webhook_url' parameter\" without it. That URL points at THIS instance's\n// own 'Apollo Phone Webhook' node (migration 020), not a placeholder:\n// confirmed live 2026-08 that Apollo's own request_id for this call is\n// sometimes an unquoted JSON number too large to survive standard JSON\n// precision (18-20 digits vs ~15-16 safe) - Apollo's OWN serializer had\n// already rounded it before the response left their server, making\n// 'Get Pending Phone Reveals' polling below permanently unable to find\n// that request, ever, no matter how it is extracted or stored on this\n// side. Apollo pushing the result here, matched back to the row by the\n// person's Apollo id (a hex string, never a large number, never subject\n// to this) instead of the broken numeric id, is what actually works.\n// Polling stays in place as a secondary path - it still succeeds whenever\n// a request_id happens not to lose precision - but the webhook push is\n// now the reliable one.\n//\n// The pending id, if one was requested, still rides along on the row so\n// polling can also try, in case it happens to resolve first.\nconst nowIso = new Date().toISOString();\nreturn [{ json: {\n  ...company,\n  contact_name: contactName,\n  contact_email: email || company.contact_email || null,\n  // A SEPARATE column from contact_email, never merged into it. contact_email\n  // is what W2's automated sender uses, unattended, from the same identity\n  // client statements go out on - a personal inbox does not get promoted into\n  // that pipeline just because Apollo happened to have one on file. Shown on\n  // the dashboard; used by hand, if at all.\n  contact_email_personal: parsed.personalEmail || company.contact_email_personal || null,\n  contact_linkedin_url: company.contact_linkedin_url || person.linkedin_url || null,\n  phone_reveal_request_id: parsed.phoneRequestId || company.phone_reveal_request_id || null,\n  phone_reveal_requested_at: parsed.phoneRequestId ? nowIso : (company.phone_reveal_requested_at || null),\n} }];"
       },
       "id": "f1000000-0000-4000-8000-000000000026",
       "name": "Attach Contact",
@@ -652,7 +652,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Build the upsert payload + the digest email.\nconst items = $input.all().map((i) => i.json).filter((x) => x && x.scored);\nconst nowIso = new Date().toISOString();\nconst rows = items.map((x) => ({\n  company_name: x.company_name,\n  vertical: x.vertical,\n  website_url: x.website_url || null,\n  domain: x.domain,\n  contact_name: x.contact_name || null,\n  contact_title: x.contact_title || null,\n  contact_email: x.contact_email || null,\n  contact_phone: x.contact_phone || null,\n  contact_phone_source: x.contact_phone_source || null,\n  company_phone: x.company_phone || x.contact_phone || null,\n  contact_linkedin_url: x.contact_linkedin_url || null,\n  contact_authority: x.contact_authority || 'none',\n  decision_maker: !!x.decision_maker,\n  phone_reveal_request_id: x.phone_reveal_request_id || null,\n  phone_reveal_requested_at: x.phone_reveal_requested_at || null,\n  contact_email_personal: x.contact_email_personal || null,\n  city: x.city || null,\n  state: x.state || 'California',\n  employee_count: x.employee_count ?? null,\n  ai_maturity_score: x.ai_maturity_score,\n  intent_score: x.intent_score,\n  tech_stack: x.tech_stack || [],\n  signals: x.signals || {},\n  tier: x.tier,\n  status: 'new',\n  source: x.source,\n}));\n\nconst byVertical = {};\nfor (const r of rows) byVertical[r.vertical] = (byVertical[r.vertical] || 0) + 1;\nconst tier1 = rows.filter((r) => r.tier === 1).sort((a, b) => b.intent_score - a.intent_score);\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst top10 = tier1.slice(0, 10).map((r, i) =>\n  '<tr><td style=\"padding:4px 8px;\">' + (i + 1) + '</td>' +\n  '<td style=\"padding:4px 8px;\"><b>' + esc(r.company_name) + '</b><br>' + esc(r.domain) + '</td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_name || '-') + '<br><small>' + esc(r.contact_title || '') + '</small></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_phone || '-') + '<br>' + esc(r.contact_email || '(no email yet)') + '</td>' +\n  '<td style=\"padding:4px 8px;text-align:center;\"><b>' + r.intent_score + '</b></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc((r.signals && r.signals.reason) || '') + '</td></tr>'\n).join('');\n\nconst html =\n  '<h2>Sanaku scraper run - ' + nowIso.slice(0, 10) + '</h2>' +\n  '<p><b>' + rows.length + '</b> new prospects stored. ' +\n  Object.entries(byVertical).map(([v, n]) => v + ': ' + n).join(' | ') +\n  ' | Tier 1: <b>' + tier1.length + '</b></p>' +\n  (top10\n    ? '<table border=\"1\" cellspacing=\"0\" style=\"border-collapse:collapse;font-family:sans-serif;font-size:13px;\">' +\n      '<tr style=\"background:#f5f5f5;\"><th>#</th><th>Company</th><th>Contact</th><th>Phone / Email</th><th>Intent</th><th>Why they scored</th></tr>' +\n      top10 + '</table>'\n    : '<p>No Tier 1 prospects this run.</p>') +\n  '<p>Review and approve in the Pipeline dashboard. Nothing is contacted until you approve it.</p>';\n\nreturn [{ json: { rows, digestHtml: html, digestSubject: 'Sanaku: ' + rows.length + ' new prospects, ' + tier1.length + ' Tier 1 (' + nowIso.slice(0, 10) + ')' } }];"
+        "jsCode": "// Build the upsert payload + the digest email.\nconst items = $input.all().map((i) => i.json).filter((x) => x && x.scored);\nconst nowIso = new Date().toISOString();\nconst rows = items.map((x) => ({\n  company_name: x.company_name,\n  vertical: x.vertical,\n  website_url: x.website_url || null,\n  domain: x.domain,\n  contact_name: x.contact_name || null,\n  contact_title: x.contact_title || null,\n  contact_email: x.contact_email || null,\n  contact_phone: x.contact_phone || null,\n  contact_phone_source: x.contact_phone_source || null,\n  company_phone: x.company_phone || x.contact_phone || null,\n  contact_linkedin_url: x.contact_linkedin_url || null,\n  contact_authority: x.contact_authority || 'none',\n  decision_maker: !!x.decision_maker,\n  // Migration 020: a safe correlation key for the phone-reveal webhook -\n  // never a large integer, so never subject to the precision loss that\n  // makes phone_reveal_request_id unreliable. Was already computed by\n  // Filter & Dedupe but silently dropped here before this - the webhook\n  // has nothing to match an incoming push against without it.\n  apollo_person_id: x.apollo_person_id || null,\n  phone_reveal_request_id: x.phone_reveal_request_id || null,\n  phone_reveal_requested_at: x.phone_reveal_requested_at || null,\n  contact_email_personal: x.contact_email_personal || null,\n  city: x.city || null,\n  state: x.state || 'California',\n  employee_count: x.employee_count ?? null,\n  ai_maturity_score: x.ai_maturity_score,\n  intent_score: x.intent_score,\n  tech_stack: x.tech_stack || [],\n  signals: x.signals || {},\n  tier: x.tier,\n  status: 'new',\n  source: x.source,\n}));\n\nconst byVertical = {};\nfor (const r of rows) byVertical[r.vertical] = (byVertical[r.vertical] || 0) + 1;\nconst tier1 = rows.filter((r) => r.tier === 1).sort((a, b) => b.intent_score - a.intent_score);\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst top10 = tier1.slice(0, 10).map((r, i) =>\n  '<tr><td style=\"padding:4px 8px;\">' + (i + 1) + '</td>' +\n  '<td style=\"padding:4px 8px;\"><b>' + esc(r.company_name) + '</b><br>' + esc(r.domain) + '</td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_name || '-') + '<br><small>' + esc(r.contact_title || '') + '</small></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc(r.contact_phone || '-') + '<br>' + esc(r.contact_email || '(no email yet)') + '</td>' +\n  '<td style=\"padding:4px 8px;text-align:center;\"><b>' + r.intent_score + '</b></td>' +\n  '<td style=\"padding:4px 8px;\">' + esc((r.signals && r.signals.reason) || '') + '</td></tr>'\n).join('');\n\nconst html =\n  '<h2>Sanaku scraper run - ' + nowIso.slice(0, 10) + '</h2>' +\n  '<p><b>' + rows.length + '</b> new prospects stored. ' +\n  Object.entries(byVertical).map(([v, n]) => v + ': ' + n).join(' | ') +\n  ' | Tier 1: <b>' + tier1.length + '</b></p>' +\n  (top10\n    ? '<table border=\"1\" cellspacing=\"0\" style=\"border-collapse:collapse;font-family:sans-serif;font-size:13px;\">' +\n      '<tr style=\"background:#f5f5f5;\"><th>#</th><th>Company</th><th>Contact</th><th>Phone / Email</th><th>Intent</th><th>Why they scored</th></tr>' +\n      top10 + '</table>'\n    : '<p>No Tier 1 prospects this run.</p>') +\n  '<p>Review and approve in the Pipeline dashboard. Nothing is contacted until you approve it.</p>';\n\nreturn [{ json: { rows, digestHtml: html, digestSubject: 'Sanaku: ' + rows.length + ' new prospects, ' + tier1.length + ' Tier 1 (' + nowIso.slice(0, 10) + ')' } }];"
       },
       "id": "f1000000-0000-4000-8000-000000000027",
       "name": "Build Upsert Rows",
@@ -1138,6 +1138,136 @@
       "maxTries": 3,
       "waitBetweenTries": 5000,
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "apollo-phone-webhook",
+        "options": {}
+      },
+      "id": "c7000000-0000-4000-8000-000000000001",
+      "name": "Apollo Phone Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        1180
+      ],
+      "webhookId": "c7000000-0000-4000-8000-0000000000ab"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'Apollo phone webhook received: ' + JSON.stringify($json.body || $json).slice(0, 900), payload: {} }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "c7000000-0000-4000-8000-000000000002",
+      "name": "Log Phone Webhook Received",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        1180
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Apollo pushes a completed phone reveal here instead of us relying on\n// 'Poll Phone Reveal' by request_id - that id is sometimes an unquoted JSON\n// number too large for standard precision, and Apollo's OWN serializer has\n// already rounded it before the response left their server (confirmed live\n// 2026-08, see migration 020). This webhook sidesteps that entirely: match\n// the push back to a row by the person's Apollo id instead, a normal hex\n// string that is never a large number and so never has this problem.\n//\n// The exact shape of Apollo's push has not yet been confirmed against a\n// real delivery (nothing in this pipeline can trigger one from outside a\n// live account), so this reads defensively from more than one plausible\n// shape - matching the poll endpoint's documented 'webhook_result.people'\n// array, a bare 'people' array, or a single un-wrapped person object - and\n// 'Log Phone Webhook Received' keeps the full raw body regardless, so the\n// first real delivery can be checked and this adjusted if the true shape\n// differs from what is assumed here.\nconst item = $input.first().json || {};\nconst body = item.body || item;\nconst wr = body.webhook_result || body;\nconst people = Array.isArray(wr.people) ? wr.people\n  : (wr.id ? [wr] : []);\n\nconst pick = (arr) => (Array.isArray(arr) && arr[0] && arr[0].sanitized_number) || null;\nconst out = people\n  .filter((p) => p && p.id)\n  .map((p) => ({ json: {\n    apollo_person_id: p.id,\n    number: pick(p.direct_phone) || pick(p.corporate_phone) || pick(p.mobile_phone) || pick(p.other_phone),\n  } }))\n  // Never invent a number - a person with none reported yet is not this\n  // webhook's job (the async job may still be running, or genuinely has\n  // nothing to report); nothing to write for that item.\n  .filter((x) => x.json.number);\nreturn out;"
+      },
+      "id": "c7000000-0000-4000-8000-000000000003",
+      "name": "Parse Phone Webhook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        1180
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "c7000000-0000-4000-8000-000000000004",
+      "name": "Per Phone Webhook Person",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1880,
+        1180
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c7000000-0000-4000-8000-000000000005",
+      "name": "Phone Webhook Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1880,
+        1320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?apollo_person_id=eq.{{ $json.apollo_person_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contact_phone: $json.number, contact_phone_source: 'apollo_direct', phone_reveal_request_id: null, phone_reveal_requested_at: null }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "c7000000-0000-4000-8000-000000000006",
+      "name": "Update Prospect By Person Id",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2100,
+        1180
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      }
     }
   ],
   "connections": {
@@ -1698,6 +1828,68 @@
         [
           {
             "node": "Per Vertical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apollo Phone Webhook": {
+      "main": [
+        [
+          {
+            "node": "Log Phone Webhook Received",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Phone Webhook Received": {
+      "main": [
+        [
+          {
+            "node": "Parse Phone Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Phone Webhook": {
+      "main": [
+        [
+          {
+            "node": "Per Phone Webhook Person",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Per Phone Webhook Person": {
+      "main": [
+        [
+          {
+            "node": "Phone Webhook Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Prospect By Person Id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Prospect By Person Id": {
+      "main": [
+        [
+          {
+            "node": "Per Phone Webhook Person",
             "type": "main",
             "index": 0
           }

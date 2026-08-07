@@ -564,6 +564,7 @@ cmd_scrape() {
   SERPAPI_KEY="$SERPAPI_KEY" OWNER_EMAIL="$OWNER_EMAIL" \
   APOLLO_KEY="${APOLLO_KEY:-}" \
   MAX_NEW="${MAX_NEW:-20}" \
+  DASHBOARD_URL="${DASHBOARD_URL:-}" \
     sh "$_engine"
 }
 

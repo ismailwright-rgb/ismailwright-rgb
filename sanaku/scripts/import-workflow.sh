@@ -103,7 +103,7 @@ print(json.dumps({
 fi
 
 echo "==> Patching for this instance..."
-export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS APOLLO_PHONE_REVEALS DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY SUPABASE_ANON_KEY TMPDIR_WF="$TMP"
+export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS APOLLO_PHONE_REVEALS DASHBOARD_URL OWNER_EMAIL SERPAPI_KEY SUPABASE_ANON_KEY N8N_URL TMPDIR_WF="$TMP"
 python3 <<'PY'
 import json, os, re, sys
 
@@ -119,6 +119,10 @@ VALUES = {
     "SANAKU_OWNER_EMAIL": os.environ.get("OWNER_EMAIL", ""),
     "SERPAPI_KEY":        os.environ.get("SERPAPI_KEY", ""),
     "SUPABASE_ANON_KEY":  os.environ.get("SUPABASE_ANON_KEY", ""),
+    # Needed so a workflow node can build a URL pointing back at THIS n8n
+    # instance itself (e.g. the Apollo phone-reveal push webhook) - nothing
+    # before this used a workflow's own host, so nothing patched it in.
+    "N8N_URL":            os.environ["N8N_URL"].rstrip("/"),
 }
 VALUES = {k: v for k, v in VALUES.items() if v}
 

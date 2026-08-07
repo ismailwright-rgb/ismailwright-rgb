@@ -34,6 +34,7 @@ APOLLO_REVEALS="${APOLLO_REVEALS:-}"   # email reveals per run when Apollo is on
 APOLLO_PHONE_REVEALS="${APOLLO_PHONE_REVEALS:-}"   # direct-dial reveals per run (default 6; costs 8 credits each, not 1)
 : "${OWNER_EMAIL:?Set OWNER_EMAIL (your email for digests)}"
 MAX_NEW="${MAX_NEW:-20}"
+DASHBOARD_URL="${DASHBOARD_URL:-https://sanaku-command-center.netlify.app}"
 
 N8N_URL="${N8N_URL%/}"
 RAW_WF="https://raw.githubusercontent.com/ismailwright-rgb/ismailwright-rgb/claude/n8n-prospect-tiering-hgkjb0/sanaku/n8n/workflows/w1-prospect-scraper.json"
@@ -96,7 +97,7 @@ fi
 
 echo "==> Downloading + patching W1..."
 curl -fsSL "$RAW_WF" -o "$TMP/w1.json"
-export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS APOLLO_PHONE_REVEALS MAX_NEW TMPDIR_WF="$TMP"
+export SUPA_CRED_ID APOLLO_CRED_ID APOLLO_REVEALS APOLLO_PHONE_REVEALS MAX_NEW DASHBOARD_URL N8N_URL TMPDIR_WF="$TMP"
 python3 <<'PY'
 import json, os, re
 
@@ -106,6 +107,8 @@ supa_url = os.environ["SUPABASE_URL"].rstrip("/")
 owner = os.environ["OWNER_EMAIL"]
 supa_id, apollo_id = os.environ["SUPA_CRED_ID"], os.environ["APOLLO_CRED_ID"]
 max_new = int(os.environ["MAX_NEW"])
+dashboard_url = os.environ["DASHBOARD_URL"].rstrip("/")
+n8n_url = os.environ["N8N_URL"].rstrip("/")
 
 serp_key = os.environ["SERPAPI_KEY"]
 
@@ -119,6 +122,17 @@ def patch_strings(obj):
         obj = obj.replace("{{ $env.SUPABASE_URL }}", supa_url)
         obj = obj.replace("{{ $env.SANAKU_OWNER_EMAIL }}", owner)
         obj = obj.replace("{{ $env.SERPAPI_KEY }}", serp_key)
+        # Missing until 2026-08: left 'Apollo Enrich Person's webhook_url as
+        # the literal string '{{ $env.DASHBOARD_URL }}', which is not a
+        # valid URL - Apollo silently... no, LOUDLY rejects reveal_phone_
+        # number calls without one ("Please add a valid 'webhook_url'
+        # parameter"). Every `sh ~/sanaku.sh scrape` re-import was
+        # overwriting a correctly-patched copy (from `import
+        # w1-prospect-scraper.json`, which DOES patch this) with this
+        # broken one, silently, because THIS script's patcher never
+        # touched DASHBOARD_URL or N8N_URL at all.
+        obj = obj.replace("{{ $env.DASHBOARD_URL }}", dashboard_url)
+        obj = obj.replace("{{ $env.N8N_URL }}", n8n_url)
         # expressions that became pure literals don't need the '=' prefix,
         # but n8n accepts it either way, so leave prefixes alone.
         return obj
