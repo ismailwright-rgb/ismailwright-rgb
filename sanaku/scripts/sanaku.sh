@@ -410,7 +410,10 @@ for c in calls:
     label = "%-13s / %-9s" % (c["vertical"], c["pass"])
     try:
         code_s, body = curl_post(
-            "https://api.apollo.io/api/v1/mixed_people/search",
+            # NOT mixed_people/search - that now returns a hard HTTP 422
+            # ("deprecated for API callers"), confirmed live against this
+            # exact account. Same body, same auth, only the path changed.
+            "https://api.apollo.io/api/v1/mixed_people/api_search",
             {"x-api-key": key, "Content-Type": "application/json", "accept": "application/json"},
             json.dumps(c["body"]).encode(),
             40,
@@ -427,12 +430,21 @@ for c in calls:
         d = None
 
     if code == 200 and isinstance(d, dict):
-        pag = d.get("pagination") or {}
+        # api_search response is flatter than the old endpoint - total_entries
+        # sits at the top level now, confirmed live, not nested under "pagination".
+        # Check both: cheap, and does not assume the current shape is permanent.
+        total = d.get("total_entries", (d.get("pagination") or {}).get("total_entries", "?"))
         people = d.get("people") or []
-        print("  %s  %s matches (%s total)" % (label, len(people), pag.get("total_entries", "?")))
+        print("  %s  %s matches (%s total)" % (label, len(people), total))
         for p in people[:2]:
             org = p.get("organization") or {}
-            print("      - %-22s %-24s %s" % ((p.get("name") or "?")[:22], (p.get("title") or "?")[:24], (org.get("name") or "?")[:30]))
+            # api_search does not return a combined "name" field, only
+            # first_name/last_name separately - confirmed live. Reading only
+            # "name" would print "?" for every real match, every time, which
+            # defeats the one thing this loop exists to let you eyeball: WHO
+            # actually matched. Same fallback Filter & Dedupe already uses.
+            who = p.get("name") or " ".join(x for x in [p.get("first_name"), p.get("last_name")] if x) or "?"
+            print("      - %-22s %-24s %s" % (who[:22], (p.get("title") or "?")[:24], (org.get("name") or "?")[:30]))
         continue
 
     msg = ""
@@ -448,9 +460,11 @@ for c in calls:
         print("                          your login password, not the OAuth app secret.")
         print("                          Then:  sh ~/sanaku.sh set APOLLO_KEY <key>")
         fatal = True
-    elif code == 404:
-        print("  %s  HTTP 404. Apollo has moved this endpoint before (mixed_people/api_search)." % label)
-        print("                          Tell me and I will repoint W1 - do not assume the key is bad.")
+    elif code == 404 or code == 422:
+        print("  %s  HTTP %s. Apollo has moved/retired this endpoint before - it did once" % (label, code))
+        print("                          already (mixed_people/search -> mixed_people/api_search,")
+        print("                          confirmed live). Check docs.apollo.io/reference/people-api-search")
+        print("                          before assuming the key or query is at fault.")
         fatal = True
     else:
         print("  %s  unexpected response (HTTP %s): %s" % (label, code, (msg or body)[:200]))
