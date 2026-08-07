@@ -101,6 +101,21 @@ function WhoYouAreCalling({ p }) {
           </div>
         )}
       </div>
+      <div className="whophones">
+        {p.contact_email && (
+          <div className="whophone">
+            <a href={`mailto:${p.contact_email}`}>{p.contact_email}</a>
+            <span className="phlabel">Business</span>
+          </div>
+        )}
+        {p.contact_email_personal && (
+          <div className="whophone">
+            <a href={`mailto:${p.contact_email_personal}`}>{p.contact_email_personal}</a>
+            <span className="phlabel">Personal</span>
+            <span className="phhint">Apollo had this on file. Verify it's live before sending anything that matters.</span>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

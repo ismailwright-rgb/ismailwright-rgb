@@ -258,22 +258,43 @@ function Row({ p, expanded, onExpand, checked, onCheck, onApprove, onThread }) {
           />
         </td>
         <td>
-          <b>{p.company_name}</b>
-          <div className="muted">
-            <a href={p.website_url || `https://${p.domain}`} target="_blank" rel="noreferrer">{p.domain}</a>
-            {p.contact_name
-              ? <> · <b className={'who-in' + (p.decision_maker ? ' decides' : '')}>{p.contact_name}</b>
-                  {p.contact_title ? ` (${p.contact_title})` : ''}</>
-              : <> · <span className="who-none">no decision maker — business line only</span></>}
+          {/* The person leads, the company follows - reversed from the old
+              layout, which put company_name in the only bold slot and buried
+              the human being we're actually going to call mid-line in muted
+              text. This table exists to answer "who am I calling", not
+              "what business is this" - the business is already known before
+              staff ever open the row. */}
+          {p.contact_name ? (
+            <>
+              <b className={'who-in' + (p.decision_maker ? ' decides' : '')}>{p.contact_name}</b>
+              {p.contact_title ? <span className="rowtitle"> · {p.contact_title}</span> : ''}
+              <div className="muted">
+                {p.company_name} · <a href={p.website_url || `https://${p.domain}`} target="_blank" rel="noreferrer">{p.domain}</a>
+              </div>
+            </>
+          ) : (
+            <>
+              <b>{p.company_name}</b>
+              <span className="who-none"> · no decision maker found</span>
+              <div className="muted">
+                <a href={p.website_url || `https://${p.domain}`} target="_blank" rel="noreferrer">{p.domain}</a>
+              </div>
+            </>
+          )}
+          <div className="muted rowcontacts">
             {p.contact_phone
-              ? <> · <a href={`tel:${p.contact_phone.replace(/[^\d+]/g, '')}`}>{p.contact_phone}</a>
+              ? <> <a href={`tel:${p.contact_phone.replace(/[^\d+]/g, '')}`}>{p.contact_phone}</a>
                   <span className={'phtag' + (p.contact_phone_source === 'apollo_direct' ? ' direct' : '')}>
                     {p.contact_phone_source === 'apollo_direct' ? 'direct' : 'main line'}
                   </span></>
-              : ''}
+              : 'no phone yet'}
             {p.contact_email
               ? <> · <a href={`mailto:${p.contact_email}`}>{p.contact_email}</a></>
               : ' · no email yet'}
+            {p.contact_email_personal
+              ? <> · <a href={`mailto:${p.contact_email_personal}`}>{p.contact_email_personal}</a>
+                  <span className="phtag">personal</span></>
+              : ''}
           </div>
         </td>
         <td className="hide-m">{VERTICALS[p.vertical] || p.vertical}</td>

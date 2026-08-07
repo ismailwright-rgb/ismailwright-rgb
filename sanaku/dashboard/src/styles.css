@@ -575,3 +575,9 @@ tbody tr:hover { background: var(--line-soft); }
 /* Apollo's direct-dial reveal resolves on a LATER run, not this one - staff
    should see "in progress", not conclude the feature silently did nothing. */
 .whopending { color: var(--sub); font-size: 12.5px; font-style: italic; margin: -4px 0 10px; }
+
+/* Row layout: the person's name is now the headline, so its supporting bits
+   need their own quiet styling rather than inheriting the old company-first
+   hierarchy. */
+.rowtitle { color: var(--sub); font-size: 12.5px; }
+.rowcontacts { margin-top: 2px; }
