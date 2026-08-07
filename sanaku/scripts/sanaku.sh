@@ -32,6 +32,9 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
     say "Missing required command: $1"
     [ "$1" = "npm" ] && say "  In Docker? Netlify deploys need Node. Run this one on your Mac, or use a node: image."
+    [ "$1" = "node" ] && say "  'apollo' runs W1's actual Run Config code to build its test query, rather"
+    [ "$1" = "node" ] && say "  than a second hand-typed copy that can (and once did) quietly go stale."
+    [ "$1" = "node" ] && say "  n8n itself requires Node, so wherever n8n runs, this will too."
     exit 1
   }
 }
@@ -306,85 +309,145 @@ for r in rows:
   printf '\n'
 }
 
-# Ask Apollo directly whether the key works, using the EXACT query and the exact
-# endpoint W1 uses. A people-search costs no credits (only enrichment does), so
-# this is free to run as often as you like. Worth its own command because the
-# alternative was a five-minute scrape that ends in an empty table, which looks
-# identical whether the cause is a bad key, a plan without API access, or a
-# query that genuinely matches nobody.
+# Ask Apollo directly whether the key works, using the EXACT query W1 sends -
+# not a second, hand-typed copy of it. That distinction matters: this command
+# used to re-encode the title list by hand, and it silently went stale the day
+# W1's targeting moved from titles to seniority - the preflight kept claiming
+# success while testing a query production had stopped sending months earlier.
+#
+# So instead of writing the body again, this pulls Run Config's OWN code out
+# of the real workflow file and runs it verbatim (same trick import-workflow.sh
+# already uses to locate that node - see scripts/import-workflow.sh). Run
+# Config touches no n8n globals ($env, $json, $(...)) - it is a plain function
+# of nothing but the current year - so running it outside n8n with `node`
+# produces byte-for-byte the same apolloBody/apolloOpsBody objects W1 sends,
+# not an approximation of them. There is now no second copy anywhere to drift.
+#
+# Both Apollo passes, all three verticals, six calls - all free (search costs
+# no credits, only enrichment does). Worth its own command because the
+# alternative was a five-minute scrape that ends in an empty table, which
+# looks identical whether the cause is a bad key, a plan without API access,
+# a query that genuinely matches nobody, or W1's second (ops-title) pass
+# quietly failing - this tells those apart instead of leaving you to guess.
 cmd_apollo() {
   ensure_config APOLLO_KEY
   need_cmd python3
+  need_cmd node
   head1 "Apollo preflight"
 
-  _q='{"person_titles":["Owner","Founder","Managing Partner","Partner","Practice Owner","Practice Manager","Office Manager","General Manager","President"],"person_locations":["United States"],"organization_locations":["Los Angeles, California, US"],"organization_num_employees_ranges":["2,100"],"contact_email_status":["verified"],"q_organization_keyword_tags":["personal injury law"],"per_page":3,"page":1}'
+  _wfjson="$HOME/.sanaku-w1-preflight.json"
+  curl -fsSL -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+    "https://raw.githubusercontent.com/ismailwright-rgb/ismailwright-rgb/${BRANCH}/sanaku/n8n/workflows/w1-prospect-scraper.json?cb=$(date +%s)" \
+    -o "$_wfjson" || { say "Could not download w1-prospect-scraper.json - check your connection."; return 1; }
 
-  say "Asking Apollo for LA personal-injury firms (the real W1 query, 3 results)..."
-  _resp=$(printf '%s' "$_q" | curl -sS -m 40 -w '\n%{http_code}' \
-    -X POST "https://api.apollo.io/api/v1/mixed_people/search" \
-    -H "x-api-key: $APOLLO_KEY" \
-    -H "Content-Type: application/json" \
-    -H "accept: application/json" \
-    --data-binary @- 2>&1) || true
-
-  printf '%s' "$_resp" | python3 -c '
+  _rcjs="$HOME/.sanaku-runconfig.js"
+  python3 -c "
 import json, sys
-raw = sys.stdin.read().rsplit("\n", 1)
-body, code = (raw[0], raw[1].strip()) if len(raw) == 2 else (raw[0], "?")
-try:
-    d = json.loads(body)
-except Exception:
-    d = None
+wf = json.load(open('$_wfjson'))
+rc = next((n for n in wf['nodes'] if n['name'] == 'Run Config'), None)
+if rc is None:
+    print('Run Config node not found in the downloaded workflow file', file=sys.stderr)
+    sys.exit(1)
+open('$_rcjs', 'w').write(rc['parameters']['jsCode'])
+" || { say "Could not extract Run Config from the workflow file - it may have been renamed."; return 1; }
 
-if code == "200" and isinstance(d, dict):
-    pag = d.get("pagination") or {}
-    people = d.get("people") or []
-    print("  KEY WORKS. api/v1/mixed_people/search is live on this plan.")
-    print("  %s people match this query (%s pages)." % (
-        pag.get("total_entries", "?"), pag.get("total_pages", "?")))
-    if not people:
-        print("  ...but this page came back empty. The key is fine; the FILTERS are")
-        print("  too tight. Widen organization_locations in W1s Run Config.")
-    for p in people[:3]:
-        org = p.get("organization") or {}
-        print("   - %-22s %-26s %s" % (
-            (p.get("name") or "?")[:22],
-            (p.get("title") or "?")[:26],
-            (org.get("name") or "?")[:34]))
-        print("     %s | %s, %s" % (
-            org.get("primary_domain") or "no domain",
-            org.get("city") or "?", org.get("state") or "?"))
-    if people:
-        print("")
-        print("  Check those are LOCAL BUSINESSES, not people who merely live in LA.")
-        print("  That is what organization_locations is there to enforce.")
-    sys.exit(0)
+  # Run the REAL code, not a re-implementation of it. per_page is the one
+  # deliberate override, applied to the object Run Config itself produced -
+  # never a re-typed literal - and trimmed only for preflight speed; every
+  # field that decides WHO matches is untouched.
+  _bodies=$(node -e "
+const out = (function () {
+$(cat "$_rcjs")
+})();
+const cfg = out[0].json;
+if (!Array.isArray(cfg.verticals) || cfg.verticals.length !== 3) {
+  throw new Error('Run Config returned ' + (cfg.verticals || []).length + ' verticals, expected 3 - its shape changed; this command needs updating, not trusting.');
+}
+const calls = [];
+for (const v of cfg.verticals) {
+  if (!v.apolloBody || !v.apolloOpsBody) {
+    throw new Error('vertical ' + v.vertical + ' is missing apolloBody/apolloOpsBody - Run Config changed shape.');
+  }
+  calls.push({ vertical: v.vertical, pass: 'seniority', body: { ...v.apolloBody, per_page: 3 } });
+  calls.push({ vertical: v.vertical, pass: 'ops-title', body: { ...v.apolloOpsBody, per_page: 3 } });
+}
+console.log(JSON.stringify(calls));
+") || { say "Run Config's own code failed to run - see the error above. Not guessing at a query; fix that first."; return 1; }
 
-msg = ""
-if isinstance(d, dict):
-    msg = str(d.get("error") or d.get("message") or d.get("error_code") or "")[:300]
-if "API_INACCESSIBLE" in body or "not included in your" in body:
-    print("  Your Apollo plan does NOT include API access.")
-    print("  Search works in Apollos own web app on every plan; the API is paid only.")
-    print("  Upgrade, then re-run this. Nothing else needs changing.")
-elif code in ("401", "403"):
-    print("  Apollo rejected the key (HTTP %s). %s" % (code, msg))
-    print("  Get the API key from apollo.io > Settings > Integrations > API - it is")
-    print("  NOT your login password and NOT the OAuth app secret.")
-    print("  Then:  sh ~/sanaku.sh set APOLLO_KEY <key>")
-elif code == "404":
-    print("  HTTP 404 on api/v1/mixed_people/search.")
-    print("  Apollo has moved this endpoint before (mixed_people/api_search).")
-    print("  Tell me and I will repoint W1 - do not assume the key is bad.")
-else:
-    print("  Unexpected response (HTTP %s): %s" % (code, (msg or body)[:300]))
-sys.exit(1)
-'
+  APOLLO_KEY="$APOLLO_KEY" python3 -c '
+import json, os, sys, urllib.request, urllib.error
+
+calls = json.loads(sys.argv[1])
+key = os.environ["APOLLO_KEY"]
+fatal = False
+
+for c in calls:
+    label = "%-13s / %-9s" % (c["vertical"], c["pass"])
+    req = urllib.request.Request(
+        "https://api.apollo.io/api/v1/mixed_people/search",
+        data=json.dumps(c["body"]).encode(),
+        headers={"x-api-key": key, "Content-Type": "application/json", "accept": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=40) as r:
+            code, body = r.status, r.read().decode()
+    except urllib.error.HTTPError as e:
+        code, body = e.code, e.read().decode()
+    except Exception as e:
+        print("  %s  COULD NOT REACH APOLLO: %s" % (label, e))
+        fatal = True
+        continue
+
+    try:
+        d = json.loads(body)
+    except Exception:
+        d = None
+
+    if code == 200 and isinstance(d, dict):
+        pag = d.get("pagination") or {}
+        people = d.get("people") or []
+        print("  %s  %s matches (%s total)" % (label, len(people), pag.get("total_entries", "?")))
+        for p in people[:2]:
+            org = p.get("organization") or {}
+            print("      - %-22s %-24s %s" % ((p.get("name") or "?")[:22], (p.get("title") or "?")[:24], (org.get("name") or "?")[:30]))
+        continue
+
+    msg = ""
+    if isinstance(d, dict):
+        msg = str(d.get("error") or d.get("message") or d.get("error_code") or "")[:200]
+    if "API_INACCESSIBLE" in body or "not included in your" in body:
+        print("  %s  APOLLO PLAN HAS NO API ACCESS. Search works in Apollos own web app on" % label)
+        print("                          every plan; the API is paid only. Upgrade, then re-run this.")
+        fatal = True
+    elif code in (401, 403):
+        print("  %s  KEY REJECTED (HTTP %s). %s" % (label, code, msg))
+        print("                          Get it from apollo.io > Settings > Integrations > API - not")
+        print("                          your login password, not the OAuth app secret.")
+        print("                          Then:  sh ~/sanaku.sh set APOLLO_KEY <key>")
+        fatal = True
+    elif code == 404:
+        print("  %s  HTTP 404. Apollo has moved this endpoint before (mixed_people/api_search)." % label)
+        print("                          Tell me and I will repoint W1 - do not assume the key is bad.")
+        fatal = True
+    else:
+        print("  %s  unexpected response (HTTP %s): %s" % (label, code, (msg or body)[:200]))
+        fatal = True
+
+sys.exit(1 if fatal else 0)
+' "$_bodies"
   _rc=$?
   printf '\n'
   if [ "$_rc" -eq 0 ]; then
-    ok "Apollo is ready. Re-import the scraper so it turns on:"
-    say "    sh ~/sanaku.sh scrape"
+    ok "Apollo connection and query both check out."
+    say ""
+    say "  A vertical/pass showing 0 matches is not necessarily broken - the query ANDs"
+    say "  a verified-email filter with a single city and a narrow employee band, which"
+    say "  can legitimately return nobody for some tag combinations. If EVERY vertical"
+    say "  and pass shows 0, that is worth a closer look at those filters; if only one"
+    say "  is, it may just be a thin query for that city/vertical."
+    say ""
+    say "  Re-import the scraper so it turns on:  sh ~/sanaku.sh scrape"
     say ""
     say "  Reveals per run default to 25. To change it:"
     say "    APOLLO_REVEALS=40 sh ~/sanaku.sh scrape"
@@ -396,6 +459,10 @@ sys.exit(1)
     say "    APOLLO_PHONE_REVEALS=10 sh ~/sanaku.sh scrape"
     say "  It resolves over the NEXT run or two, not instantly - Apollo delivers"
     say "  the number asynchronously, sometimes several minutes later."
+    say ""
+    say "  After a real scrape, sh ~/sanaku.sh status shows recent sanaku_errors -"
+    say "  look for 'Apollo people search failed:', 'Apollo ops search failed:', or"
+    say "  'Apollo zero results:' to see exactly which pass did what, per run."
   fi
   return $_rc
 }

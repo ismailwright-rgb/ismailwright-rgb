@@ -217,7 +217,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Merge Apollo + Places candidates for this vertical, apply hard excludes,\n// dedupe against the table and within the run, cap per vertical.\nconst ctx = $('Per Vertical').first().json;\nconst norm = (d) => String(d || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].trim();\nconst digits = (p) => String(p || '').replace(/\\D/g, '').slice(-10);\nconst exTitle = new RegExp(ctx.excludeTitleRe, 'i');\nconst exCompany = new RegExp(ctx.excludeCompanyRe, 'i');\nconst known = new Set(ctx.knownDomains);\nconst knownPh = new Set(ctx.knownPhones);\nconst seen = new Set();\nconst out = [];\n\n// Both Apollo passes: decision makers by seniority, operators by title. Either\n// may be missing - the node did not run (Apollo off), or it errored and its\n// output item is an error object rather than a result.\nconst apolloFrom = (node) => {\n  try {\n    const j = $(node).first().json || {};\n    return Array.isArray(j.people) ? j.people : [];\n  } catch (e) { return []; }\n};\nconst apolloPeople = [...apolloFrom('Apollo People Search'), ...apolloFrom('Apollo Ops Search')];\nlet places = $input.first().json || {};\n\n// Surface SerpAPI failures loudly - swallowing them produced a 'successful'\n// run that silently stored nothing. But loudly is not the same as fatally:\n// while SerpAPI was the only source, throwing here was right; with Apollo on\n// it threw away people Apollo had already returned. So the vertical fails only\n// when BOTH sources came back empty.\nlet serpWarning = null;\nif (places.error) {\n  serpWarning = 'SerpAPI returned an error: ' + JSON.stringify(places.error).slice(0, 300);\n} else if (!Array.isArray(places.local_results) || places.local_results.length === 0) {\n  serpWarning = 'SerpAPI returned no local_results for query: ' + (ctx.serpQuery || '?') + ' | keys: ' + Object.keys(places).join(',');\n}\nif (serpWarning && apolloPeople.length === 0) {\n  throw new Error(serpWarning);\n}\n\n// SerpAPI google_maps local_results indexed by domain (also enriches Apollo hits)\nconst localResults = Array.isArray(places.local_results) ? places.local_results : [];\nconst placeByDomain = {};\nfor (const p of localResults) {\n  const d = norm(p.website);\n  if (d) placeByDomain[d] = p;\n}\n\n// Who speaks for a company, when Apollo returns several of them. It returns\n// a person per row, not a company: one live page of ten held four partners of\n// the same firm. We keep one prospect per domain, and it used to be whichever\n// Apollo happened to list first - so whether a firm was represented by its\n// founder or by its office manager was luck. Rank instead, and keep the top.\n// Who we are looking for, by vertical, because the answer genuinely differs:\n//\n//   law firms      managing partner or sole attorney. In larger firms a COO,\n//                  Director of Operations or practice-group leader sits between\n//                  them and the phones and owns this decision.\n//   dental/medical the practice owner signs, but the OFFICE MANAGER runs the\n//                  front desk and for back-office tools is usually the one who\n//                  decides and often the one who signs. Ranked second here, not\n//                  last, and that is the whole reason this is per-vertical.\n//   home services  the owner, until the shop has several trucks - then whoever\n//                  runs the dispatch board owns the missed call.\n//\n// Bands first (what the title IS), then rank and approval authority per\n// vertical (what that means HERE). Order matters within AUTHORITY: 'operations'\n// and 'office' are tested before the generic director and manager rules.\nconst AUTHORITY = [\n  // (?<!vice ) on president: \"Vice President Operations\" is a department lead,\n  // not an owner. A bare /president/ banded them with the founders, which would\n  // spend a reveal credit and a call on the wrong person.\n  ['owner',      /\\bowner\\b|founder|principal|(?<!vice )\\bpresident\\b|\\bceo\\b|chief executive|managing (partner|attorney|director)|sole (attorney|practitioner)/],\n  ['operations', /\\bcoo\\b|chief operating|(director|vp|vice president|head)\\s+(of\\s+)?operations|operations (manager|director)|general manager|\\bgm\\b|dispatch|service manager|practice group (leader|lead)|firm administrator|legal administrator/],\n  ['office',     /office manager|practice (manager|administrator)|business manager|office administrator/],\n  ['c_suite',    /\\bchief\\b|\\bcfo\\b|\\bcmo\\b|\\bcto\\b|\\bcso\\b/],\n  ['partner',    /\\bpartner\\b/],\n  ['marketing',  /marketing|\\bintake\\b|growth|business development|\\bbiz dev\\b|client relations|revenue/],\n  ['leader',     /director|\\bvp\\b|vice president|\\bhead of\\b/],\n  ['staff',      /manager|administrator|coordinator/],\n];\nconst authority = (title) => {\n  const t = String(title || '').toLowerCase();\n  for (const [band, re] of AUTHORITY) if (re.test(t)) return band;\n  return 'staff';\n};\n\n// Higher wins the one slot a company gets, and gets the reveal credit first.\nconst RANK = {\n  law_firm:      { owner: 9, partner: 8, operations: 7, c_suite: 6, marketing: 5, office: 4, leader: 3, staff: 2, none: 0 },\n  medical:       { owner: 9, office: 8, operations: 7, c_suite: 6, marketing: 5, partner: 5, leader: 3, staff: 2, none: 0 },\n  home_services: { owner: 9, operations: 8, c_suite: 6, marketing: 5, partner: 5, office: 4, leader: 3, staff: 2, none: 0 },\n};\n// Who can actually approve. An office manager can in a dental practice and\n// cannot in a plumbing shop, which is a claim about the vertical, not the title.\nconst DECIDES = {\n  law_firm:      new Set(['owner', 'partner', 'operations', 'c_suite', 'marketing']),\n  medical:       new Set(['owner', 'office', 'operations', 'c_suite', 'marketing']),\n  home_services: new Set(['owner', 'operations', 'c_suite', 'marketing']),\n};\nconst rankOf = (title) => (RANK[ctx.vertical] || RANK.home_services)[authority(title)] || 0;\nconst decides = (title) => (DECIDES[ctx.vertical] || DECIDES.home_services).has(authority(title));\n\n// Apollo has returned this object with the domain under `domain` and under\n// `primary_domain` depending on the endpoint. Reading only one of them drops\n// EVERY Apollo person on the `if (!domain) continue` below, silently, and the\n// run still reports success - so read all three spellings.\nconst orgDomain = (org) => norm(org.primary_domain || org.domain || org.website_url);\n\nconst bestByDomain = new Map();\nfor (const person of apolloPeople) {\n  const org = person.organization || {};\n  const domain = orgDomain(org);\n  const phone = digits(org.sanitized_phone || org.phone);\n  if (!domain) continue;                                   // hard exclude: no website\n  if (known.has(domain)) continue;                          // already in the table\n  if (phone && knownPh.has(phone)) continue;                // dedupe on phone\n  if (exTitle.test(person.title || '')) continue;           // not a decision maker\n  if (exCompany.test(org.name || '')) continue;             // agencies/vendors/SaaS\n  const emp = org.estimated_num_employees || null;\n  if (emp !== null && emp < 2) continue;                    // solo, no staff\n  const prev = bestByDomain.get(domain);\n  if (!prev || rankOf(person.title) > rankOf(prev.title)) bestByDomain.set(domain, person);\n}\n\nfor (const person of bestByDomain.values()) {\n  const org = person.organization || {};\n  const domain = orgDomain(org);\n  const emp = org.estimated_num_employees || null;\n  if (seen.has(domain)) continue;\n  seen.add(domain);\n  const place = placeByDomain[domain] || {};\n  out.push({ json: {\n    company_name: org.name || domain,\n    vertical: ctx.vertical,\n    website_url: org.website_url || 'https://' + domain,\n    domain,\n    contact_name: person.name || [person.first_name, person.last_name].filter(Boolean).join(' ') || null,\n    contact_title: person.title || null,\n    apollo_person_id: person.id || null,\n    contact_authority: authority(person.title),\n    decision_maker: decides(person.title),\n    city: org.city || person.city || null,\n    state: org.state || person.state || 'California',\n    // The person first, the switchboard second, and a label saying which one\n    // this is. Storing only the org number and calling it contact_phone is how\n    // \"call the owner\" quietly became \"call the front desk\".\n    contact_phone: person.sanitized_phone || org.sanitized_phone || org.phone || null,\n    contact_phone_source: person.sanitized_phone ? 'apollo_direct' : 'apollo_company',\n    company_phone: org.sanitized_phone || org.phone || null,\n    contact_linkedin_url: person.linkedin_url || null,\n    employee_count: emp,\n    rating: place.rating ?? null,\n    review_count: place.reviews ?? null,\n    source: 'apollo',\n  }});\n}\n\nfor (const p of localResults) {\n  const domain = norm(p.website);\n  const phone = digits(p.phone);\n  if (!domain || known.has(domain) || seen.has(domain)) continue;\n  if (phone && knownPh.has(phone)) continue;\n  const name = p.title || domain;\n  if (exCompany.test(name)) continue;\n  seen.add(domain);\n  out.push({ json: {\n    company_name: name,\n    vertical: ctx.vertical,\n    website_url: p.website,\n    domain,\n    contact_name: null,\n    contact_title: null,\n    apollo_person_id: null,\n    contact_authority: 'none',\n    decision_maker: false,\n    city: null,\n    state: 'California',\n    contact_phone: p.phone || null,\n    contact_phone_source: p.phone ? 'google_places' : null,\n    company_phone: p.phone || null,\n    contact_linkedin_url: null,\n    employee_count: null,\n    rating: p.rating ?? null,\n    review_count: p.reviews ?? null,\n    source: 'google_places',\n  }});\n}\n\nconst capped = out.slice(0, ctx.maxPerVertical);\nreturn capped.length ? capped : [{ json: { _empty: true, vertical: ctx.vertical, serp_warning: serpWarning } }];"
+        "jsCode": "// Merge Apollo + Places candidates for this vertical, apply hard excludes,\n// dedupe against the table and within the run, cap per vertical.\nconst ctx = $('Per Vertical').first().json;\nconst norm = (d) => String(d || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].trim();\nconst digits = (p) => String(p || '').replace(/\\D/g, '').slice(-10);\nconst exTitle = new RegExp(ctx.excludeTitleRe, 'i');\nconst exCompany = new RegExp(ctx.excludeCompanyRe, 'i');\nconst known = new Set(ctx.knownDomains);\nconst knownPh = new Set(ctx.knownPhones);\nconst seen = new Set();\nconst out = [];\n\n// Both Apollo passes: decision makers by seniority, operators by title. Either\n// may be missing - the node did not run (Apollo off), or it errored and its\n// output item is an error object rather than a result. Reported separately\n// from a plain empty array, because \"errored\" and \"ran fine, found nobody\"\n// need to stay distinguishable below - conflating them is exactly what made\n// this impossible to diagnose without opening the workflow's run history.\nconst apolloRunInfo = (node) => {\n  try {\n    const j = $(node).first().json || {};\n    if (j && j.error) return { people: [], errored: true };\n    if (Array.isArray(j.people)) return { people: j.people, errored: false };\n    return { people: [], errored: false };\n  } catch (e) { return { people: [], errored: false }; }\n};\nconst peopleInfo = apolloRunInfo('Apollo People Search');\nconst opsInfo = apolloRunInfo('Apollo Ops Search');\nconst apolloPeople = [...peopleInfo.people, ...opsInfo.people];\n// Enabled, neither pass errored, and still nothing - a real, visible outcome\n// in its own right, not a default we fall into unlabeled. Both a bad query\n// and a broken credential used to look identical to this from the outside;\n// this is what stops that.\nconst apolloZeroResults = ctx.useApollo === true && !peopleInfo.errored && !opsInfo.errored && apolloPeople.length === 0;\nlet places = $input.first().json || {};\n\n// Surface SerpAPI failures loudly - swallowing them produced a 'successful'\n// run that silently stored nothing. But loudly is not the same as fatally:\n// while SerpAPI was the only source, throwing here was right; with Apollo on\n// it threw away people Apollo had already returned. So the vertical fails only\n// when BOTH sources came back empty.\nlet serpWarning = null;\nif (places.error) {\n  serpWarning = 'SerpAPI returned an error: ' + JSON.stringify(places.error).slice(0, 300);\n} else if (!Array.isArray(places.local_results) || places.local_results.length === 0) {\n  serpWarning = 'SerpAPI returned no local_results for query: ' + (ctx.serpQuery || '?') + ' | keys: ' + Object.keys(places).join(',');\n}\nif (serpWarning && apolloPeople.length === 0) {\n  throw new Error(serpWarning);\n}\n\n// SerpAPI google_maps local_results indexed by domain (also enriches Apollo hits)\nconst localResults = Array.isArray(places.local_results) ? places.local_results : [];\nconst placeByDomain = {};\nfor (const p of localResults) {\n  const d = norm(p.website);\n  if (d) placeByDomain[d] = p;\n}\n\n// Who speaks for a company, when Apollo returns several of them. It returns\n// a person per row, not a company: one live page of ten held four partners of\n// the same firm. We keep one prospect per domain, and it used to be whichever\n// Apollo happened to list first - so whether a firm was represented by its\n// founder or by its office manager was luck. Rank instead, and keep the top.\n// Who we are looking for, by vertical, because the answer genuinely differs:\n//\n//   law firms      managing partner or sole attorney. In larger firms a COO,\n//                  Director of Operations or practice-group leader sits between\n//                  them and the phones and owns this decision.\n//   dental/medical the practice owner signs, but the OFFICE MANAGER runs the\n//                  front desk and for back-office tools is usually the one who\n//                  decides and often the one who signs. Ranked second here, not\n//                  last, and that is the whole reason this is per-vertical.\n//   home services  the owner, until the shop has several trucks - then whoever\n//                  runs the dispatch board owns the missed call.\n//\n// Bands first (what the title IS), then rank and approval authority per\n// vertical (what that means HERE). Order matters within AUTHORITY: 'operations'\n// and 'office' are tested before the generic director and manager rules.\nconst AUTHORITY = [\n  // (?<!vice ) on president: \"Vice President Operations\" is a department lead,\n  // not an owner. A bare /president/ banded them with the founders, which would\n  // spend a reveal credit and a call on the wrong person.\n  ['owner',      /\\bowner\\b|founder|principal|(?<!vice )\\bpresident\\b|\\bceo\\b|chief executive|managing (partner|attorney|director)|sole (attorney|practitioner)/],\n  ['operations', /\\bcoo\\b|chief operating|(director|vp|vice president|head)\\s+(of\\s+)?operations|operations (manager|director)|general manager|\\bgm\\b|dispatch|service manager|practice group (leader|lead)|firm administrator|legal administrator/],\n  ['office',     /office manager|practice (manager|administrator)|business manager|office administrator/],\n  ['c_suite',    /\\bchief\\b|\\bcfo\\b|\\bcmo\\b|\\bcto\\b|\\bcso\\b/],\n  ['partner',    /\\bpartner\\b/],\n  ['marketing',  /marketing|\\bintake\\b|growth|business development|\\bbiz dev\\b|client relations|revenue/],\n  ['leader',     /director|\\bvp\\b|vice president|\\bhead of\\b/],\n  ['staff',      /manager|administrator|coordinator/],\n];\nconst authority = (title) => {\n  const t = String(title || '').toLowerCase();\n  for (const [band, re] of AUTHORITY) if (re.test(t)) return band;\n  return 'staff';\n};\n\n// Higher wins the one slot a company gets, and gets the reveal credit first.\nconst RANK = {\n  law_firm:      { owner: 9, partner: 8, operations: 7, c_suite: 6, marketing: 5, office: 4, leader: 3, staff: 2, none: 0 },\n  medical:       { owner: 9, office: 8, operations: 7, c_suite: 6, marketing: 5, partner: 5, leader: 3, staff: 2, none: 0 },\n  home_services: { owner: 9, operations: 8, c_suite: 6, marketing: 5, partner: 5, office: 4, leader: 3, staff: 2, none: 0 },\n};\n// Who can actually approve. An office manager can in a dental practice and\n// cannot in a plumbing shop, which is a claim about the vertical, not the title.\nconst DECIDES = {\n  law_firm:      new Set(['owner', 'partner', 'operations', 'c_suite', 'marketing']),\n  medical:       new Set(['owner', 'office', 'operations', 'c_suite', 'marketing']),\n  home_services: new Set(['owner', 'operations', 'c_suite', 'marketing']),\n};\nconst rankOf = (title) => (RANK[ctx.vertical] || RANK.home_services)[authority(title)] || 0;\nconst decides = (title) => (DECIDES[ctx.vertical] || DECIDES.home_services).has(authority(title));\n\n// Apollo has returned this object with the domain under `domain` and under\n// `primary_domain` depending on the endpoint. Reading only one of them drops\n// EVERY Apollo person on the `if (!domain) continue` below, silently, and the\n// run still reports success - so read all three spellings.\nconst orgDomain = (org) => norm(org.primary_domain || org.domain || org.website_url);\n\nconst bestByDomain = new Map();\nfor (const person of apolloPeople) {\n  const org = person.organization || {};\n  const domain = orgDomain(org);\n  const phone = digits(org.sanitized_phone || org.phone);\n  if (!domain) continue;                                   // hard exclude: no website\n  if (known.has(domain)) continue;                          // already in the table\n  if (phone && knownPh.has(phone)) continue;                // dedupe on phone\n  if (exTitle.test(person.title || '')) continue;           // not a decision maker\n  if (exCompany.test(org.name || '')) continue;             // agencies/vendors/SaaS\n  const emp = org.estimated_num_employees || null;\n  if (emp !== null && emp < 2) continue;                    // solo, no staff\n  const prev = bestByDomain.get(domain);\n  if (!prev || rankOf(person.title) > rankOf(prev.title)) bestByDomain.set(domain, person);\n}\n\nfor (const person of bestByDomain.values()) {\n  const org = person.organization || {};\n  const domain = orgDomain(org);\n  const emp = org.estimated_num_employees || null;\n  if (seen.has(domain)) continue;\n  seen.add(domain);\n  const place = placeByDomain[domain] || {};\n  out.push({ json: {\n    company_name: org.name || domain,\n    vertical: ctx.vertical,\n    website_url: org.website_url || 'https://' + domain,\n    domain,\n    contact_name: person.name || [person.first_name, person.last_name].filter(Boolean).join(' ') || null,\n    contact_title: person.title || null,\n    apollo_person_id: person.id || null,\n    contact_authority: authority(person.title),\n    decision_maker: decides(person.title),\n    city: org.city || person.city || null,\n    state: org.state || person.state || 'California',\n    // The person first, the switchboard second, and a label saying which one\n    // this is. Storing only the org number and calling it contact_phone is how\n    // \"call the owner\" quietly became \"call the front desk\".\n    contact_phone: person.sanitized_phone || org.sanitized_phone || org.phone || null,\n    contact_phone_source: person.sanitized_phone ? 'apollo_direct' : 'apollo_company',\n    company_phone: org.sanitized_phone || org.phone || null,\n    contact_linkedin_url: person.linkedin_url || null,\n    employee_count: emp,\n    rating: place.rating ?? null,\n    review_count: place.reviews ?? null,\n    source: 'apollo',\n  }});\n}\n\nfor (const p of localResults) {\n  const domain = norm(p.website);\n  const phone = digits(p.phone);\n  if (!domain || known.has(domain) || seen.has(domain)) continue;\n  if (phone && knownPh.has(phone)) continue;\n  const name = p.title || domain;\n  if (exCompany.test(name)) continue;\n  seen.add(domain);\n  out.push({ json: {\n    company_name: name,\n    vertical: ctx.vertical,\n    website_url: p.website,\n    domain,\n    contact_name: null,\n    contact_title: null,\n    apollo_person_id: null,\n    contact_authority: 'none',\n    decision_maker: false,\n    city: null,\n    state: 'California',\n    contact_phone: p.phone || null,\n    contact_phone_source: p.phone ? 'google_places' : null,\n    company_phone: p.phone || null,\n    contact_linkedin_url: null,\n    employee_count: null,\n    rating: p.rating ?? null,\n    review_count: p.reviews ?? null,\n    source: 'google_places',\n  }});\n}\n\nconst capped = out.slice(0, ctx.maxPerVertical);\n// A marker, not a prospect: has no .domain, so Collect Candidates' existing\n// filter drops it before it ever reaches the upsert path. It exists purely so\n// 'Apollo Zero Results?' downstream can route it to a log line - it is not,\n// and must never become, a row in sanaku_prospects.\nconst markers = apolloZeroResults ? [{ json: { _apollo_zero: true, vertical: ctx.vertical } }] : [];\nreturn capped.length\n  ? [...capped, ...markers]\n  : [{ json: { _empty: true, vertical: ctx.vertical, serp_warning: serpWarning } }, ...markers];"
       },
       "id": "f1000000-0000-4000-8000-000000000009",
       "name": "Filter & Dedupe",
@@ -774,8 +774,7 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -1017,6 +1016,122 @@
       },
       "retryOnFail": true,
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'Apollo ops search failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000), payload: { vertical: $('Per Vertical').first().json.vertical } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a5000000-0000-4000-8000-0000000000c2",
+      "name": "Log Apollo Ops Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1220,
+        1160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "apollo-zero",
+              "leftValue": "={{ $json._apollo_zero === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a5000000-0000-4000-8000-0000000000c3",
+      "name": "Apollo Zero Results?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1660,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: 'Apollo zero results: enabled and ran successfully but returned 0 people for vertical ' + $json.vertical, payload: { vertical: $json.vertical } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a5000000-0000-4000-8000-0000000000c4",
+      "name": "Log Apollo Zero Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1660,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -1149,7 +1264,7 @@
       "main": [
         [
           {
-            "node": "Per Vertical",
+            "node": "Apollo Zero Results?",
             "type": "main",
             "index": 0
           }
@@ -1419,6 +1534,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Log Apollo Ops Error",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1530,6 +1652,46 @@
         [
           {
             "node": "Attach Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Apollo Ops Error": {
+      "main": [
+        [
+          {
+            "node": "Maps Search (SerpAPI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apollo Zero Results?": {
+      "main": [
+        [
+          {
+            "node": "Log Apollo Zero Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Per Vertical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Apollo Zero Results": {
+      "main": [
+        [
+          {
+            "node": "Per Vertical",
             "type": "main",
             "index": 0
           }

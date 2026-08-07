@@ -75,7 +75,9 @@ chmod 600 ~/.sanaku.env
   `docker run -it -v sanaku-home:/root <image> sh`
 - `dashboard` and `site` need Node in the image (the script says so plainly if
   it's missing). `status` and `scrape` need only curl + python3 — run those
-  anywhere.
+  anywhere. `apollo` also needs Node — it runs W1's real Run Config code to
+  build its test query rather than keeping a second hand-typed copy that can
+  go stale, so wherever n8n itself runs, this will too.
 
 ---
 
