@@ -40,10 +40,18 @@ export const WORKFLOWS = {
 };
 
 // What one lost lead is worth, by vertical (from the Sanaku brief).
+// Privacy-regulated retargeting (2026-08): the 4 new verticals' figures
+// below are a first-pass estimate for review, not sourced the way the
+// original 3 were - flagged in the approved plan as draft copy, tune once
+// real call data comes back.
 export const ECONOMICS = {
   law_firm: { one: 3500, label: 'one signed case', range: '$3,000–$5,000+' },
   medical: { one: 200, label: 'one booked patient', range: '$75–$300 (aesthetics higher)' },
   home_services: { one: 600, label: 'one job', range: '$200–$2,000+' },
+  accounting_tax: { one: 800, label: 'one new client engagement', range: '$400–$2,000+' },
+  therapy: { one: 150, label: 'one intake booking', range: '$100–$250+ per session, recurring' },
+  financial_advisory: { one: 2500, label: 'one new client relationship', range: '$1,500–$10,000+ annual fee value' },
+  family_office: { one: 15000, label: 'one family relationship', range: '$10,000–$50,000+ annual' },
 };
 
 const has = (p, cat) => Boolean(p.signals?.detected?.[cat]?.length);
@@ -158,6 +166,14 @@ export function buildScript(p, rec) {
       'When someone calls to book and gets voicemail at lunch, does anyone track how many of those call back?',
     home_services:
       'When your techs are on a job and the phone rings, where does that call go?',
+    accounting_tax:
+      'When a client calls during tax season and gets voicemail, does anyone track how many go to a different firm?',
+    therapy:
+      'When a prospective client calls looking for an opening and gets voicemail, does anyone track how many just book with the next practice on Google?',
+    financial_advisory:
+      'When a prospect calls to talk about moving their assets and gets voicemail, what happens to that call?',
+    family_office:
+      'When a referral calls your office and does not get a same-day response, do you know if they go elsewhere?',
   };
 
   const STAKES = {
@@ -167,11 +183,32 @@ export function buildScript(p, rec) {
       'Most patients who hit voicemail do not call back — they just book with the next practice on Google.',
     home_services:
       'Emergency work goes to whoever picks up. The next shop on the list gets the job you paid to advertise for.',
+    accounting_tax:
+      'Clients shopping for a new accountant in busy season are usually calling two or three firms the same week. Whoever responds first usually wins the engagement.',
+    therapy:
+      'A prospective client who hits voicemail rarely waits — they just book with the next practice on Google.',
+    financial_advisory:
+      'A prospect who does not hear back quickly assumes you are too busy for their account and calls someone else.',
+    family_office:
+      'Referrals to a family office are rare and high-trust. A slow response reads as a signal about how the relationship would be run.',
+  };
+
+  // What to call the business type in a sentence like "I help ___ like
+  // yours...". A 3-way ternary did not extend cleanly to 5+ verticals - a
+  // plain lookup does.
+  const NOUN = {
+    law_firm: 'firms',
+    medical: 'practices',
+    home_services: 'shops',
+    accounting_tax: 'firms',
+    therapy: 'practices',
+    financial_advisory: 'firms',
+    family_office: 'offices',
   };
 
   return {
     opener: `${greeting}${observation} — I help ${
-      p.vertical === 'law_firm' ? 'firms' : p.vertical === 'medical' ? 'practices' : 'shops'
+      NOUN[p.vertical] || 'shops'
     } like yours stop losing calls they already paid for. Can I ask you one quick question and then get out of your way?`,
     question: QUESTIONS[p.vertical] || QUESTIONS.home_services,
     stakes: STAKES[p.vertical] || STAKES.home_services,

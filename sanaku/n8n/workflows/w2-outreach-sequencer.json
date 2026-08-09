@@ -11,13 +11,19 @@
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [40, 0]
+      "position": [
+        40,
+        0
+      ]
     },
     {
       "parameters": {
         "rule": {
           "interval": [
-            { "field": "cronExpression", "expression": "0 9 * * 1-5" }
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
           ]
         }
       },
@@ -25,7 +31,10 @@
       "name": "Daily Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [120, 560]
+      "position": [
+        120,
+        560
+      ]
     },
     {
       "parameters": {
@@ -33,15 +42,23 @@
         "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?status=eq.queued&do_not_contact=is.false&contact_email=not.is.null&select=id,company_name,vertical,contact_name,contact_email,signals,last_contacted&order=intent_score.desc&limit=20",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f2000000-0000-4000-8000-000000000002",
       "name": "Get Queued",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [340, 560],
+      "position": [
+        340,
+        560
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -57,18 +74,29 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Range", "value": "0-9999" }
+            {
+              "name": "Range",
+              "value": "0-9999"
+            }
           ]
         },
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f2000000-0000-4000-8000-000000000003",
       "name": "Get In Sequence",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [560, 560],
+      "position": [
+        560,
+        560
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -84,18 +112,29 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Range", "value": "0-9999" }
+            {
+              "name": "Range",
+              "value": "0-9999"
+            }
           ]
         },
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f2000000-0000-4000-8000-000000000004",
       "name": "Get Outbound History",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [780, 560],
+      "position": [
+        780,
+        560
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -111,7 +150,10 @@
       "name": "Plan Touches",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1000, 560]
+      "position": [
+        1000,
+        560
+      ]
     },
     {
       "parameters": {
@@ -121,18 +163,30 @@
       "name": "Per Touch",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [1220, 560]
+      "position": [
+        1220,
+        560
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "is-send",
               "leftValue": "={{ $json.action === 'send' }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -143,7 +197,10 @@
       "name": "Send Or Lost?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1440, 660]
+      "position": [
+        1440,
+        660
+      ]
     },
     {
       "parameters": {
@@ -154,21 +211,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ status: 'lost', notes: 'no reply after 3-touch email sequence' }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f2000000-0000-4000-8000-000000000008",
       "name": "Mark Lost",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1660, 860],
+      "position": [
+        1660,
+        860
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -178,13 +246,16 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Build the OpenRouter request for this touch: evidence-based, one question,\n// loss frame not feature pitch.\nconst p = $input.first().json;\nconst sig = p.signals || {};\nconst evidence = [];\nif (sig.detected && sig.detected.ads) evidence.push('they are running paid ads (' + sig.detected.ads.join(', ') + ')');\nif (!sig.detected || !sig.detected.chat) evidence.push('no chat or intake widget on the site');\nif (!sig.detected || !sig.detected.booking) evidence.push('no online booking tool');\nif (sig.has_contact_form) evidence.push('intake goes to a plain contact form');\nif (sig.answer_language) evidence.push('site promises \"we answer 24/7\"-type availability');\nif (sig.review_count) evidence.push(sig.review_count + ' Google reviews at ' + sig.rating);\n\nconst EXAMPLES = {\n  law_firm: 'Noticed [Firm] is running ads but the intake page goes to a form. Curious - of the calls that come in after 6pm, roughly how many end up signing?',\n  medical: 'Quick one - when someone calls to book and gets voicemail at lunch, does anyone track how many of those call back?',\n  home_services: 'When your techs are on a job and the phone rings, where does that call go? Trying to figure out if that is a real problem for shops your size or if I am overthinking it.',\n};\n\nconst ANGLES = {\n  opener: 'First touch. Reference one specific thing we observed on their website and ask ONE question about leads they might be losing.',\n  follow_up: 'Second touch, 3 days later, they did not reply. Different angle from a generic bump - a new observation or a sharper version of the question. Do NOT say \"just following up\". Still exactly one question.',\n  breakup: 'Third and final touch, day 8. Short breakup note - ask if you should close the file. Two sentences max.',\n};\n\nconst system = 'You write cold outreach emails for Sanaku, a one-person AI automation agency. Rules: under 400 characters. Exactly one question. Never pitch features or mention AI/automation tools. The frame is money lost to missed leads, not what we sell. Sound like a busy person typed it - lowercase-ish, direct, zero fluff. Absolutely never write \"I hope this email finds you well\" or any variant. Output ONLY the email body, no subject, no signature, no quotes.';\n\nconst user = 'Business: ' + p.company_name + ' (' + p.vertical + ')\\n' +\n  'Decision maker: ' + (p.contact_name || 'unknown') + '\\n' +\n  'What we found on their site: ' + (evidence.join('; ') || 'nothing notable') + '\\n' +\n  'Touch type: ' + ANGLES[p.angle] + '\\n' +\n  'Style reference for this vertical (do not copy verbatim): ' + EXAMPLES[p.vertical];\n\nreturn [{ json: { ...p, orBody: {\n  model: $env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free',\n  messages: [ { role: 'system', content: system }, { role: 'user', content: user } ],\n  max_tokens: 220,\n  temperature: 0.8,\n} } }];"
+        "jsCode": "// Build the OpenRouter request for this touch: evidence-based, one question,\n// loss frame not feature pitch.\nconst p = $input.first().json;\nconst sig = p.signals || {};\nconst evidence = [];\nif (sig.detected && sig.detected.ads) evidence.push('they are running paid ads (' + sig.detected.ads.join(', ') + ')');\nif (!sig.detected || !sig.detected.chat) evidence.push('no chat or intake widget on the site');\nif (!sig.detected || !sig.detected.booking) evidence.push('no online booking tool');\nif (sig.has_contact_form) evidence.push('intake goes to a plain contact form');\nif (sig.answer_language) evidence.push('site promises \"we answer 24/7\"-type availability');\nif (sig.review_count) evidence.push(sig.review_count + ' Google reviews at ' + sig.rating);\n\nconst EXAMPLES = {\n  law_firm: 'Noticed [Firm] is running ads but the intake page goes to a form. Curious - of the calls that come in after 6pm, roughly how many end up signing?',\n  medical: 'Quick one - when someone calls to book and gets voicemail at lunch, does anyone track how many of those call back?',\n  home_services: 'When your techs are on a job and the phone rings, where does that call go? Trying to figure out if that is a real problem for shops your size or if I am overthinking it.',\n  accounting_tax: 'Noticed [Firm] is running ads during tax season but the contact page just goes to a form. Curious - of the calls that hit voicemail in the first two weeks of April, how many end up going with someone else?',\n  therapy: 'Quick one - when a prospective client calls looking for an opening and gets voicemail, does anyone track how many just book with the next practice on Google?',\n  financial_advisory: 'Noticed your firm gets referrals but new-client calls seem to route through a general line. When someone calls to talk about moving their assets and gets voicemail, what happens to that call?',\n  family_office: 'Curious how prospective families reach your office - if a referral calls and does not get a same-day response, do you know if they go elsewhere?',\n};\n\nconst ANGLES = {\n  opener: 'First touch. Reference one specific thing we observed on their website and ask ONE question about leads they might be losing.',\n  follow_up: 'Second touch, 3 days later, they did not reply. Different angle from a generic bump - a new observation or a sharper version of the question. Do NOT say \"just following up\". Still exactly one question.',\n  breakup: 'Third and final touch, day 8. Short breakup note - ask if you should close the file. Two sentences max.',\n};\n\nconst system = 'You write cold outreach emails for Sanaku, a one-person AI automation agency. Rules: under 400 characters. Exactly one question. Never pitch features or mention AI/automation tools. The frame is money lost to missed leads, not what we sell. Sound like a busy person typed it - lowercase-ish, direct, zero fluff. Absolutely never write \"I hope this email finds you well\" or any variant. Output ONLY the email body, no subject, no signature, no quotes.';\n\nconst user = 'Business: ' + p.company_name + ' (' + p.vertical + ')\\n' +\n  'Decision maker: ' + (p.contact_name || 'unknown') + '\\n' +\n  'What we found on their site: ' + (evidence.join('; ') || 'nothing notable') + '\\n' +\n  'Touch type: ' + ANGLES[p.angle] + '\\n' +\n  'Style reference for this vertical (do not copy verbatim): ' + EXAMPLES[p.vertical];\n\nreturn [{ json: { ...p, orBody: {\n  model: $env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free',\n  messages: [ { role: 'system', content: system }, { role: 'user', content: user } ],\n  max_tokens: 220,\n  temperature: 0.8,\n} } }];"
       },
       "id": "f2000000-0000-4000-8000-000000000009",
       "name": "Build Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1660, 560]
+      "position": [
+        1660,
+        560
+      ]
     },
     {
       "parameters": {
@@ -195,15 +266,23 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.orBody) }}",
-        "options": { "timeout": 45000 }
+        "options": {
+          "timeout": 45000
+        }
       },
       "id": "f2000000-0000-4000-8000-000000000010",
       "name": "Generate Message",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1880, 560],
+      "position": [
+        1880,
+        560
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "openrouter-header-auth", "name": "OpenRouter (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "openrouter-header-auth",
+          "name": "OpenRouter (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -214,13 +293,16 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Validate the LLM output; fall back to the hand-written bank if it broke a rule.\nconst p = $('Build Prompt').first().json;\nconst resp = $input.first().json || {};\nlet body = '';\ntry { body = String(resp.choices[0].message.content || '').trim(); } catch (e) { body = ''; }\nbody = body.replace(/^[\"']|[\"']$/g, '').trim();\n\nconst FALLBACK = {\n  law_firm: {\n    1: 'Noticed ' + p.company_name + ' is running ads but the intake page goes to a form. Curious - of the calls that come in after 6pm, roughly how many end up signing?',\n    2: 'One more thought - when an accident victim calls three firms in a row, whoever answers first usually wins the case. Do you know how fast your intake responds after hours?',\n    3: 'Have not heard back so I will assume missed intake calls are not a priority right now - should I close the file?',\n  },\n  medical: {\n    1: 'Quick one - when someone calls to book and gets voicemail at lunch, does anyone track how many of those call back?',\n    2: 'Was thinking about your front desk - what happens to booking calls that come in after close? Do they land anywhere?',\n    3: 'No worries if the timing is off - should I close the file on this?',\n  },\n  home_services: {\n    1: 'When your techs are on a job and the phone rings, where does that call go? Trying to figure out if that is a real problem for shops your size or if I am overthinking it.',\n    2: 'Curious what an emergency call that hits voicemail is worth to you - the ones that call the next shop when nobody picks up.',\n    3: 'Guessing missed calls are not a burning issue right now - want me to close the file?',\n  },\n};\n\nconst invalid = !body || body.length > 400 || !body.includes('?') || /hope this (e-?mail )?finds you/i.test(body);\nif (invalid) body = FALLBACK[p.vertical][p.step];\n\nconst first = (p.contact_name || '').split(' ')[0];\nconst greeting = first ? first + ' - ' : '';\nconst footer = '\\n\\n-\\nIsmail | Sanaku\\n' + ($env.SANAKU_MAILING_ADDRESS || '') + \"\\nIf you'd rather not hear from me, reply 'no thanks' and I'll close the file for good.\";\n\nconst SUBJECTS = { 1: 'quick question about ' + p.company_name, 2: 're: quick question about ' + p.company_name, 3: 'closing the file?' };\n\nreturn [{ json: {\n  ...p,\n  email_subject: SUBJECTS[p.step],\n  email_body: greeting + body + footer,\n  message_logged: body,\n  used_fallback: invalid,\n} }];"
+        "jsCode": "// Validate the LLM output; fall back to the hand-written bank if it broke a rule.\nconst p = $('Build Prompt').first().json;\nconst resp = $input.first().json || {};\nlet body = '';\ntry { body = String(resp.choices[0].message.content || '').trim(); } catch (e) { body = ''; }\nbody = body.replace(/^[\"']|[\"']$/g, '').trim();\n\nconst FALLBACK = {\n  law_firm: {\n    1: 'Noticed ' + p.company_name + ' is running ads but the intake page goes to a form. Curious - of the calls that come in after 6pm, roughly how many end up signing?',\n    2: 'One more thought - when an accident victim calls three firms in a row, whoever answers first usually wins the case. Do you know how fast your intake responds after hours?',\n    3: 'Have not heard back so I will assume missed intake calls are not a priority right now - should I close the file?',\n  },\n  medical: {\n    1: 'Quick one - when someone calls to book and gets voicemail at lunch, does anyone track how many of those call back?',\n    2: 'Was thinking about your front desk - what happens to booking calls that come in after close? Do they land anywhere?',\n    3: 'No worries if the timing is off - should I close the file on this?',\n  },\n  home_services: {\n    1: 'When your techs are on a job and the phone rings, where does that call go? Trying to figure out if that is a real problem for shops your size or if I am overthinking it.',\n    2: 'Curious what an emergency call that hits voicemail is worth to you - the ones that call the next shop when nobody picks up.',\n    3: 'Guessing missed calls are not a burning issue right now - want me to close the file?',\n  },\n  accounting_tax: {\n    1: 'Noticed ' + p.company_name + ' is running ads during tax season but the contact page just goes to a form. Curious - of the calls that hit voicemail in the first two weeks of April, how many end up going with someone else?',\n    2: 'One more thought - clients shopping for a new accountant in busy season are usually calling two or three firms same week. Do you know how fast your intake responds after hours?',\n    3: 'Have not heard back so I will assume missed intake calls are not a priority right now - should I close the file?',\n  },\n  therapy: {\n    1: 'Quick one - when a prospective client calls looking for an opening and gets voicemail, does anyone track how many just book with the next practice on Google?',\n    2: 'Was thinking about your intake line - what happens to a client inquiry that comes in after hours? Does it land anywhere, or just sit?',\n    3: 'No worries if the timing is off - should I close the file on this?',\n  },\n  financial_advisory: {\n    1: 'Noticed your firm gets referrals but new-client calls seem to route through a general line. When someone calls to talk about moving their assets and gets voicemail, what happens to that call?',\n    2: 'One more thought - a prospect who does not hear back quickly usually assumes you are too busy for their account and calls someone else. Do you track how often that happens?',\n    3: 'Have not heard back so I will assume this is not a priority right now - should I close the file?',\n  },\n  family_office: {\n    1: 'Curious how prospective families reach your office - if a referral calls and does not get a same-day response, do you know if they go elsewhere?',\n    2: 'One more thought - referrals to a family office are rare and high-trust. A slow response reads as a signal about how the relationship would be run. Worth knowing how fast yours responds?',\n    3: 'Have not heard back so I will assume this is not a priority right now - should I close the file?',\n  },\n};\n\nconst invalid = !body || body.length > 400 || !body.includes('?') || /hope this (e-?mail )?finds you/i.test(body);\nif (invalid) body = FALLBACK[p.vertical][p.step];\n\nconst first = (p.contact_name || '').split(' ')[0];\nconst greeting = first ? first + ' - ' : '';\nconst footer = '\\n\\n-\\nIsmail | Sanaku\\n' + ($env.SANAKU_MAILING_ADDRESS || '') + \"\\nIf you'd rather not hear from me, reply 'no thanks' and I'll close the file for good.\";\n\nconst SUBJECTS = { 1: 'quick question about ' + p.company_name, 2: 're: quick question about ' + p.company_name, 3: 'closing the file?' };\n\nreturn [{ json: {\n  ...p,\n  email_subject: SUBJECTS[p.step],\n  email_body: greeting + body + footer,\n  message_logged: body,\n  used_fallback: invalid,\n} }];"
       },
       "id": "f2000000-0000-4000-8000-000000000011",
       "name": "Finalize Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2100, 560]
+      "position": [
+        2100,
+        560
+      ]
     },
     {
       "parameters": {
@@ -234,9 +316,15 @@
       "name": "Send Email",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [2320, 560],
+      "position": [
+        2320,
+        560
+      ],
       "credentials": {
-        "gmailOAuth2": { "id": "gmail-oauth2", "name": "Gmail Account" }
+        "gmailOAuth2": {
+          "id": "gmail-oauth2",
+          "name": "Gmail Account"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -252,21 +340,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, prospect_id: $('Finalize Message').first().json.id, error: 'email send failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000) }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f2000000-0000-4000-8000-000000000013",
       "name": "Log Send Error",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2540, 760],
+      "position": [
+        2540,
+        760
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -282,21 +381,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ prospect_id: $('Finalize Message').first().json.id, channel: 'email', direction: 'outbound', body: $('Finalize Message').first().json.message_logged, sequence_step: $('Finalize Message').first().json.step }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f2000000-0000-4000-8000-000000000014",
       "name": "Log Conversation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2540, 560],
+      "position": [
+        2540,
+        560
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -312,21 +422,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ status: 'contacted', last_contacted: new Date().toISOString() }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f2000000-0000-4000-8000-000000000015",
       "name": "Update Prospect",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2760, 560],
+      "position": [
+        2760,
+        560
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -342,7 +463,10 @@
       "name": "Pace Sends",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [2980, 560],
+      "position": [
+        2980,
+        560
+      ],
       "webhookId": "f2000000-0000-4000-8000-000000000301"
     },
     {
@@ -354,7 +478,10 @@
       "name": "Summarize Run",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1440, 400]
+      "position": [
+        1440,
+        400
+      ]
     },
     {
       "parameters": {
@@ -368,9 +495,15 @@
       "name": "Send Run Summary",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [1660, 400],
+      "position": [
+        1660,
+        400
+      ],
       "credentials": {
-        "gmailOAuth2": { "id": "gmail-oauth2", "name": "Gmail Account" }
+        "gmailOAuth2": {
+          "id": "gmail-oauth2",
+          "name": "Gmail Account"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -379,64 +512,212 @@
   ],
   "connections": {
     "Daily Trigger": {
-      "main": [ [ { "node": "Get Queued", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Get Queued",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get Queued": {
-      "main": [ [ { "node": "Get In Sequence", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Get In Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get In Sequence": {
-      "main": [ [ { "node": "Get Outbound History", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Get Outbound History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get Outbound History": {
-      "main": [ [ { "node": "Plan Touches", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Plan Touches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Plan Touches": {
-      "main": [ [ { "node": "Per Touch", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Touch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Per Touch": {
       "main": [
-        [ { "node": "Summarize Run", "type": "main", "index": 0 } ],
-        [ { "node": "Send Or Lost?", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Summarize Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Or Lost?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Send Or Lost?": {
       "main": [
-        [ { "node": "Build Prompt", "type": "main", "index": 0 } ],
-        [ { "node": "Mark Lost", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Lost",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Mark Lost": {
-      "main": [ [ { "node": "Per Touch", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Touch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Prompt": {
-      "main": [ [ { "node": "Generate Message", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Generate Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Generate Message": {
-      "main": [ [ { "node": "Finalize Message", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Finalize Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Finalize Message": {
-      "main": [ [ { "node": "Send Email", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Send Email": {
       "main": [
-        [ { "node": "Log Conversation", "type": "main", "index": 0 } ],
-        [ { "node": "Log Send Error", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Log Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Send Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Log Send Error": {
-      "main": [ [ { "node": "Per Touch", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Touch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Log Conversation": {
-      "main": [ [ { "node": "Update Prospect", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Update Prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Update Prospect": {
-      "main": [ [ { "node": "Pace Sends", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Pace Sends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Pace Sends": {
-      "main": [ [ { "node": "Per Touch", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Per Touch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Summarize Run": {
-      "main": [ [ { "node": "Send Run Summary", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Send Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {

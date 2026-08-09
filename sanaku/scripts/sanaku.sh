@@ -403,8 +403,8 @@ const out = (function () {
 $(cat "$_rcjs")
 })();
 const cfg = out[0].json;
-if (!Array.isArray(cfg.verticals) || cfg.verticals.length !== 3) {
-  throw new Error('Run Config returned ' + (cfg.verticals || []).length + ' verticals, expected 3 - its shape changed; this command needs updating, not trusting.');
+if (!Array.isArray(cfg.verticals) || cfg.verticals.length !== 5) {
+  throw new Error('Run Config returned ' + (cfg.verticals || []).length + ' verticals, expected 5 - its shape changed; this command needs updating, not trusting.');
 }
 const calls = [];
 for (const v of cfg.verticals) {
@@ -418,7 +418,7 @@ console.log(JSON.stringify(calls));
 ") || { say "Run Config's own code failed to run - see the error above. Not guessing at a query; fix that first."; return 1; }
 
   APOLLO_KEY="$APOLLO_KEY" python3 -c '
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 
 # curl, not urllib. urllib.request opens its own TLS connection using
 # Pythons bundled/absent cert store, which on macOS commonly cannot find a
@@ -449,6 +449,23 @@ calls = json.loads(sys.argv[1])
 key = os.environ["APOLLO_KEY"]
 fatal = False
 
+# "Size and quality of a pull" - size is the match count already printed
+# below; this is quality, the fraction of matched people whose title lands
+# in the SAME owner band Filter & Dedupe/Cap Reveals/Pick Best Person use to
+# pick who gets the one reveal slot for a company. This is a FOURTH
+# hand-synced copy of that one regex (joining those three) - deliberately
+# duplicated rather than shared, since this file has no import path into an
+# n8n Code node jsCode and this is a free preview signal, not something
+# that spends a credit if it drifts slightly stale. Keep it matched to the
+# owner band in those three files if that pattern ever changes.
+OWNER_BAND_RE = re.compile(
+    r"\bowner\b|founder|principal|(?<!vice )\bpresident\b|\bceo\b|chief executive|"
+    r"managing (partner|attorney|director)|sole (attorney|practitioner)",
+    re.I,
+)
+quality_total = 0
+quality_owner = 0
+
 for c in calls:
     label = "%-13s / %-9s" % (c["vertical"], c["pass"])
     try:
@@ -478,6 +495,10 @@ for c in calls:
         # Check both: cheap, and does not assume the current shape is permanent.
         total = d.get("total_entries", (d.get("pagination") or {}).get("total_entries", "?"))
         people = d.get("people") or []
+        for p in people:
+            quality_total += 1
+            if OWNER_BAND_RE.search(str(p.get("title") or "")):
+                quality_owner += 1
         print("  %s  %s matches (%s total)" % (label, len(people), total))
         for p in people[:2]:
             org = p.get("organization") or {}
@@ -512,6 +533,14 @@ for c in calls:
     else:
         print("  %s  unexpected response (HTTP %s): %s" % (label, code, (msg or body)[:200]))
         fatal = True
+
+if quality_total > 0:
+    pct = round(100 * quality_owner / quality_total)
+    print("")
+    print("  Quality: %d/%d sampled matches (%d%%) are owner-band titles (owner/founder/" % (quality_owner, quality_total, pct))
+    print("  principal/president/CEO/managing partner) - the rest are the ops-title fallback")
+    print("  pass, or senior-but-not-owner titles. This is a rough read on a %d-per-call" % 3
+          + " sample per pass, not the full pull a real scrape would see.")
 
 sys.exit(1 if fatal else 0)
 ' "$_bodies"

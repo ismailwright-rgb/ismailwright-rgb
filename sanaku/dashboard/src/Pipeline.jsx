@@ -3,7 +3,18 @@ import { supabase } from './supabase.js';
 import { WORKFLOWS, recommendWorkflow, buildScript, scriptToText } from './playbook.js';
 import ProspectDrawer from './ProspectDrawer.jsx';
 
-const VERTICALS = { law_firm: 'Law firm', medical: 'Medical', home_services: 'Home services' };
+// Privacy-regulated retargeting (2026-08): dropped medical/home_services from
+// the filter dropdown - sourcing no longer targets them, in this priority
+// order. Existing rows in either still render fine via the table cell's
+// `VERTICALS[p.vertical] || p.vertical` fallback below; they just lose a
+// dedicated filter option.
+const VERTICALS = {
+  law_firm: 'Personal injury law',
+  accounting_tax: 'Accounting & tax',
+  therapy: 'Therapy & counseling',
+  financial_advisory: 'Financial advisory',
+  family_office: 'Family office',
+};
 const fmtMoney = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US'));
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
 
@@ -66,6 +77,13 @@ export default function Pipeline() {
     }
     const { key, dir } = sort;
     r = [...r].sort((a, b) => {
+      // A verified decision-maker always sorts to the top, ahead of
+      // whatever column staff clicked - a general-contact lead never
+      // outranks a decision-maker-verified one just because it scores
+      // higher on today's sort key. The existing per-column comparison
+      // below is the tiebreaker among leads that match on this.
+      const dmDiff = Number(b.decision_maker) - Number(a.decision_maker);
+      if (dmDiff !== 0) return dmDiff;
       const av = a[key] ?? '';
       const bv = b[key] ?? '';
       const c = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
