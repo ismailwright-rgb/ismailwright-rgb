@@ -242,14 +242,47 @@ similarity search — right for picking snippets for one lead, wrong here, where
 every item needs the whole brief. Leaving them unembedded also keeps LinkedIn
 voice rules out of cold-email retrieval.
 
-### Weekly rotation
-Sun article (first Sunday of the month: a Featured asset) · Mon post ·
-Tue carousel · Wed post · Thu poll · Fri post · Sat newsletter.
+### How it works — two stages, like the Sydney pipeline
+V1 was a single LLM call: brand brain in, finished post out. Correct, on-message
+and forgettable, because nothing had a point of view before it started writing.
 
-Audience rotates on an 8-slot cycle with personal injury law in every other
-slot; bottleneck cycles independently so pairings vary. Over a year that is
-~156 posts, 52 carousels, 53 polls, 52 newsletters, 40 articles, 12 Featured,
-with PI law at ~50% of items.
+1. **Angle engine.** Reads the brand brain, `content_memory`, the last 14 items
+   and real headlines pulled from Google News RSS, then commits to **three
+   genuinely different theses** — different audience, bottleneck or argument.
+2. **The writer.** Takes ONE thesis and writes to it, in the right format shape.
+
+Deciding what to argue and writing it well are different jobs. Asking one call
+to do both is why v1 drifted to whatever the model found easiest.
+
+**It remembers.** After each run it extracts spent arguments, used analogies and
+used openers into `content_memory`, and the angle engine is shown them and told
+not to repeat. That is what stops draft 40 re-running draft 3.
+
+### Cadence
+**Three drafts every morning, seven days a week.** They are alternatives to
+choose between — approve the one you want, delete the rest. They share a
+`draft_group` so the tab can show them as a set.
+
+### Output format is delimited blocks, not JSON
+Free-tier models cannot reliably escape newlines and quotes inside a JSON string
+when the value is multi-paragraph prose — two of every three drafts died on
+`Expected ',' or '}' after property value` around character 1200. Blocks
+(`[POST] … [/POST]`, `[SLIDE] …`) need no escaping, so the writer just writes.
+Both stages use them; the angle engine switched too after a reasoning-model
+fallback emitted its working instead of JSON.
+
+### The model
+Defaults to `google/gemma-4-31b-it:free` with two free fallbacks across other
+vendors, because the free pool rate-limits constantly and a single free model is
+not something you can schedule against. Override without a rebuild:
+
+```
+n8n env   OPENROUTER_MODEL=anthropic/claude-sonnet-5
+```
+
+~$2/month at this cadence, and a large step up in writing quality. **The paid
+OpenRouter balance is currently exhausted ($50 of $50), which is why the free
+endpoint is the default.**
 
 ### Installing it
 ```

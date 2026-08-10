@@ -98,9 +98,10 @@ def supa(method, path, body=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=5,
+    ap.add_argument("--limit", type=int, default=3,
                     help="max items per run; keeps an unattended run from "
-                         "burning the whole Alexya balance on a backlog")
+                         "burning the whole Alexya balance on a backlog. A "
+                         "carousel counts as one item but costs 5-8 images.")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -114,18 +115,26 @@ def main():
         print(f"[illustrate] Alexya not reachable at {ALEXYA} (HTTP {code}); nothing to do")
         return 0
 
-    # Only items that ASKED for a picture and did not get one. 'posted' is
-    # excluded: adding art to something already on LinkedIn helps nobody.
+    # APPROVED ONLY, and this is the important line in the file.
+    #
+    # The studio writes three drafts every morning and Ismail publishes one. If
+    # this drew every draft it would spend roughly two thirds of the Alexya
+    # balance on content that is deleted the same day - about 2,800 credits a
+    # month against a balance of ~27,000. Drawing on approval instead means art
+    # is only ever made for something that ships.
+    #
+    # 'posted' is excluded too: adding artwork to something already on LinkedIn
+    # helps nobody.
     rows = supa("GET",
                 "content_queue"
                 "?select=id,content_type,image_prompt,image_url,slides,bottleneck,created_at"
                 "&image_url=is.null"
                 "&image_prompt=not.is.null"
-                "&status=in.(queued,approved)"
+                "&status=eq.approved"
                 f"&order=created_at.asc&limit={args.limit}")
 
     if not rows:
-        print("[illustrate] nothing waiting for artwork")
+        print("[illustrate] nothing approved is waiting for artwork")
         return 0
     print(f"[illustrate] {len(rows)} item(s) waiting")
 
@@ -136,29 +145,47 @@ def main():
         if args.dry_run:
             continue
 
+        # A carousel is illustrated slide by slide. The generator writes a
+        # `scene` per slide for exactly this, and a document post where only
+        # the cover is drawn looks half-finished next to one that is not.
+        slides = r.get("slides") if isinstance(r.get("slides"), list) else []
+        scenes = [s.get("scene") for s in slides] if r["content_type"] == "carousel" else []
+        per_slide = r["content_type"] == "carousel" and any(scenes)
+
+        # Slides without a scene fall back to the item's own so the deck stays
+        # visually complete rather than gappy.
+        prompts = ([sc or r["image_prompt"] for sc in scenes] if per_slide
+                   else [r["image_prompt"]])
+        aspect = "4:5" if per_slide else "1:1"
+
         code, payload = curl("POST", f"{ALEXYA}/generate-illustration",
                              {"Content-Type": "application/json"},
-                             {"prompts": [r["image_prompt"]], "slug": slug,
+                             {"prompts": prompts, "slug": slug,
                               "project": "sanaku", "bucket": BUCKET,
-                              "aspect_ratio": "1:1", "mode": "fast"})
+                              "aspect_ratio": aspect, "mode": "fast"})
         if code != 200:
             print(f"      alexya HTTP {code}: {payload[:200]} - leaving for the next run")
             continue
-        urls = [u for u in (json.loads(payload).get("image_urls") or []) if u]
-        if not urls:
+        urls = json.loads(payload).get("image_urls") or []
+        if not any(urls):
             print("      alexya returned no image - leaving for the next run")
             continue
 
-        patch = {"image_url": urls[0]}
-        # A carousel's cover is slide 1, so keep the two in step or the post
-        # pack will name the same picture twice.
-        if r["content_type"] == "carousel" and isinstance(r.get("slides"), list) and r["slides"]:
-            slides = list(r["slides"])
-            slides[0] = {**slides[0], "image_url": urls[0]}
-            patch["slides"] = slides
+        # Index-aligned: a failed scene is null in place, so slide 4 never
+        # silently inherits slide 5's picture.
+        first = next((u for u in urls if u), None)
+        patch = {"image_url": first}
+        if per_slide:
+            patch["slides"] = [
+                ({**sl, "image_url": urls[i]} if i < len(urls) and urls[i] else sl)
+                for i, sl in enumerate(slides)
+            ]
+        elif r["content_type"] == "carousel" and slides:
+            patch["slides"] = [{**slides[0], "image_url": first}] + slides[1:]
         supa("PATCH", f"content_queue?id=eq.{r['id']}", patch)
         drawn += 1
-        print(f"      -> {urls[0].rsplit('/', 1)[-1]}")
+        drawn_n = sum(1 for u in urls if u)
+        print(f"      -> {drawn_n} image(s), first: {first.rsplit('/', 1)[-1]}")
 
     print(f"[illustrate] done, {drawn} illustrated")
     return 0

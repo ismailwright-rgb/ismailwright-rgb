@@ -3,9 +3,9 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## M1 - LinkedIn Content Studio\n\nWrites one item a day for Ismail's personal LinkedIn and stages it in `content_queue` as `queued`. **It never publishes.**\n\n### Rotation\nSun article (1st Sun: featured) / Mon post / Tue carousel / Wed post / Thu poll / Fri post / Sat newsletter\n\n### The brief lives in Supabase, not here\nPositioning, voice, audience and guardrails are `brand_brain` rows with `channel = 'linkedin'`. Edit those, not this workflow.\n\n### Alexya\nSet `$env.ALEXYA_URL` to something this n8n can actually reach:\n- native on the Mac: `http://127.0.0.1:8000`\n- in Docker: `http://host.docker.internal:8000`\n- remote droplet: needs a tunnel back to the Mac\n\nThe image step is non-fatal by design - if Alexya is unreachable the item still queues, text complete.\n\n### Video\nPhase 2. `content_kind` has the value; nothing generates it yet.",
-        "height": 620,
-        "width": 460,
+        "content": "## M1 - LinkedIn Content Studio\n\n**3 drafts every morning, 7 days a week.** You publish what you like from the Marketing tab and delete the rest. It never posts.\n\n### Two stages, like the Sydney pipeline\n1. **Angle engine** — reads the brand brain, the memory, the last 14 items and real headlines, then commits to three genuinely different theses.\n2. **The writer** — takes ONE thesis and writes to it.\n\nDeciding what to argue and writing it well are different jobs. Asking one call to do both is what made v1 read generic.\n\n### It remembers\n`content_memory` keeps spent arguments, used analogies and used openers. The angle engine is shown them and told not to repeat.\n\n### No artwork here\nAlexya is on the Mac; this runs on the droplet. Each draft carries a `scene` brief instead. `illustrate-queue.py` draws **approved** items locally — at 3 drafts a day, illustrating everything would spend the balance on content that never ships.\n\n### The brief lives in Supabase\nEdit `brand_brain` rows with `channel = 'linkedin'`, not this workflow.",
+        "height": 760,
+        "width": 470,
         "color": 4
       },
       "id": "e0000000-0000-4000-8000-000000000001",
@@ -13,8 +13,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -460,
-        -200
+        -520,
+        -260
       ]
     },
     {
@@ -35,40 +35,93 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        40,
+        0,
         0
       ]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Decide the day's format, audience and bottleneck.\n//\n// The rotation lives here rather than in a settings table on purpose: it is one\n// array, it changes rarely, and putting it in the database would mean a second\n// place to look when the week's output is not what was expected. The POSITIONING\n// is what needs to be editable without touching this file, and that is in\n// brand_brain.\n\nconst now = new Date();\n\n// Day of week, local. 0 = Sunday.\nconst dow = now.getDay();\n\n// Three posts a week, because the text post is the daily driver and the thing\n// the profile is actually judged on. The heavier formats are the authority\n// layer, not the volume.\nconst WEEK = {\n  0: 'article',      // Sunday    - long-form, people read on Sundays\n  1: 'post',         // Monday\n  2: 'carousel',     // Tuesday   - the authority builder\n  3: 'post',         // Wednesday\n  4: 'poll',         // Thursday  - engagement + market signal\n  5: 'post',         // Friday\n  6: 'newsletter',   // Saturday  - The Private Practice\n};\nlet content_type = WEEK[dow];\n\n// Featured assets are not timely - they are the pinned storefront. Refresh one\n// on the first Sunday of the month instead of that week's article.\nconst dom = now.getDate();\nif (dow === 0 && dom <= 7) content_type = 'featured';\n\n// Audience rotation. Personal injury law is the priority vertical, so it gets\n// every other slot; the rest cycle behind it. An 8-slot cycle over day-of-year\n// keeps it from locking to a weekday - otherwise 'article' would be forever\n// about family offices.\nconst VERTICALS = [\n  'personal_injury_law', 'accounting_tax',\n  'personal_injury_law', 'therapy',\n  'personal_injury_law', 'financial_advisory',\n  'personal_injury_law', 'family_office',\n];\nconst startOfYear = new Date(now.getFullYear(), 0, 0);\nconst doy = Math.floor((now - startOfYear) / 86400000);\nconst target_vertical = VERTICALS[doy % VERTICALS.length];\n\n// One bottleneck per item, never two. Cycles independently of the vertical so\n// the pairings vary instead of always sending the same theme to the same reader.\nconst BOTTLENECKS = [\n  'missed_calls', 'data_exposure', 'compliance_pressure',\n  'loss_of_control', 'paperwork_load',\n];\nconst bottleneck = BOTTLENECKS[doy % BOTTLENECKS.length];\n\n// Which formats get artwork, and how many scenes.\n//   post/featured - one illustration\n//   carousel      - ONE cover illustration by default, not one per slide.\n//                   A teaching carousel is text-forward; per-slide art costs\n//                   ~31 credits a slide and usually reads worse than clean\n//                   type. Per-slide art is available by raising this number.\n//   poll/article/newsletter - none. Polls render as their own card on\n//                   LinkedIn, and articles/newsletters carry their own header.\nconst IMAGES = { post: 1, featured: 1, carousel: 1, poll: 0, article: 0, newsletter: 0 };\nconst image_count = IMAGES[content_type] || 0;\n\nconst slug = [\n  now.toISOString().slice(0, 10),\n  bottleneck.replace(/_/g, '-'),\n].join('_');\n\nreturn [{ json: {\n  content_type,\n  target_vertical,\n  bottleneck,\n  image_count,\n  needs_image: image_count > 0,\n  slug,\n  generated_for: now.toISOString().slice(0, 10),\n} }];"
+        "jsCode": "// Real triggers beat evergreen. A post about state bar AI guidance the week it\n// changes is worth ten timeless ones about data custody.\n//\n// Google News RSS needs no key and no quota, which is why it is used here\n// rather than a paid news API.\n\n// Four a day, rotated, so every vertical gets covered across the week without\n// four times the requests every morning.\nconst QUERIES = [\n  { q: 'state bar artificial intelligence guidance lawyers', vertical: 'personal_injury_law' },\n  { q: 'law firm data breach client records', vertical: 'personal_injury_law' },\n  { q: 'IRS Circular 230 artificial intelligence tax preparer', vertical: 'accounting_tax' },\n  { q: 'accounting firm client data breach', vertical: 'accounting_tax' },\n  { q: 'HIPAA artificial intelligence therapy notes', vertical: 'therapy' },\n  { q: 'mental health app patient data privacy', vertical: 'therapy' },\n  { q: 'SEC FINRA artificial intelligence adviser compliance', vertical: 'financial_advisory' },\n  { q: 'registered investment adviser data breach', vertical: 'financial_advisory' },\n  { q: 'family office cybersecurity private wealth', vertical: 'family_office' },\n  { q: 'AI vendor training data lawsuit confidential', vertical: null },\n  { q: 'chatbot leaked confidential business data', vertical: null },\n  { q: 'professional services artificial intelligence policy', vertical: null },\n];\n\nconst now = new Date();\nconst startOfYear = new Date(now.getFullYear(), 0, 0);\nconst doy = Math.floor((now - startOfYear) / 86400000);\n\nconst picked = [];\nfor (let i = 0; i < 4; i++) {\n  picked.push(QUERIES[(doy * 4 + i) % QUERIES.length]);\n}\n\nreturn picked.map((p) => ({ json: {\n  url: 'https://news.google.com/rss/search?q=' + encodeURIComponent(p.q)\n       + '&hl=en-US&gl=US&ceid=US:en',\n  query: p.q,\n  vertical: p.vertical,\n} }));"
       },
       "id": "e2000000-0000-4000-8000-000000000003",
-      "name": "Pick today's brief",
+      "name": "Build the news queries",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        260,
+        220,
         0
       ]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/brand_brain?select=kind,title,content,vertical&channel=eq.linkedin&status=in.(proven,testing)&or=(vertical.is.null,vertical.eq.{{ $json.target_vertical }})&order=kind.asc",
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "ea000000-0000-4000-8000-000000000001",
+      "name": "Fetch headlines",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Collapse the per-query responses into ONE item carrying all the headlines.\n//\n// This node exists because n8n runs the fetch once per query and would\n// otherwise carry four items forward, making every downstream node run four\n// times. Everything after this point is single-item.\n\nconst items = $input.all();\nconst triggers = [];\n\nfor (const item of items) {\n  const xml = typeof item.json.data === 'string' ? item.json.data\n            : typeof item.json.body === 'string' ? item.json.body\n            : '';\n  if (!xml) continue;\n\n  // A regex parser, not an XML one: the Code node has no DOM, and RSS from one\n  // known publisher is regular enough that a parser is not worth the weight.\n  const blocks = xml.split('<item>').slice(1, 7);\n  for (const b of blocks) {\n    const grab = (tag) => {\n      const m = b.match(new RegExp('<' + tag + '>([\\\\s\\\\S]*?)</' + tag + '>'));\n      if (!m) return null;\n      return m[1]\n        .replace(/<!\\[CDATA\\[|\\]\\]>/g, '')\n        .replace(/<[^>]+>/g, '')\n        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n        .replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\")\n        .trim();\n    };\n    const title = grab('title');\n    if (!title) continue;\n    triggers.push({\n      title,\n      url: grab('link'),\n      published: grab('pubDate'),\n      source: grab('source'),\n    });\n  }\n}\n\n// Newest first, and deduplicated - Google News repeats the same story across\n// queries constantly.\nconst seen = new Set();\nconst unique = triggers.filter((t) => {\n  const k = t.title.toLowerCase().slice(0, 60);\n  if (seen.has(k)) return false;\n  seen.add(k);\n  return true;\n});\n\nconsole.log('[m1] ' + unique.length + ' unique headlines from ' + items.length + ' queries');\nreturn [{ json: { triggers: unique.slice(0, 18) } }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000004",
+      "name": "Read the signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/content_studio_context",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ _days: 14 }) }}",
         "options": {
           "timeout": 15000
         }
       },
-      "id": "e4000000-0000-4000-8000-000000000004",
-      "name": "Read the brand brain",
+      "id": "e5000000-0000-4000-8000-000000000005",
+      "name": "Studio context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        480,
+        880,
         0
       ],
       "credentials": {
@@ -85,14 +138,14 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Assemble the OpenRouter request. The whole brand brain for this channel and\n// vertical goes in - not a top-k semantic slice - because every format must\n// come out in the same voice, and \"most similar rows\" is not the same thing as\n// \"the brief\".\n\nconst brief = $('Pick today\\'s brief').first().json;\n\n// PostgREST returns a JSON array, and n8n splits an array response into ONE\n// ITEM PER ELEMENT. So the rows arrive as $input.all(), and $input.first()\n// would be a single brand_brain row - which reads as \"the brain is empty\"\n// rather than as a shape error. Handle the wrapped-array case too, in case a\n// future n8n version stops splitting.\nconst raw = $input.all().map((i) => i.json);\nconst brain = (raw.length === 1 && Array.isArray(raw[0]) ? raw[0] : raw)\n  .filter((r) => r && r.kind && r.content);\n\nif (!brain.length) {\n  throw new Error('brand_brain returned no linkedin rows - refusing to write off-brief. Check the seed ran and channel=linkedin rows exist.');\n}\n\nconst section = (kinds) => brain\n  .filter((r) => kinds.includes(r.kind))\n  .map((r) => '### ' + r.title + '\\n' + r.content)\n  .join('\\n\\n');\n\nconst positioning = section(['offer']);\nconst voice = section(['brand_voice', 'voice']);\nconst rules = section(['rule']);\nconst audience = section(['icp']);\nconst objections = section(['objection']);\nconst extras = section(['message_snippet', 'proof', 'proof_point', 'case_study']);\n\n// Per-format instructions and the exact JSON each must return. Keeping the\n// schema next to the instruction is what makes the parse step downstream a\n// validation rather than a guess.\nconst FORMATS = {\n  post: {\n    how: 'Write ONE LinkedIn text post. 120-200 words. Open with a hook of one or two lines that survives truncation - LinkedIn cuts off around there and the reader decides on those lines alone. Then the teaching body. Then a one-line takeaway the reader could repeat to a partner. No hashtags. No emoji. No call to action.',\n    json: '{\"post_text\": \"the full post, newlines allowed\", \"image_prompt\": \"one sentence describing a flat-cartoon scene that illustrates the idea\"}',\n  },\n  carousel: {\n    how: 'Write a LinkedIn document carousel of 5 to 8 slides. It must be a real teaching sequence, not a post chopped into pieces. Slide 1 is the promise and names the payoff. Middle slides carry ONE idea each in under 25 words. The last slide is the takeaway. It has to be useful screenshotted with no caption.',\n    json: '{\"title\": \"the carousel title\", \"slides\": [{\"text\": \"slide 1 text\"}, {\"text\": \"slide 2 text\"}], \"post_text\": \"the short caption that accompanies the document when posted\", \"image_prompt\": \"one sentence describing a flat-cartoon cover scene\"}',\n  },\n  poll: {\n    how: 'Write ONE LinkedIn poll. The question must be one the reader genuinely does not know the answer to about their own firm - not a leading question with an obvious right answer. 2 to 4 options, each under 30 characters. Add a short body that gives the question context and teaches something.',\n    json: '{\"poll_question\": \"the question, under 140 characters\", \"poll_options\": [\"option 1\", \"option 2\", \"option 3\"], \"post_text\": \"the accompanying body text\"}',\n  },\n  article: {\n    how: 'Write ONE LinkedIn article on a single bottleneck. 700-1200 words. Real structure with subheads. Go deeper than a post can - this is where the mechanism gets explained properly, without ever crossing into how the system is built.',\n    json: '{\"title\": \"the article headline\", \"body\": \"the full article with markdown subheads\"}',\n  },\n  newsletter: {\n    how: 'Write ONE edition of the newsletter named The Private Practice. 500-900 words. The most personal of the formats - first person throughout, the register of explaining something to one managing partner across a desk. It ties this weeks theme together and must stand alone. Consistent sign-off. Never beg for subscribers.',\n    json: '{\"title\": \"the edition title\", \"body\": \"the full edition with markdown subheads\"}',\n  },\n  featured: {\n    how: 'Write ONE Featured-section asset for the profile - a pinned proof piece, not a timely post. Pick whichever of the three is most relevant to this bottleneck: the \"what I do\" one-pager, the before/after explainer, or the \"hidden risk\" explainer. It is a storefront piece, so it should read as durable rather than newsy.',\n    json: '{\"title\": \"the asset name\", \"body\": \"the full asset copy\", \"image_prompt\": \"one sentence describing a flat-cartoon scene for the asset\"}',\n  },\n};\n\nconst spec = FORMATS[brief.content_type];\nif (!spec) throw new Error('no format spec for ' + brief.content_type);\n\nconst system = [\n  'You write LinkedIn content as Ismail Rogers-Wright, in the first person.',\n  'This is his PERSONAL profile, not a company page. Never write as \"we\" or as a brand.',\n  '',\n  '## Positioning', positioning,\n  '', '## Voice - match this exactly', voice,\n  '', '## Hard rules - these override everything else', rules,\n  '', '## Who you are writing for today', audience,\n  '', '## Objections you may hear', objections,\n  extras ? '\\n## Other context\\n' + extras : '',\n  '',\n  '## Output',\n  'Return ONLY minified JSON matching this shape, with no markdown fence and no commentary:',\n  spec.json,\n].join('\\n');\n\nconst user = [\n  'Format: ' + brief.content_type,\n  'Audience: ' + brief.target_vertical,\n  'Bottleneck to address (exactly this one, not any other): ' + brief.bottleneck,\n  '',\n  spec.how,\n  '',\n  'The image_prompt, if the shape asks for one, describes a SCENE only - no style words, they are added later. Two things the illustrator gets wrong unless you are explicit: to show an empty room you must say \"no people, nobody in frame\"; to show something inside a building you must say \"cutaway view\" or it will be drawn on the roof.',\n].join('\\n');\n\nconst requestBody = JSON.stringify({\n  model: 'google/gemma-4-31b-it',\n  temperature: 0.8,\n  max_tokens: 4000,\n  messages: [\n    { role: 'system', content: system },\n    { role: 'user', content: user },\n  ],\n});\n\nreturn [{ json: { ...brief, requestBody } }];"
+        "jsCode": "// THE ANGLE ENGINE. Sydney's story engine, doing the equivalent job.\n//\n// It does not write the post. It decides what three genuinely different things\n// are worth saying today, and commits each to a one-sentence thesis. Prose gets\n// written in the next step, FROM that thesis. Everything good about this\n// pipeline comes from that separation.\n\nconst ctx = $input.first().json;\nconst triggers = $('Read the signals').first().json.triggers || [];\n\nconst brain = ctx.brain || [];\nif (!brain.length) {\n  throw new Error('brand_brain returned no linkedin rows - refusing to write off-brief. Check the seed ran.');\n}\n\nconst section = (kinds) => brain\n  .filter((r) => kinds.includes(r.kind))\n  .map((r) => '### ' + r.title + '\\n' + r.content)\n  .join('\\n\\n');\n\nconst memory = (ctx.memory || [])\n  .map((m) => '- [' + m.category + '] ' + m.key + ': ' + m.value)\n  .join('\\n') || '(nothing remembered yet - this is an early run)';\n\nconst recent = (ctx.recent || []).slice(0, 20)\n  .map((r) => '- ' + r.day + ' ' + r.content_type + ' / ' + (r.vertical || '?')\n              + ' / ' + (r.bottleneck || '?') + ': ' + (r.thesis || r.title || '(no thesis recorded)'))\n  .join('\\n') || '(nothing published yet)';\n\nconst approved = (ctx.approved_recent || [])\n  .map((r) => '- ' + r.content_type + ': ' + (r.thesis || '(no thesis)'))\n  .join('\\n') || '(nothing approved yet)';\n\nconst counts = ctx.format_counts || {};\nconst FORMATS = ['post', 'carousel', 'poll', 'article', 'newsletter', 'featured'];\nconst gaps = FORMATS.map((f) => f + '=' + (counts[f] || 0)).join(', ');\nconst starved = FORMATS.filter((f) => !counts[f]);\n\nconst headlines = triggers.length\n  ? triggers.map((t, i) => (i + 1) + '. ' + t.title + (t.source ? ' (' + t.source + ')' : '')\n                           + (t.url ? '\\n   ' + t.url : '')).join('\\n')\n  : '(no headlines pulled today - go evergreen)';\n\nconst system = [\n  'You are the editorial director for Ismail Rogers-Wright\\'s personal LinkedIn.',\n  'You do NOT write posts. You decide what is worth saying, and hand each decision to a writer.',\n  '',\n  '## The positioning everything ladders to', section(['offer']),\n  '', '## The voice the writer will use', section(['brand_voice', 'voice']),\n  '', '## Hard rules - these bind you too', section(['rule']),\n  '', '## The five audiences', section(['icp']),\n  '', '## Objections that come up', section(['objection']),\n  '',\n  '## What has already been said - DO NOT REPEAT ANY OF THIS',\n  recent,\n  '',\n  '## What Ismail actually approved (he liked these - note what they have in common)',\n  approved,\n  '',\n  '## Long-term memory - arguments, analogies and openers already spent',\n  memory,\n].join('\\n');\n\nconst user = [\n  '## Real headlines from the last few days',\n  headlines,\n  '',\n  '## Format balance over the last 7 days',\n  gaps + (starved.length ? '  <- NOT USED AT ALL THIS WEEK: ' + starved.join(', ') : ''),\n  '',\n  '## Your job',\n  'Choose EXACTLY ' + 3 + ' angles for today. They are alternatives Ismail will choose between,',\n  'so they must be genuinely different from each other - different audience, different',\n  'bottleneck, or a fundamentally different argument. Three phrasings of one idea is a',\n  'failure. So is three posts about data exposure to law firms.',\n  '',\n  'Rules for choosing:',\n  '- Prefer an angle anchored to a real headline above. Say which one. If nothing in the',\n  '  list genuinely touches a confidentiality-driven profession, go evergreen rather than',\n  '  forcing a connection - a strained news hook reads worse than none.',\n  '- Favour formats not used this week, unless a specific angle demands otherwise.',\n  '- Each angle targets exactly ONE bottleneck for ONE audience.',\n  '- The thesis must be arguable. \"AI is risky\" is not a thesis. \"A BAA tells you who is',\n  '  liable after a breach, not where the data sits\" is.',\n  '- Nothing that repeats a thesis in the DO NOT REPEAT list, in substance or in framing.',\n  '',\n  'Output format - follow EXACTLY. No JSON, no markdown fence, no preamble,',\n  'no reasoning, no commentary. Every tag alone at the start of its line.',\n  'Emit this block ' + 3 + ' times, once per angle:',\n  '',\n  '[ANGLE]',\n  '[TYPE] one of: post carousel poll article newsletter featured',\n  '[VERTICAL] one of: personal_injury_law accounting_tax therapy financial_advisory family_office',\n  '[BOTTLENECK] one of: missed_calls data_exposure compliance_pressure loss_of_control paperwork_load',\n  '[THESIS] the single arguable sentence this piece exists to land',\n  '[WHYNOW] what makes today the day - omit this line entirely if evergreen',\n  '[SOURCE_TITLE] the exact headline used - omit if none',\n  '[SOURCE_URL] its url - omit if none',\n  '[HOOK] the opening line, written to survive LinkedIn truncation',\n  '[BEAT] one teaching step',\n  '[BEAT] the next teaching step (3-5 [BEAT] lines in total, in order)',\n  '[SCENE] a concrete visual moment that illustrates the thesis - who is in it, where, what is happening. No style words.',\n  '[DISTINCT] one line on how this differs from the other two angles',\n  '[/ANGLE]',\n].join('\\n');\n\nconst requestBody = JSON.stringify({\n  model: (typeof $env !== 'undefined' && $env.OPENROUTER_MODEL) || 'google/gemma-4-31b-it:free',\n  models: [(typeof $env !== 'undefined' && $env.OPENROUTER_MODEL) || 'google/gemma-4-31b-it:free'].concat(['google/gemma-4-26b-a4b-it:free','nvidia/nemotron-3-super-120b-a12b:free']),\n  temperature: 0.95,\n  max_tokens: 3000,\n  messages: [\n    { role: 'system', content: system },\n    { role: 'user', content: user },\n  ],\n});\n\nreturn [{ json: { requestBody, trigger_count: triggers.length } }];"
       },
-      "id": "e2000000-0000-4000-8000-000000000005",
-      "name": "Build the brief prompt",
+      "id": "e2000000-0000-4000-8000-000000000006",
+      "name": "Build the angle brief",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        700,
+        1100,
         0
       ]
     },
@@ -119,12 +172,12 @@
           "timeout": 120000
         }
       },
-      "id": "e8000000-0000-4000-8000-000000000006",
-      "name": "Write it",
+      "id": "e8000000-0000-4000-8000-000000000007",
+      "name": "Angle engine",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        920,
+        1320,
         0
       ],
       "credentials": {
@@ -141,88 +194,85 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Turn the model response into a content_queue row, or fail loudly.\n//\n// The per-format CHECK constraint on content_queue would reject a malformed row\n// anyway, but failing here gives a readable error in the execution log instead\n// of a Postgres constraint name.\n\nconst brief = $('Pick today\\'s brief').first().json;\nconst res = $input.first().json;\n\nconst raw = res?.choices?.[0]?.message?.content;\nif (!raw) throw new Error('model returned no content: ' + JSON.stringify(res).slice(0, 400));\n\n// Free models fence their JSON despite being told not to, and sometimes add a\n// sentence before it. Take the outermost JSON object.\nlet text = String(raw).trim().replace(/^\\`\\`\\`(?:json)?/i, '').replace(/\\`\\`\\`$/, '').trim();\nconst start = text.indexOf('{');\nconst end = text.lastIndexOf('}');\nif (start === -1 || end === -1) throw new Error('no JSON object in model output: ' + text.slice(0, 300));\ntext = text.slice(start, end + 1);\n\nlet out;\ntry {\n  out = JSON.parse(text);\n} catch (e) {\n  throw new Error('model output was not valid JSON (' + e.message + '): ' + text.slice(0, 300));\n}\n\nconst t = brief.content_type;\nconst need = (field) => {\n  const v = out[field];\n  if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) {\n    throw new Error(t + ' is missing required field \"' + field + '\"');\n  }\n  return v;\n};\n\nconst row = {\n  content_type: t,\n  target_vertical: brief.target_vertical,\n  bottleneck: brief.bottleneck,\n  status: 'queued',\n  audience: brief.target_vertical,\n  angle: brief.bottleneck,\n};\n\nif (t === 'post') {\n  row.post_text = need('post_text');\n} else if (t === 'carousel') {\n  row.title = need('title');\n  const slides = need('slides');\n  if (!Array.isArray(slides) || slides.length < 5 || slides.length > 8) {\n    throw new Error('carousel needs 5-8 slides, got ' + (Array.isArray(slides) ? slides.length : typeof slides));\n  }\n  // Accept [\"text\", ...] as well as [{text}, ...] - the model drifts between them.\n  row.slides = slides.map((s) => (typeof s === 'string' ? { text: s } : { text: String(s.text || '') }));\n  if (row.slides.some((s) => !s.text.trim())) throw new Error('a carousel slide came back empty');\n  row.post_text = out.post_text || null;\n} else if (t === 'poll') {\n  row.poll_question = need('poll_question');\n  const opts = need('poll_options');\n  if (!Array.isArray(opts) || opts.length < 2 || opts.length > 4) {\n    throw new Error('poll needs 2-4 options, got ' + (Array.isArray(opts) ? opts.length : typeof opts));\n  }\n  row.poll_options = opts.map((o) => String(o));\n  row.post_text = out.post_text || null;\n} else if (t === 'article' || t === 'newsletter') {\n  row.title = need('title');\n  row.body = need('body');\n} else if (t === 'featured') {\n  row.title = need('title');\n  row.body = out.body || null;\n}\n\n// Scene description for the illustrator, if this format takes artwork.\nconst image_prompt = out.image_prompt || null;\nif (brief.needs_image && image_prompt) row.image_prompt = image_prompt;\n\nreturn [{ json: {\n  ...brief,\n  row,\n  image_prompt,\n  // Only try to illustrate when the format wants art AND we got a scene for it.\n  illustrate: Boolean(brief.needs_image && image_prompt),\n} }];"
+        "jsCode": "// Turn the editorial decision into up to 3 items, one per draft.\n//\n// Blocks, not JSON, for the same reason the writer uses them: the free-tier\n// fallbacks include reasoning models that emit their working before the answer.\n// A JSON parser sees that as garbage; a block scanner simply ignores it.\n\nconst res = $input.first().json;\nlet raw = res?.choices?.[0]?.message?.content;\nif (!raw) {\n  const e = res?.error;\n  throw new Error(e ? ('angle engine provider error: ' + (e.message || JSON.stringify(e)).slice(0, 200))\n                    : 'angle engine returned nothing: ' + JSON.stringify(res).slice(0, 300));\n}\n\n// Reasoning models wrap their working in <think>. Drop it before scanning.\nlet text = String(raw).replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n\nconst angles = [];\nlet cur = null;\nlet lastTag = null;\n\nconst finish = () => {\n  if (cur && cur.thesis && cur.content_type && cur.target_vertical) angles.push(cur);\n  cur = null; lastTag = null;\n};\n\nfor (const line of text.replace(/\\r/g, '').split('\\n')) {\n  const t = line.trim();\n\n  if (/^\\[ANGLE\\]$/i.test(t)) { finish(); cur = { beats: [] }; continue; }\n  if (/^\\[\\/ANGLE\\]$/i.test(t)) { finish(); continue; }\n  if (!cur) continue;\n\n  const m = t.match(/^\\[(TYPE|VERTICAL|BOTTLENECK|THESIS|WHYNOW|SOURCE_TITLE|SOURCE_URL|HOOK|BEAT|SCENE|DISTINCT)\\]\\s*(.*)$/i);\n  if (m) {\n    const tag = m[1].toUpperCase();\n    // Models restate the menu (\"one of: post carousel ...\"). Take the first\n    // token for enum fields so a copied instruction line still resolves.\n    const val = m[2].trim().replace(/^one of:\\s*/i, '');\n    if (tag === 'BEAT') { cur.beats.push(val); lastTag = ['beats', cur.beats.length - 1]; continue; }\n    const key = { TYPE: 'content_type', VERTICAL: 'target_vertical', BOTTLENECK: 'bottleneck',\n                  THESIS: 'thesis', WHYNOW: 'why_now', SOURCE_TITLE: 'source_title',\n                  SOURCE_URL: 'source_url', HOOK: 'hook', SCENE: 'scene',\n                  DISTINCT: 'distinct_from' }[tag];\n    cur[key] = ['content_type', 'target_vertical', 'bottleneck'].includes(key)\n      ? val.split(/[\\s,|]+/)[0].toLowerCase()\n      : val;\n    lastTag = [key, null];\n    continue;\n  }\n\n  // Untagged line continues the tag above it.\n  if (lastTag && t) {\n    const [k, i] = lastTag;\n    if (i === null) cur[k] = (cur[k] ? cur[k] + ' ' : '') + t;\n    else cur[k][i] = (cur[k][i] ? cur[k][i] + ' ' : '') + t;\n  }\n}\nfinish();\n\nconst TYPES = ['post', 'carousel', 'poll', 'article', 'newsletter', 'featured'];\nconst VERTS = ['personal_injury_law', 'accounting_tax', 'therapy', 'financial_advisory', 'family_office'];\nconst BNECKS = ['missed_calls', 'data_exposure', 'compliance_pressure', 'loss_of_control', 'paperwork_load'];\n\nconst usable = angles.filter((a) => TYPES.includes(a.content_type) && VERTS.includes(a.target_vertical));\nif (!usable.length) {\n  throw new Error('no usable angles in the response. Got ' + angles.length\n    + ' block(s). First 300 chars: ' + text.slice(0, 300));\n}\n\n// One id shared by the morning's drafts, so the tab can show them as a set of\n// alternatives rather than three unrelated items.\nconst group = [\n  Math.random().toString(16).slice(2, 10),\n  Math.random().toString(16).slice(2, 6),\n  '4' + Math.random().toString(16).slice(2, 5),\n  '8' + Math.random().toString(16).slice(2, 5),\n  Math.random().toString(16).slice(2, 14),\n].join('-');\n\nconst day = new Date().toISOString().slice(0, 10);\n\nconsole.log('[m1] ' + usable.length + ' angles of ' + angles.length + ' blocks');\n\nreturn usable.slice(0, 3).map((a, i) => ({ json: {\n  ...a,\n  bottleneck: BNECKS.includes(a.bottleneck) ? a.bottleneck : 'data_exposure',\n  why_now: a.why_now || null,\n  source_title: a.source_title || null,\n  source_url: a.source_url || null,\n  draft_group: group,\n  draft_index: i + 1,\n  generated_for: day,\n} }));"
       },
-      "id": "e2000000-0000-4000-8000-000000000007",
-      "name": "Validate the draft",
+      "id": "e2000000-0000-4000-8000-000000000008",
+      "name": "Decide the three angles",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1140,
+        1540,
         0
       ]
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "ok",
-              "leftValue": "={{ $json.illustrate }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "mode": "runOnceForAllItems",
+        "jsCode": "// One request per angle. The writer never re-decides what to argue - the thesis\n// is handed to it and it writes to that. This is the half that V1 collapsed\n// into the same call, and why V1 drifted to whatever the model found easiest.\n\nconst ctx = $('Studio context').first().json;\nconst brain = ctx.brain || [];\n\nconst section = (kinds, vertical) => brain\n  .filter((r) => kinds.includes(r.kind))\n  .filter((r) => !vertical || !r.vertical || r.vertical === vertical)\n  .map((r) => '### ' + r.title + '\\n' + r.content)\n  .join('\\n\\n');\n\n// Output is DELIMITED BLOCKS, not JSON.\n//\n// JSON was the first attempt and it failed on two of every three drafts. The\n// failures were always the same: a free-tier model emitting multi-paragraph\n// prose inside a JSON string value, and getting the newline and quote escaping\n// wrong somewhere around character 1200. \"Expected ',' or '}' after property\n// value\" is not a prompting problem you can fix by asking more firmly - it is\n// a format that requires the writer to escape its own output while writing.\n//\n// Blocks need no escaping at all, so the writer can just write.\nconst SHAPES = {\n  post: {\n    how: 'Write ONE LinkedIn text post, 130-220 words. Open with the hook you were given, or something better in the same direction - it has to survive truncation at two lines. Then walk the beats. Close on a takeaway a reader could repeat to a partner from memory. No hashtags, no emoji, no call to action, no \"thoughts?\"',\n    blocks: '[POST]\\nthe full post, as many paragraphs as it needs\\n[/POST]',\n  },\n  carousel: {\n    how: 'Write a document carousel of 5-8 slides that teaches the beats in order. Slide 1 states the promise and names the payoff. Each middle slide carries ONE idea in under 25 words - these are read at a glance, not studied. The final slide is the takeaway. It must stand alone screenshotted with no caption.',\n    blocks: '[TITLE] the carousel title\\n[CAPTION]\\nthe short caption that accompanies the document\\n[/CAPTION]\\n[SLIDE] slide 1 text\\n[SCENE] a concrete visual moment for slide 1, no style words\\n[SLIDE] slide 2 text\\n[SCENE] a concrete visual moment for slide 2\\n(repeat [SLIDE] then [SCENE] for every slide, 5 to 8 of them)',\n  },\n  poll: {\n    how: 'Write ONE poll. The question must be one the reader genuinely cannot answer about their own firm without going and checking - that discomfort is the whole point. Not a leading question with an obvious right answer. 2-4 options, each under 30 characters. Then a body that teaches the beats and earns the question.',\n    blocks: '[QUESTION] the poll question, under 140 characters\\n[OPTION] first option\\n[OPTION] second option\\n(2 to 4 [OPTION] lines total)\\n[POST]\\nthe body text that sets up the question\\n[/POST]',\n  },\n  article: {\n    how: 'Write ONE long-form article, 800-1300 words, working through the beats with real subheads. This is where the mechanism gets explained properly. Go deeper than a post can - concrete scenarios, the actual sequence of how the exposure happens, what a firm would see and not see. Never cross into how the system is built.',\n    blocks: '[TITLE] the headline\\n[BODY]\\nthe full article, using ## for subheads\\n[/BODY]',\n  },\n  newsletter: {\n    how: 'Write ONE edition of \"The Private Practice\", 600-1000 words. The most personal register of any format - first person throughout, the way you would explain this to one managing partner across a desk. It must stand alone. Consistent sign-off. Never ask for subscribers.',\n    blocks: '[TITLE] the edition title\\n[BODY]\\nthe full edition, using ## for subheads\\n[/BODY]',\n  },\n  featured: {\n    how: 'Write ONE Featured-section asset - a pinned proof piece, not a timely post. Durable, not newsy. Pick whichever fits: the \"what I do\" one-pager, the before/after explainer, or the \"hidden risk\" explainer.',\n    blocks: '[TITLE] the asset name\\n[BODY]\\nthe full copy\\n[/BODY]',\n  },\n};\n\nreturn $input.all().map((item) => {\n  const a = item.json;\n  const shape = SHAPES[a.content_type];\n  if (!shape) throw new Error('no shape for ' + a.content_type);\n\n  const system = [\n    'You are Ismail Rogers-Wright, writing in the first person on your PERSONAL LinkedIn profile.',\n    'Never \"we\". Never a brand voice. You build these systems for a living and you are explaining what you see.',\n    '',\n    '## Positioning', section(['offer']),\n    '', '## Voice - match this exactly', section(['brand_voice', 'voice']),\n    '', '## Hard rules - these override every other instruction', section(['rule']),\n    '', '## Who you are writing to', section(['icp'], a.target_vertical),\n    '', '## Objections in the room', section(['objection']),\n    '',\n    '## Output format - follow this EXACTLY',\n    'Emit only these labelled blocks. No JSON, no markdown fence, no preamble, no commentary.',\n    'Every tag sits alone at the start of its line. Write prose normally - do not escape anything.',\n    '',\n    shape.blocks,\n  ].join('\\n');\n\n  const user = [\n    'THESIS - this is what the piece must land. Do not drift off it:',\n    a.thesis,\n    '',\n    a.why_now ? 'WHY TODAY: ' + a.why_now : 'This one is evergreen.',\n    a.source_title ? 'ANCHORED TO: ' + a.source_title : '',\n    '',\n    'Audience: ' + a.target_vertical,\n    'Bottleneck (exactly this one): ' + a.bottleneck,\n    'Opening direction: ' + (a.hook || '(choose your own)'),\n    '',\n    'Walk these beats, in order:',\n    (a.beats || []).map((b, i) => (i + 1) + '. ' + b).join('\\n'),\n    '',\n    shape.how,\n    '',\n    'Do not invent statistics, client results or testimonials. If a number would help and',\n    'you do not have a real one, describe the mechanism instead.',\n  ].filter(Boolean).join('\\n');\n\n  return { json: {\n    ...a,\n    requestBody: JSON.stringify({\n      model: (typeof $env !== 'undefined' && $env.OPENROUTER_MODEL) || 'google/gemma-4-31b-it:free',\n  models: [(typeof $env !== 'undefined' && $env.OPENROUTER_MODEL) || 'google/gemma-4-31b-it:free'].concat(['google/gemma-4-26b-a4b-it:free','nvidia/nemotron-3-super-120b-a12b:free']),\n      temperature: 0.85,\n      max_tokens: 4000,\n      messages: [\n        { role: 'system', content: system },\n        { role: 'user', content: user },\n      ],\n    }),\n  } };\n});"
       },
-      "id": "e3000000-0000-4000-8000-000000000008",
-      "name": "Needs artwork?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "id": "e2000000-0000-4000-8000-000000000009",
+      "name": "Build the item prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        1360,
+        1760,
         0
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ALEXYA_URL || 'http://127.0.0.1:8000' }}/generate-illustration",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ prompts: [$json.image_prompt], slug: $json.slug, project: \"sanaku\", bucket: \"sanaku-marketing\", aspect_ratio: \"1:1\", mode: \"fast\" }) }}",
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.requestBody }}",
         "options": {
-          "timeout": 600000
+          "timeout": 120000
         }
       },
-      "id": "e9000000-0000-4000-8000-000000000001",
-      "name": "Alexya: illustrate",
+      "id": "e8000000-0000-4000-8000-000000000010",
+      "name": "Write them",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1580,
-        -110
+        1980,
+        0
       ],
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter-header-auth",
+          "name": "OpenRouter (Header Auth)"
+        }
+      },
       "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 5000
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Best-effort. Alexya being down must not cost us the writing.\n\nconst prev = $('Validate the draft').first().json;\nconst row = { ...prev.row };\n\nlet urls = [];\nlet note = null;\ntry {\n  const res = $input.first().json;\n  if (res && Array.isArray(res.image_urls)) urls = res.image_urls.filter(Boolean);\n  if (res && res.error) note = String(res.error);\n} catch (e) {\n  note = e.message;\n}\n\nif (urls.length) {\n  row.image_url = urls[0];\n  // A carousel cover illustrates slide 1; the rest stay text.\n  if (row.content_type === 'carousel' && Array.isArray(row.slides)) {\n    row.slides = row.slides.map((s, i) => (i < urls.length ? { ...s, image_url: urls[i] } : s));\n  }\n} else {\n  console.log('[m1] no illustration attached' + (note ? ': ' + note : '') + ' - queueing text-only');\n}\n\nreturn [{ json: { ...prev, row, image_attached: urls.length } }];"
+        "jsCode": "// Pair each response back to the angle that produced it and build the row.\n//\n// Paired BY INDEX: n8n preserves item order through an HTTP node, and the angle\n// carries draft_index so a mismatch would be visible rather than silent.\n\n// Parse the delimited-block format. Deliberately forgiving about everything\n// except structure - a model that writes [Slide] or adds a stray blank line\n// should not cost the draft, but a missing required block must.\nfunction parseBlocks(text) {\n  const out = { slides: [], scenes: [], options: [] };\n  const lines = String(text).replace(/\\r/g, '').split('\\n');\n  let open = null;\n  let buf = [];\n  let last = null;   // the inline tag an untagged line should continue\n\n  const closeBlock = () => {\n    if (open) out[open] = buf.join('\\n').trim();\n    open = null; buf = [];\n  };\n\n  for (const line of lines) {\n    const t = line.trim();\n\n    const opening = t.match(/^\\[(POST|BODY|CAPTION)\\]$/i);\n    if (opening) { closeBlock(); open = opening[1].toLowerCase(); last = null; continue; }\n\n    const closing = t.match(/^\\[\\/(POST|BODY|CAPTION)\\]$/i);\n    if (closing) { closeBlock(); continue; }\n\n    if (open) { buf.push(line); continue; }\n\n    const inline = t.match(/^\\[(TITLE|QUESTION|SLIDE|SCENE|OPTION)\\]\\s*(.*)$/i);\n    if (inline) {\n      const tag = inline[1].toUpperCase();\n      const val = inline[2].trim();\n      if (tag === 'SLIDE') { out.slides.push(val); last = ['slides', out.slides.length - 1]; }\n      else if (tag === 'SCENE') { out.scenes.push(val); last = ['scenes', out.scenes.length - 1]; }\n      else if (tag === 'OPTION') { out.options.push(val.replace(/^[-*\\d.)\\s]+/, '').trim()); last = null; }\n      else { out[tag.toLowerCase()] = val; last = [tag.toLowerCase(), null]; }\n      continue;\n    }\n\n    // An untagged line continues the tag above it. Without this a slide whose\n    // text runs onto a second line keeps only its first line - which showed up\n    // in testing as a final slide reading exactly 'The Takeaway:' and nothing\n    // else, because the model put the payoff on the next line.\n    if (last && t) {\n      const [k, i] = last;\n      if (i === null) out[k] = (out[k] ? out[k] + ' ' : '') + t;\n      else out[k][i] = (out[k][i] ? out[k][i] + ' ' : '') + t;\n    }\n  }\n  closeBlock();\n  return out;\n}\n\nconst angles = $('Build the item prompts').all().map((i) => i.json);\nconst rows = [];\nconst failures = [];\n\n$input.all().forEach((item, idx) => {\n  const a = angles[idx];\n  if (!a) return;\n\n  try {\n    const raw = item.json?.choices?.[0]?.message?.content;\n    if (!raw) {\n      const e = item.json?.error;\n      throw new Error(e ? ('provider error: ' + (e.message || JSON.stringify(e)).slice(0, 160))\n                        : 'model returned no content');\n    }\n\n    const out = parseBlocks(raw);\n    const need = (f, label) => {\n      const v = out[f];\n      if (!v || !String(v).trim()) throw new Error('missing [' + (label || f.toUpperCase()) + '] block');\n      return String(v).trim();\n    };\n\n    const row = {\n      content_type: a.content_type,\n      target_vertical: a.target_vertical,\n      bottleneck: a.bottleneck,\n      status: 'queued',\n      audience: a.target_vertical,\n      angle: a.bottleneck,\n      thesis: a.thesis,\n      why_now: a.why_now || null,\n      source_title: a.source_title || null,\n      source_url: a.source_url || null,\n      draft_group: a.draft_group,\n      image_prompt: a.scene || null,\n    };\n\n    const t = a.content_type;\n    if (t === 'post') {\n      row.post_text = need('post');\n    } else if (t === 'carousel') {\n      row.title = need('title');\n      if (out.slides.length < 5 || out.slides.length > 8) {\n        throw new Error('carousel needs 5-8 [SLIDE] lines, got ' + out.slides.length);\n      }\n      // Scenes are optional and matched by position; a slide without one simply\n      // goes unillustrated rather than shifting every later slide's artwork.\n      row.slides = out.slides.map((text, i) => (out.scenes[i]\n        ? { text, scene: out.scenes[i] }\n        : { text }));\n      row.post_text = out.caption || null;\n    } else if (t === 'poll') {\n      row.poll_question = need('question');\n      if (out.options.length < 2 || out.options.length > 4) {\n        throw new Error('poll needs 2-4 [OPTION] lines, got ' + out.options.length);\n      }\n      row.poll_options = out.options;\n      row.post_text = out.post || null;\n    } else if (t === 'article' || t === 'newsletter') {\n      row.title = need('title');\n      row.body = need('body');\n    } else if (t === 'featured') {\n      row.title = need('title');\n      row.body = out.body || null;\n    }\n\n    rows.push({ json: { row, thesis: a.thesis } });\n  } catch (err) {\n    // One bad draft must not cost the other two. At three a day, losing the\n    // whole morning because one model fumbled its output is the wrong trade.\n    failures.push('draft ' + (a.draft_index || idx + 1) + ' (' + a.content_type + '): ' + err.message);\n    console.log('[m1] dropped ' + a.content_type + ': ' + err.message);\n  }\n});\n\nif (!rows.length) throw new Error('every draft failed: ' + failures.join(' | '));\nif (failures.length) console.log('[m1] ' + rows.length + ' of ' + $input.all().length + ' drafts survived');\nreturn rows;"
       },
-      "id": "e2000000-0000-4000-8000-000000000009",
-      "name": "Attach artwork",
+      "id": "e2000000-0000-4000-8000-000000000011",
+      "name": "Validate the drafts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1800,
-        -110
+        2200,
+        0
       ]
     },
     {
@@ -236,7 +286,7 @@
           "parameters": [
             {
               "name": "Prefer",
-              "value": "return=representation"
+              "value": "return=minimal"
             }
           ]
         },
@@ -247,12 +297,123 @@
           "timeout": 15000
         }
       },
-      "id": "e5000000-0000-4000-8000-000000000010",
-      "name": "Queue it",
+      "id": "e5000000-0000-4000-8000-000000000012",
+      "name": "Queue the drafts",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2020,
+        2420,
+        0
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Sydney's memory extraction, doing the same job: decide what from today is\n// worth keeping forever, and be stingy about it.\n\nconst ctx = $('Studio context').first().json;\nconst existing = (ctx.memory || [])\n  .map((m) => m.category + '/' + m.key + ': ' + m.value).join('\\n') || '(none yet)';\n\nconst today = $('Validate the drafts').all()\n  .map((i) => '- ' + i.json.row.content_type + ' / ' + i.json.row.target_vertical\n              + ': ' + i.json.thesis).join('\\n');\n\nconst requestBody = JSON.stringify({\n  model: (typeof $env !== 'undefined' && $env.OPENROUTER_MODEL) || 'google/gemma-4-31b-it:free',\n  models: [(typeof $env !== 'undefined' && $env.OPENROUTER_MODEL) || 'google/gemma-4-31b-it:free'].concat(['google/gemma-4-26b-a4b-it:free','nvidia/nemotron-3-super-120b-a12b:free']),\n  temperature: 0.3,\n  max_tokens: 900,\n  messages: [\n    { role: 'system', content: [\n      'You maintain the long-term memory of a LinkedIn content studio.',\n      'Its whole purpose is to stop the studio repeating itself as it produces three drafts a day forever.',\n      'Be selective. Most days add one row or none. Never duplicate something already known.',\n      'Return JSON only.',\n    ].join(' ') },\n    { role: 'user', content: [\n      'Already remembered:', existing,\n      '', 'Argued today:', today,\n      '',\n      'Return ONLY: {\"memories\":[{\"category\":\"...\",\"key\":\"...\",\"value\":\"...\"}]}',\n      'category is one of: angle (an argument now spent), analogy (a comparison now used),',\n      'opener (a hook pattern now used), fact (a durable claim cleared for reuse).',\n      'key is short, stable and snake_case. value is one sentence.',\n      'Empty array if today added nothing new.',\n    ].join('\\n') },\n  ],\n});\n\nreturn [{ json: { requestBody } }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000013",
+      "name": "Build the memory prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "e8000000-0000-4000-8000-000000000014",
+      "name": "Memory engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter-header-auth",
+          "name": "OpenRouter (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const resp = $input.first().json;\nlet text = (resp?.choices?.[0]?.message?.content || '').replace(/\\`\\`\\`json|\\`\\`\\`/g, '').trim();\nlet parsed = { memories: [] };\ntry {\n  const s = text.indexOf('{'), e = text.lastIndexOf('}');\n  if (s !== -1 && e > s) parsed = JSON.parse(text.slice(s, e + 1));\n} catch (err) { /* a day that adds nothing to memory is a normal day */ }\n\nconst mems = (Array.isArray(parsed.memories) ? parsed.memories : [])\n  .filter((m) => m && m.category && m.key && m.value)\n  .slice(0, 6);\n\nconsole.log('[m1] ' + mems.length + ' new memories');\n// An empty result must not stall the branch, so emit a skip marker instead.\nreturn mems.length ? mems.map((m) => ({ json: m })) : [{ json: { _skip: true } }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000015",
+      "name": "Parse the memories",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/content_memory?on_conflict=category,key",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ category: $json.category, key: $json.key, value: $json.value }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e5000000-0000-4000-8000-000000000016",
+      "name": "Save memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
         0
       ],
       "credentials": {
@@ -283,18 +444,18 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: $json.error?.message || \"content studio run failed\", payload: JSON.stringify({ content_type: $json.content_type, vertical: $json.target_vertical }) }) }}",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: $json.error?.message || \"content studio run failed\", payload: JSON.stringify({ stage: \"m1\" }) }) }}",
         "options": {
           "timeout": 15000
         }
       },
-      "id": "e5000000-0000-4000-8000-000000000011",
+      "id": "e5000000-0000-4000-8000-000000000017",
       "name": "Log the failure",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2020,
-        200
+        2420,
+        220
       ],
       "credentials": {
         "httpCustomAuth": {
@@ -313,102 +474,161 @@
       "main": [
         [
           {
-            "node": "Pick today's brief",
+            "node": "Build the news queries",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Pick today's brief": {
+    "Build the news queries": {
       "main": [
         [
           {
-            "node": "Read the brand brain",
+            "node": "Fetch headlines",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Read the brand brain": {
+    "Fetch headlines": {
       "main": [
         [
           {
-            "node": "Build the brief prompt",
+            "node": "Read the signals",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build the brief prompt": {
+    "Read the signals": {
       "main": [
         [
           {
-            "node": "Write it",
+            "node": "Studio context",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Write it": {
+    "Studio context": {
       "main": [
         [
           {
-            "node": "Validate the draft",
+            "node": "Build the angle brief",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Validate the draft": {
+    "Build the angle brief": {
       "main": [
         [
           {
-            "node": "Needs artwork?",
+            "node": "Angle engine",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Needs artwork?": {
+    "Angle engine": {
       "main": [
         [
           {
-            "node": "Alexya: illustrate",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Queue it",
+            "node": "Decide the three angles",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Alexya: illustrate": {
+    "Decide the three angles": {
       "main": [
         [
           {
-            "node": "Attach artwork",
+            "node": "Build the item prompts",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Attach artwork": {
+    "Build the item prompts": {
       "main": [
         [
           {
-            "node": "Queue it",
+            "node": "Write them",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write them": {
+      "main": [
+        [
+          {
+            "node": "Validate the drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate the drafts": {
+      "main": [
+        [
+          {
+            "node": "Queue the drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue the drafts": {
+      "main": [
+        [
+          {
+            "node": "Build the memory prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build the memory prompt": {
+      "main": [
+        [
+          {
+            "node": "Memory engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory engine": {
+      "main": [
+        [
+          {
+            "node": "Parse the memories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse the memories": {
+      "main": [
+        [
+          {
+            "node": "Save memory",
             "type": "main",
             "index": 0
           }
