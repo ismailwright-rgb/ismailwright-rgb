@@ -7,20 +7,24 @@
 # script swaps them for the ids that actually exist on the instance, then
 # creates (or updates) and activates the workflow.
 #
-# The ids are DISCOVERED, not hardcoded: it reads the credentials already in
-# use by installed Sanaku workflows. That matters because there are three
-# separate credentials on the live instance all named "Supabase Service Role
-# (Custom Auth)" - repeated installer runs each created a new one - so the only
-# safe answer is "whichever one a currently-working workflow uses".
+# Credentials: M1's own pair is created once, from ~/.sanaku.env, and REUSED on
+# every later run. Two things drove that.
 #
-# It also handles a naming drift the README does not mention: the live
-# OpenRouter credential is called "OpenRouter Sanaku", not "OpenRouter (Header
-# Auth)". A credential mismatch does NOT fail at import; the node shows a small
-# warning and then every run 401s, which reads like a model outage.
+# Inheriting a credential from another workflow does not work. Three separate
+# credentials on this instance are all named "Supabase Service Role (Custom
+# Auth)" and at least one holds a stale key, so "whichever one the newest
+# workflow uses" picked a dead one - and the failure only showed up at run time
+# as "401 Invalid API key", three nodes in, looking like a broken credential
+# rather than the wrong one.
+#
+# Creating a fresh pair every run does not work either: that is how the instance
+# grew three identical Supabase credentials in the first place. So M1 tags its
+# own with a "- M1" suffix and reuses them. ROTATE_CREDS=1 forces new ones,
+# which is what to use after rotating a key.
 #
 # Usage:
 #   sh sanaku/scripts/install-m1.sh                 # install + activate
-#   ALEXYA_URL=http://host.docker.internal:8000 sh sanaku/scripts/install-m1.sh
+#   ROTATE_CREDS=1 sh sanaku/scripts/install-m1.sh  # after a key rotation
 #
 # Reads N8N_URL / N8N_KEY from ~/.sanaku.env. Safe to run more than once.
 # ============================================================================
@@ -87,6 +91,32 @@ def api(method, path, body=None):
 # so it is the only one worth trusting.
 found = {}
 
+# Re-running must not mint a new pair of credentials every time. The first
+# version of this script did, which is how the instance ended up with three
+# identically-named Supabase credentials in the first place - the exact mess
+# this script exists to navigate around. So: if M1 is already installed and
+# already points at credentials this script created, reuse them.
+#
+# ROTATE_CREDS=1 forces fresh ones. That is the escape hatch for the one case
+# reuse gets wrong - the key in ~/.sanaku.env has changed, and the stored
+# credential still holds the old one.
+ROTATE = os.environ.get("ROTATE_CREDS") == "1"
+existing = next((w for w in api("GET", "/api/v1/workflows?limit=250")["data"]
+                 if w["name"] == json.load(open(WF))["name"]), None)
+if existing and not ROTATE:
+    prev = api("GET", f"/api/v1/workflows/{existing['id']}")
+    for node in prev.get("nodes", []):
+        for ctype, cred in (node.get("credentials") or {}).items():
+            if not cred.get("name", "").endswith("- M1"):
+                continue
+            slot = "supabase" if ctype == "httpCustomAuth" else "openrouter"
+            found.setdefault(slot, cred)
+    if found:
+        print("==> Reusing this workflow's existing credentials "
+              "(ROTATE_CREDS=1 to replace them)")
+        for slot, cred in found.items():
+            print(f"    {slot:10} {cred['id']}")
+
 print("==> Checking the service key actually works...")
 supa_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
 supa_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
@@ -101,22 +131,25 @@ if probe != "200":
     raise SystemExit(f"    !! service key rejected by Supabase (HTTP {probe}) - fix it before installing")
 print("    ok")
 
-print("==> Creating the Supabase credential...")
-found["supabase"] = {
-    "id": api("POST", "/api/v1/credentials", {
-        "name": "Supabase Service Role (Custom Auth) - M1",
-        "type": "httpCustomAuth",
-        "data": {"json": json.dumps(
-            {"headers": {"apikey": supa_key, "Authorization": "Bearer " + supa_key}})},
-    })["id"],
-    "name": "Supabase Service Role (Custom Auth) - M1",
-}
-print(f"    supabase   {found['supabase']['id']}")
+if "supabase" not in found:
+  print("==> Creating the Supabase credential...")
+  found["supabase"] = {
+      "id": api("POST", "/api/v1/credentials", {
+          "name": "Supabase Service Role (Custom Auth) - M1",
+          "type": "httpCustomAuth",
+          "data": {"json": json.dumps(
+              {"headers": {"apikey": supa_key, "Authorization": "Bearer " + supa_key}})},
+      })["id"],
+      "name": "Supabase Service Role (Custom Auth) - M1",
+  }
+  print(f"    supabase   {found['supabase']['id']}")
 
 # OpenRouter: create from OPENROUTER_KEY when ~/.sanaku.env has one, otherwise
 # fall back to whatever credential the existing content workflows use.
 or_key = os.environ.get("OPENROUTER_KEY", "")
-if or_key:
+if "openrouter" in found:
+    pass
+elif or_key:
     print("==> Creating the OpenRouter credential...")
     found["openrouter"] = {
         "id": api("POST", "/api/v1/credentials", {

@@ -264,10 +264,12 @@ easy to get wrong by hand:
   as an expression, every Sanaku query hits the wrong project and returns
   `401 Invalid API key`, which reads like a broken credential. `setup-sanaku.sh`
   hardcodes it for the T/W workflows for exactly this reason.
-- **Credentials are created fresh from `~/.sanaku.env`.** Three credentials on
-  the instance share the name "Supabase Service Role (Custom Auth)" and at
-  least one holds a stale key, so inheriting "the one the newest workflow uses"
-  picks a dead one.
+- **Credentials are created once and reused.** Three credentials on the instance
+  share the name "Supabase Service Role (Custom Auth)" and at least one holds a
+  stale key, so inheriting "the one the newest workflow uses" picks a dead one.
+  Creating a fresh pair on every run is how that mess started, so M1 tags its
+  own with a `- M1` suffix and reuses them. After rotating a key:
+  `ROTATE_CREDS=1 sh sanaku/scripts/install-m1.sh`
 
 ### Artwork: the droplet cannot reach Alexya
 Alexya is bound to `127.0.0.1:8000` on the Mac and M1 runs on the droplet, so
