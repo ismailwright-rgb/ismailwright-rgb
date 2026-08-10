@@ -40,24 +40,73 @@ import {
   workflow, RETRY,
 } from './lib.mjs';
 
-// Same model family Ismail chose, on the FREE endpoint - the paid one stopped
-// working mid-build when the OpenRouter balance hit zero ($50 of $50 used), and
-// a studio that silently stops writing when a balance runs out is worse than a
-// slightly rate-limited one. Override per-instance without a rebuild:
-//   n8n env  OPENROUTER_MODEL=anthropic/claude-sonnet-5
-// which is ~$2/month at this cadence and a large step up in writing quality.
-const MODEL_EXPR = "(typeof $env !== 'undefined' && $env.OPENROUTER_MODEL) "
-                 + "|| 'google/gemma-4-31b-it:free'";
+// A ROTATING POOL of free models, not one primary with fixed spares.
+//
+// The free tier is a shared pool that rate-limits constantly, so "the model"
+// is not a thing you can depend on - only "a model that is answering right
+// now" is. Probed live on 2026-08-10, and the result made the point: the
+// primary that had been configured (gemma-4-31b:free) was 429ing at that
+// moment, and one of its two fallbacks (nemotron-3-super-120b:free) did not
+// respond at all. A static list decided once is a list that rots.
+//
+// So: OpenRouter's `models` array handles fallback within a request (it falls
+// through on a provider error), and the STARTING POINT rotates per call and
+// per day so consecutive attempts do not all hammer whichever model is
+// currently throttled. Three entries is the API's hard cap on that array.
+//
+// The pool is ordered by how well each followed instructions in that probe.
+// The nemotron entries leak their reasoning into the response - harmless here
+// only because both stages parse delimited blocks and ignore loose prose,
+// which is a large part of why that format was chosen.
+//
+// Override either without a rebuild:
+//   OPENROUTER_MODEL   pin one model, e.g. anthropic/claude-sonnet-5
+//   OPENROUTER_MODELS  replace the whole pool, comma-separated
+const POOL_DEFAULT = [
+  'google/gemma-4-26b-a4b-it:free',
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'nvidia/nemotron-3-nano-30b-a3b:free',
+];
 
-// OpenRouter falls through this list in order when a provider 429s. The free
-// pool is shared and rate-limits constantly - a single free model is not a
-// dependency you can schedule against. Two fallbacks across two other vendors
-// is; the API caps the array at three entries total, primary included.
-// Only used when the primary fails, so the primary still decides the voice.
-const FALLBACKS_EXPR = "["
-  + "'google/gemma-4-26b-a4b-it:free',"
-  + "'nvidia/nemotron-3-super-120b-a12b:free'"
-  + "]";
+// The angle engine gets a narrower pool, and this is not fussiness.
+//
+// The nemotron entries answer reliably but emit their reasoning instead of the
+// requested format. For the WRITER that is harmless - the block parser ignores
+// loose prose before the first tag. For the ANGLE ENGINE it is fatal: a live
+// run came back "We need to output exactly three angles, each with the format
+// lines" and not a single [ANGLE] block, so there was nothing to parse.
+//
+// Only models that returned clean, exactly-formatted output when probed go
+// here. Prose stages keep the full pool, so throttling still has somewhere to
+// fall through to.
+const POOL_STRUCTURED = [
+  'google/gemma-4-26b-a4b-it:free',
+  'google/gemma-4-31b-it:free',
+];
+
+// `salt` staggers the three calls in one run so a throttled model cannot take
+// out the whole morning: the angle engine, the writer and the memory pass each
+// start at a different point in the pool.
+const modelPicker = (salt, pool = POOL_DEFAULT) => `
+// --- model selection (rotating free pool) ---
+const __env = (k) => (typeof $env !== 'undefined' && $env[k]) ? $env[k] : null;
+const __pinned = __env('OPENROUTER_MODEL');
+const __pool = (__env('OPENROUTER_MODELS') || '').split(',').map((x) => x.trim()).filter(Boolean);
+const __models = __pool.length ? __pool : ${JSON.stringify(pool)};
+const __day = Math.floor(Date.now() / 86400000);
+const __off = (__day + ${salt}) % __models.length;
+// Pinned wins outright, but still carries spares behind it so a paid model
+// being briefly unavailable does not stop the studio.
+// Deduped: a pool shorter than three would otherwise wrap and repeat an
+// entry, which wastes one of the three slots the API allows and gives the
+// request a spare that is the model that just failed.
+const __ordered = __pinned
+  ? [__pinned].concat(__models.filter((m) => m !== __pinned))
+  : __models.map((_, i) => __models[(__off + i) % __models.length]);
+const __trio = __ordered.filter((m, i) => __ordered.indexOf(m) === i).slice(0, 3);
+`;
+
 const DRAFTS_PER_DAY = 3;
 
 // ---------------------------------------------------------------------------
@@ -158,7 +207,7 @@ return [{ json: { triggers: unique.slice(0, 18) } }];`;
 // ---------------------------------------------------------------------------
 // 2. Decide what today is about, before writing a word of it
 // ---------------------------------------------------------------------------
-const buildAngles = `// THE ANGLE ENGINE. Sydney's story engine, doing the equivalent job.
+const buildAngles = `${modelPicker(0, POOL_STRUCTURED)}// THE ANGLE ENGINE. Sydney's story engine, doing the equivalent job.
 //
 // It does not write the post. It decides what three genuinely different things
 // are worth saying today, and commits each to a one-sentence thesis. Prose gets
@@ -244,8 +293,10 @@ const user = [
   '  liable after a breach, not where the data sits" is.',
   '- Nothing that repeats a thesis in the DO NOT REPEAT list, in substance or in framing.',
   '',
-  'Output format - follow EXACTLY. No JSON, no markdown fence, no preamble,',
-  'no reasoning, no commentary. Every tag alone at the start of its line.',
+  'Output format - follow EXACTLY. Your very first characters must be "[ANGLE]".',
+  'No JSON, no markdown fence, no preamble, no reasoning, no commentary, no',
+  'restating of the task. Do not think out loud. Every tag alone at the start',
+  'of its line.',
   'Emit this block ' + ${DRAFTS_PER_DAY} + ' times, once per angle:',
   '',
   '[ANGLE]',
@@ -265,7 +316,7 @@ const user = [
 ].join('\\n');
 
 const requestBody = JSON.stringify({
-  model: ${MODEL_EXPR},\n  models: [${MODEL_EXPR}].concat(${FALLBACKS_EXPR}),
+  model: __trio[0],\n  models: __trio,
   temperature: 0.95,
   max_tokens: 3000,
   messages: [
@@ -374,7 +425,7 @@ return usable.slice(0, ${DRAFTS_PER_DAY}).map((a, i) => ({ json: {
 // ---------------------------------------------------------------------------
 // 3. Write each one FROM its angle
 // ---------------------------------------------------------------------------
-const buildItems = `// One request per angle. The writer never re-decides what to argue - the thesis
+const buildItems = `${modelPicker(1)}// One request per angle. The writer never re-decides what to argue - the thesis
 // is handed to it and it writes to that. This is the half that V1 collapsed
 // into the same call, and why V1 drifted to whatever the model found easiest.
 
@@ -469,7 +520,7 @@ return $input.all().map((item) => {
   return { json: {
     ...a,
     requestBody: JSON.stringify({
-      model: ${MODEL_EXPR},\n  models: [${MODEL_EXPR}].concat(${FALLBACKS_EXPR}),
+      model: __trio[0],\n  models: __trio,
       temperature: 0.85,
       max_tokens: 4000,
       messages: [
@@ -619,7 +670,7 @@ return rows;`;
 // ---------------------------------------------------------------------------
 // 4. Remember what was argued, so tomorrow does not repeat it
 // ---------------------------------------------------------------------------
-const buildMemory = `// Sydney's memory extraction, doing the same job: decide what from today is
+const buildMemory = `${modelPicker(2)}// Sydney's memory extraction, doing the same job: decide what from today is
 // worth keeping forever, and be stingy about it.
 
 const ctx = $('Studio context').first().json;
@@ -631,7 +682,7 @@ const today = $('Validate the drafts').all()
               + ': ' + i.json.thesis).join('\\n');
 
 const requestBody = JSON.stringify({
-  model: ${MODEL_EXPR},\n  models: [${MODEL_EXPR}].concat(${FALLBACKS_EXPR}),
+  model: __trio[0],\n  models: __trio,
   temperature: 0.3,
   max_tokens: 900,
   messages: [

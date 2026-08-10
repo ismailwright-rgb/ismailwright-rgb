@@ -271,14 +271,37 @@ when the value is multi-paragraph prose — two of every three drafts died on
 Both stages use them; the angle engine switched too after a reasoning-model
 fallback emitted its working instead of JSON.
 
-### The model
-Defaults to `google/gemma-4-31b-it:free` with two free fallbacks across other
-vendors, because the free pool rate-limits constantly and a single free model is
-not something you can schedule against. Override without a rebuild:
+### The model: a rotating pool, not a primary
+The free tier rate-limits constantly, so "the model" is not something you can
+depend on — only "a model answering right now" is. Probed live 2026-08-10, and
+the result made the point: the configured primary was 429ing at that moment and
+one of its two fallbacks did not respond at all.
+
+So OpenRouter's `models` array handles fallback *within* a request (max 3
+entries), and the **starting point rotates per call and per day** — the angle
+engine, the writer and the memory pass each begin at a different point, so one
+throttled provider cannot take out the whole morning.
+
+The angle engine gets a **narrower pool** on purpose. The nemotron models answer
+reliably but emit reasoning instead of the requested format. Harmless for the
+writer, whose parser ignores loose prose — fatal for structured output, where a
+run came back *"We need to output exactly three angles…"* and no `[ANGLE]` block
+at all. Only models that returned exactly-formatted output when probed are
+eligible there.
+
+| Pool | Used by | Members |
+|---|---|---|
+| structured | angle engine | `gemma-4-26b-a4b:free`, `gemma-4-31b:free` |
+| prose | writer, memory | both gemmas + `nemotron-3-ultra-550b:free`, `nemotron-3-nano-30b:free` |
+
+Override without a rebuild:
 
 ```
-n8n env   OPENROUTER_MODEL=anthropic/claude-sonnet-5
+OPENROUTER_MODEL    pin one model, e.g. anthropic/claude-sonnet-5
+OPENROUTER_MODELS   replace the pool entirely, comma-separated
 ```
+A pinned model still carries the free pool behind it, so a paid model being
+briefly unavailable does not stop the studio.
 
 ~$2/month at this cadence, and a large step up in writing quality. **The paid
 OpenRouter balance is currently exhausted ($50 of $50), which is why the free
