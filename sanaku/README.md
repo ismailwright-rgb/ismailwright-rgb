@@ -322,11 +322,26 @@ morning. Run it by hand any time with:
 python3 sanaku/scripts/illustrate-queue.py --limit 5 [--dry-run]
 ```
 
-### Illustration style
-Flat 2D cartoon, bold outlines, flat colour — held by prompt wording alone
-(`FLAT_STYLE_PREFIX` in `sydney_server.py`). Alexya exposes no model or
-checkpoint parameter, so wording plus an optional reference image are the only
-levers; verified live, no reference image needed.
+### Illustration: a cycling palette, not one look
+Eight named styles in `sydney_server.py` — `flat_vector, clay, mural, pastel,
+risograph, isometric, papercut, linocut` — listed live at `GET /styles`. The
+worker picks one per item, keyed off the row id so a retry redraws the *same*
+look and the morning's three drafts almost always differ from each other. A
+carousel keeps one style across all its slides.
+
+Every draft gets a **cover image**, approved or not: ~31 credits each, about
+2,790/month at three drafts a day against a balance near 27,000 — roughly ten
+months. Choosing between three blocks of text with the artwork arriving only
+after you have decided is backwards. Full per-slide carousel art (5-8 images,
+~217 credits) is what waits for approval.
+
+Alexya exposes no model or checkpoint parameter, so prompt wording is the only
+lever there is; verified live across four styles, no reference image needed.
+
+**Lettering is suppressed by default.** The same scene gave a garbled
+"IRS MONUEMENT" in linocut and a clean "Client Data Transfer" in pastel — a
+correct label is a small bonus, a misspelled one is a hard fail in front of
+lawyers and accountants. Pass `allow_text: true` when a label earns its place.
 
 Two scene-wording quirks, found by testing rather than assumed:
 - "empty" is ignored for rooms — say "no people, nobody in frame".
