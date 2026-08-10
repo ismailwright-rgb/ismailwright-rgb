@@ -251,19 +251,41 @@ slot; bottleneck cycles independently so pairings vary. Over a year that is
 ~156 posts, 52 carousels, 53 polls, 52 newsletters, 40 articles, 12 Featured,
 with PI law at ~50% of items.
 
-### Where to install it — read before importing
-The image step calls the Alexya wrapper on the Mac at `127.0.0.1:8000`, so
-placement decides whether artwork works:
+### Installing it
+```
+sh sanaku/scripts/install-m1.sh
+```
+Discovers/creates the credentials, pins the Supabase URL, creates or updates
+the workflow, and activates it. Safe to re-run. Two things it handles that are
+easy to get wrong by hand:
 
-| n8n location | `ALEXYA_URL` |
-|---|---|
-| native on the Mac | `http://127.0.0.1:8000` |
-| in a Docker container | `http://host.docker.internal:8000` |
-| the remote droplet | not reachable — needs a tunnel back to the Mac |
+- **The Supabase URL must be hardcoded, not `$env.SUPABASE_URL`.** The droplet
+  hosts both Sanaku and TCR and has one such variable — it points at TCR. Left
+  as an expression, every Sanaku query hits the wrong project and returns
+  `401 Invalid API key`, which reads like a broken credential. `setup-sanaku.sh`
+  hardcodes it for the T/W workflows for exactly this reason.
+- **Credentials are created fresh from `~/.sanaku.env`.** Three credentials on
+  the instance share the name "Supabase Service Role (Custom Auth)" and at
+  least one holds a stale key, so inheriting "the one the newest workflow uses"
+  picks a dead one.
 
-The image call is **non-fatal on purpose**. If Alexya is unreachable the item
-still queues with its text complete. A studio that stops writing because an
-illustrator is offline would be a worse studio.
+### Artwork: the droplet cannot reach Alexya
+Alexya is bound to `127.0.0.1:8000` on the Mac and M1 runs on the droplet, so
+the image step always fails there — **on purpose**. It is non-fatal: the item
+queues with its text complete and `image_prompt` set.
+
+`scripts/illustrate-queue.py` closes the gap from the other side. It runs on the
+Mac under `com.sanaku.illustrator` every 20 minutes, finds queued items that
+wanted a picture and did not get one, draws them locally and writes the public
+URL back. If the Mac is asleep or Alexya is down it exits quietly and the work
+waits.
+
+That decoupling beats a tunnel: ngrok would work until the Mac slept or the free
+URL rotated, and then the failure is a stale `ALEXYA_URL` silently 502ing every
+morning. Run it by hand any time with:
+```
+python3 sanaku/scripts/illustrate-queue.py --limit 5 [--dry-run]
+```
 
 ### Illustration style
 Flat 2D cartoon, bold outlines, flat colour — held by prompt wording alone

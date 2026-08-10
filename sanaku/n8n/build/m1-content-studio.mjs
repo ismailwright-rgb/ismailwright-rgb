@@ -41,6 +41,13 @@ import {
 // Same model the existing Ismail/Sydney content workflows use.
 const MODEL = 'google/gemma-4-31b-it';
 
+// Credentials here are the repo's PLACEHOLDER names, same as every other
+// workflow in n8n/workflows/. Real instance ids are wired in at install time
+// by scripts/install-m1.sh, which is also where the naming drift is handled:
+// the live OpenRouter credential is called "OpenRouter Sanaku", not the
+// README's "OpenRouter (Header Auth)". A credential mismatch does not fail
+// loudly at import - the node just shows a warning and every run 401s.
+
 // ---------------------------------------------------------------------------
 // 1. What are we making today?
 // ---------------------------------------------------------------------------
@@ -134,9 +141,14 @@ const buildPrompt = `// Assemble the OpenRouter request. The whole brand brain f
 
 const brief = $('Pick today\\'s brief').first().json;
 
-// The Supabase node returns the rows array as the item body.
-const rows = $input.first().json;
-const brain = Array.isArray(rows) ? rows : (rows.data || []);
+// PostgREST returns a JSON array, and n8n splits an array response into ONE
+// ITEM PER ELEMENT. So the rows arrive as $input.all(), and $input.first()
+// would be a single brand_brain row - which reads as "the brain is empty"
+// rather than as a shape error. Handle the wrapped-array case too, in case a
+// future n8n version stops splitting.
+const raw = $input.all().map((i) => i.json);
+const brain = (raw.length === 1 && Array.isArray(raw[0]) ? raw[0] : raw)
+  .filter((r) => r && r.kind && r.content);
 
 if (!brain.length) {
   throw new Error('brand_brain returned no linkedin rows - refusing to write off-brief. Check the seed ran and channel=linkedin rows exist.');

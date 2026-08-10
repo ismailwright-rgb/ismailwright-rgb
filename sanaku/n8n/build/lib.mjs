@@ -63,7 +63,7 @@ export const dailyAt = (name, hour, position) => ({
  * it keeps the model id, the system prompt and the temperature in readable
  * JavaScript instead of buried in node parameters.
  */
-export const openrouter = (name, position, bodyExpr = '={{ $json.requestBody }}') => ({
+export const openrouter = (name, position, bodyExpr = '={{ $json.requestBody }}', cred = OPENROUTER_CRED) => ({
   parameters: {
     method: 'POST', url: 'https://openrouter.ai/api/v1/chat/completions',
     authentication: 'genericCredentialType', genericAuthType: 'httpHeaderAuth',
@@ -74,7 +74,7 @@ export const openrouter = (name, position, bodyExpr = '={{ $json.requestBody }}'
     options: { timeout: 120000 },
   },
   id: nid('e8000000'), name, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-  position, credentials: OPENROUTER_CRED, ...RETRY,
+  position, credentials: cred, ...RETRY,
 });
 
 export const code = (name, jsCode, position, mode = 'runOnceForAllItems') => ({
