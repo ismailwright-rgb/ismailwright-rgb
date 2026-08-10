@@ -40,7 +40,7 @@ WF="$HERE/../n8n/workflows/m1-content-studio.json"
 [ -f "$WF" ] || { echo "Missing $WF - run: node n8n/build/m1-content-studio.mjs $WF"; exit 1; }
 
 export N8N_URL N8N_KEY WF
-export SUPABASE_URL SUPABASE_SERVICE_KEY
+export SUPABASE_URL SUPABASE_SERVICE_KEY SUPABASE_ANON_KEY
 export OPENROUTER_KEY="${OPENROUTER_KEY:-}"
 
 python3 - <<'PY'
@@ -192,8 +192,24 @@ wf = json.load(open(WF))
 # place. Every installed Sanaku workflow carries the literal URL for this
 # reason; M1 is no different.
 raw = json.dumps(wf).replace("{{ $env.SUPABASE_URL }}", os.environ["SUPABASE_URL"].rstrip("/"))
+
+# The anon key needs pinning for the same reason and is safe to pin: it is
+# already public by design, compiled into the deployed dashboard bundle. It is
+# NOT committed - the repo keeps the placeholder and the instance gets the
+# literal, exactly as setup-sanaku.sh does for the T/W workflows.
+#
+# Without this the Generate button's authorisation call goes out with an empty
+# apikey header, PostgREST rejects it, and every request - including a genuine
+# staff one - comes back "not authorised".
+anon = os.environ.get("SUPABASE_ANON_KEY", "")
+if not anon:
+    raise SystemExit("    !! SUPABASE_ANON_KEY missing from ~/.sanaku.env - the "
+                     "Generate button cannot authorise without it")
+raw = raw.replace("{{ $env.SUPABASE_ANON_KEY }}", anon)
+
 wf = json.loads(raw)
 print(f"==> Pinned Supabase URL to {os.environ['SUPABASE_URL']}")
+print("==> Pinned the anon key for the Generate button's auth check")
 
 rewired = 0
 for node in wf["nodes"]:

@@ -4,6 +4,7 @@ import {
   captionFor, imagesFor, packName, copyText, downloadImage,
   downloadPostPack, downloadBatchPack,
 } from './postpack.js';
+import { requestGeneration, canGenerate } from './generate.js';
 
 /**
  * The content studio.
@@ -18,6 +19,17 @@ import {
  * and not a column: writing five posts is a different job from assembling a
  * carousel, and batching by format is how the week actually gets done.
  */
+
+// What the Generate bar can ask for. 'video' is deliberately absent - the
+// content_kind enum has it, but nothing generates one yet.
+const MAKEABLE = [
+  ['post', 'Post'],
+  ['carousel', 'Carousel'],
+  ['poll', 'Poll'],
+  ['article', 'Article'],
+  ['newsletter', 'Newsletter'],
+  ['featured', 'Featured'],
+];
 
 const TYPES = [
   ['all', 'Everything'],
@@ -49,6 +61,7 @@ export default function Marketing() {
   const [flash, setFlash] = useState(null);
   const [editing, setEditing] = useState(null); // id being edited
   const [draft, setDraft] = useState({});
+  const [making, setMaking] = useState(null);   // content_type being generated
 
   async function load() {
     setLoading(true);
@@ -81,6 +94,37 @@ export default function Marketing() {
     for (const r of rows) c[r.status] = (c[r.status] || 0) + 1;
     return c;
   }, [rows]);
+
+  // A run takes 30-90s and the webhook answers immediately, so the queue is
+  // polled rather than awaited. Ten tries at 8s covers the slow end without
+  // hammering, and the count comparison means a slow run that lands late still
+  // shows up on the next ordinary refresh rather than being lost.
+  async function generate(contentType) {
+    setMaking(contentType);
+    const before = rows.length;
+    try {
+      await requestGeneration(contentType, 1);
+      setFlash(`Writing a ${contentType}… this takes up to a minute.`);
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 8000));
+        const { data } = await supabase.from('content_queue').select('*')
+          .order('created_at', { ascending: false });
+        if (data && data.length > before) {
+          setRows(data);
+          setType(contentType);
+          setStatus('queued');
+          setFlash(`New ${contentType} ready.`);
+          return;
+        }
+      }
+      setFlash('Still working — it will appear here when it lands.');
+      load();
+    } catch (e) {
+      setFlash(`Could not generate: ${e.message}`);
+    } finally {
+      setMaking(null);
+    }
+  }
 
   async function patch(id, fields) {
     const { error } = await supabase.from('content_queue').update(fields).eq('id', id);
@@ -175,6 +219,29 @@ export default function Marketing() {
         <div className="metric"><div className="v">{counts.approved || 0}</div><div className="l">Approved, ready to post</div></div>
         <div className="metric"><div className="v">{counts.posted || 0}</div><div className="l">Posted</div></div>
       </div>
+
+      {canGenerate && (
+        <div className="card mk-make">
+          <div className="mk-make-head">
+            <b>Generate</b>
+            <span className="muted">
+              M1 writes three drafts every morning. Ask for something specific here.
+            </span>
+          </div>
+          <div className="seg">
+            {MAKEABLE.map(([k, label]) => (
+              <button
+                key={k}
+                disabled={Boolean(making)}
+                onClick={() => generate(k)}
+                className={making === k ? 'on' : ''}
+              >
+                {making === k ? 'Writing…' : label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="controls">
         <div className="seg">

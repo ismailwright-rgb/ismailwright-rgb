@@ -258,6 +258,28 @@ to do both is why v1 drifted to whatever the model found easiest.
 used openers into `content_memory`, and the angle engine is shown them and told
 not to repeat. That is what stops draft 40 re-running draft 3.
 
+### The Generate button
+The Marketing tab can ask for a specific format on demand — Post, Carousel,
+Poll, Article, Newsletter, Featured — instead of waiting for 7am. It posts to
+the `sanaku-generate` webhook on M1, which runs the same two-stage pipeline with
+the format forced.
+
+**There is no API key in the dashboard bundle.** A shared token would be a
+password published on the internet, since anyone can read deployed JavaScript.
+Instead the browser forwards the caller's own Supabase session and n8n reads
+`sanaku_staff` *as that user* — its only policy is `sanaku_is_staff()`, so a
+client-portal login gets an empty array and a logged-out one gets a 401. RLS is
+the authorizer.
+
+The webhook answers immediately and the tab polls the queue, because a run takes
+30–90s and holding a browser connection open that long is worse than watching it
+fill in. Requests are capped at 5 drafts.
+
+`install-m1.sh` pins the anon key into the workflow the same way it pins the
+Supabase URL — the droplet's own env vars belong to TCR, so without pinning the
+auth call goes out with an empty `apikey` and *every* request is refused,
+including a genuine one.
+
 ### Cadence
 **Three drafts every morning, seven days a week.** They are alternatives to
 choose between — approve the one you want, delete the rest. They share a

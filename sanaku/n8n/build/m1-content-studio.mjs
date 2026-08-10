@@ -36,8 +36,8 @@
 // spend most of the Alexya balance on content that never ships.
 import { writeFileSync } from 'node:fs';
 import {
-  dailyAt, code, supaGet, supaWrite, openrouter, logError, sticky, to,
-  workflow, RETRY,
+  dailyAt, code, gate, respond, supaGet, supaWrite, openrouter, logError,
+  sticky, to, workflow, RETRY,
 } from './lib.mjs';
 
 // A ROTATING POOL of free models, not one primary with fixed spares.
@@ -108,6 +108,36 @@ const __trio = __ordered.filter((m, i) => __ordered.indexOf(m) === i).slice(0, 3
 `;
 
 const DRAFTS_PER_DAY = 3;
+
+// ---------------------------------------------------------------------------
+// 0. What was asked for
+// ---------------------------------------------------------------------------
+const normalizeRequest = `// What was asked for, from either trigger.
+//
+// Both the 7am cron and the Generate button land here, so nothing downstream
+// has to know which one fired. Referencing a node that did not run throws in
+// n8n, and that throw IS the signal: no webhook node means this is the cron.
+let body = {};
+try {
+  body = $('Generate now').first().json.body || {};
+} catch (e) {
+  body = null;   // scheduled run
+}
+
+if (body === null) {
+  return [{ json: { source: 'schedule', forced_type: null, count: ${DRAFTS_PER_DAY} } }];
+}
+
+const TYPES = ['post', 'carousel', 'poll', 'article', 'newsletter', 'featured'];
+const forced = TYPES.includes(body.content_type) ? body.content_type : null;
+
+// Capped at 5. Each draft is a separate model call on a rate-limited free tier,
+// so a request for fifty would mostly produce failures and a long wait.
+let count = parseInt(body.count, 10);
+if (!Number.isFinite(count) || count < 1) count = forced ? 1 : ${DRAFTS_PER_DAY};
+count = Math.min(count, 5);
+
+return [{ json: { source: 'on_demand', forced_type: forced, count } }];`;
 
 // ---------------------------------------------------------------------------
 // 1. What is actually happening in their world today
@@ -216,6 +246,8 @@ const buildAngles = `${modelPicker(0, POOL_STRUCTURED)}// THE ANGLE ENGINE. Sydn
 
 const ctx = $input.first().json;
 const triggers = $('Read the signals').first().json.triggers || [];
+const req = $('What was asked for').first().json;
+const WANT = req.count;
 
 const brain = ctx.brain || [];
 if (!brain.length) {
@@ -278,7 +310,7 @@ const user = [
   gaps + (starved.length ? '  <- NOT USED AT ALL THIS WEEK: ' + starved.join(', ') : ''),
   '',
   '## Your job',
-  'Choose EXACTLY ' + ${DRAFTS_PER_DAY} + ' angles for today. They are alternatives Ismail will choose between,',
+  'Choose EXACTLY ' + WANT + ' angle' + (WANT === 1 ? '' : 's') + ' for today. They are alternatives Ismail will choose between,',
   'so they must be genuinely different from each other - different audience, different',
   'bottleneck, or a fundamentally different argument. Three phrasings of one idea is a',
   'failure. So is three posts about data exposure to law firms.',
@@ -297,7 +329,7 @@ const user = [
   'No JSON, no markdown fence, no preamble, no reasoning, no commentary, no',
   'restating of the task. Do not think out loud. Every tag alone at the start',
   'of its line.',
-  'Emit this block ' + ${DRAFTS_PER_DAY} + ' times, once per angle:',
+  'Emit this block ' + WANT + ' time' + (WANT === 1 ? '' : 's') + ', once per angle:',
   '',
   '[ANGLE]',
   '[TYPE] one of: post carousel poll article newsletter featured',
@@ -411,7 +443,16 @@ const day = new Date().toISOString().slice(0, 10);
 
 console.log('[m1] ' + usable.length + ' angles of ' + angles.length + ' blocks');
 
-return usable.slice(0, ${DRAFTS_PER_DAY}).map((a, i) => ({ json: {
+const req = $('What was asked for').first().json;
+// A forced format is a hard filter, not a hint - the free models drift back to
+// 'post' whatever the instruction says.
+const wanted = req.forced_type
+  ? (usable.filter((a) => a.content_type === req.forced_type).length
+      ? usable.filter((a) => a.content_type === req.forced_type)
+      : usable.map((a) => ({ ...a, content_type: req.forced_type })))
+  : usable;
+
+return wanted.slice(0, req.count).map((a, i) => ({ json: {
   ...a,
   bottleneck: BNECKS.includes(a.bottleneck) ? a.bottleneck : 'data_exposure',
   why_now: a.why_now || null,
@@ -750,8 +791,70 @@ const nodes = [
     [-520, -260], { width: 470, height: 760, color: 4 },
   ),
 
-  dailyAt('Daily 7am', 7, [0, 0]),
-  code('Build the news queries', buildQueries, [220, 0]),
+  dailyAt('Daily 7am', 7, [-220, -120]),
+
+  // ---- the Generate button in the Marketing tab -------------------------
+  {
+    parameters: {
+      httpMethod: 'POST',
+      path: 'sanaku-generate',
+      responseMode: 'responseNode',
+      options: {
+        // The dashboard is on a different origin, so the browser preflights.
+        allowedOrigins: 'https://sanaku-command-center.netlify.app',
+      },
+    },
+    id: 'eb000000-0000-4000-8000-000000000001',
+    name: 'Generate now',
+    type: 'n8n-nodes-base.webhook',
+    typeVersion: 2,
+    position: [-220, 160],
+    webhookId: 'eb100000-0000-4000-8000-000000000001',
+  },
+
+  // Authorisation with no shared secret.
+  //
+  // The obvious design - a token baked into the dashboard bundle - is a
+  // password published on the internet. Instead the browser forwards the
+  // caller's own Supabase session, and this asks PostgREST to read
+  // sanaku_staff AS THAT USER. Its only policy is `sanaku_is_staff()`, so a
+  // non-staff session gets an empty array and a logged-out one gets a 401.
+  // RLS is the authorizer; there is nothing here to leak.
+  {
+    parameters: {
+      method: 'GET',
+      // n8n expression syntax, and the same {{ $env.SUPABASE_URL }} placeholder
+      // the installer rewrites to a literal - the droplet's own env var points
+      // at the TCR project, not Sanaku.
+      url: '={{ $env.SUPABASE_URL }}/rest/v1/sanaku_staff?select=user_id&limit=1',
+      sendHeaders: true,
+      headerParameters: {
+        parameters: [
+          { name: 'apikey', value: `={{ $env.SUPABASE_ANON_KEY }}` },
+          { name: 'Authorization', value: `={{ $json.headers.authorization }}` },
+        ],
+      },
+      options: { timeout: 10000 },
+    },
+    id: 'eb200000-0000-4000-8000-000000000001',
+    name: 'Verify the caller is staff',
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
+    position: [0, 160],
+    onError: 'continueRegularOutput',
+    alwaysOutputData: true,
+  },
+
+    // Requires an actual row back. PostgREST returns [] for an authenticated
+  // NON-staff caller, which n8n turns into one empty item - so checking merely
+  // for "no error" would have waved them straight through.
+gate('Staff?', '$json.user_id != null', [220, 160]),
+
+  respond('Refuse', "{ error: 'not authorised' }", [440, 300]),
+  respond('Accepted', "{ accepted: true, queued_for: 'generation' }", [440, 40]),
+
+  code('What was asked for', normalizeRequest, [660, 0]),
+  code('Build the news queries', buildQueries, [880, 0]),
 
   {
     parameters: {
@@ -825,7 +928,18 @@ const nodes = [
 // Strictly linear. The memory branch hangs off the insert so it only records
 // what actually made it into the queue.
 const connections = {
-  'Daily 7am': { main: [to('Build the news queries')] },
+  // Two ways in, one pipeline. Both triggers land on a node that says what was
+  // asked for, so nothing downstream needs to know which one fired.
+  'Daily 7am': { main: [to('What was asked for')] },
+
+  'Generate now': { main: [to('Verify the caller is staff')] },
+  'Verify the caller is staff': { main: [to('Staff?')] },
+  // Answer the browser before generating - a run takes 30-90s and holding the
+  // connection open that long is a worse experience than polling the queue.
+  'Staff?': { main: [to('Accepted'), to('Refuse')] },
+  'Accepted': { main: [to('What was asked for')] },
+  'What was asked for': { main: [to('Build the news queries')] },
+
   'Build the news queries': { main: [to('Fetch headlines')] },
   'Fetch headlines': { main: [to('Read the signals')] },
   'Read the signals': { main: [to('Studio context')] },

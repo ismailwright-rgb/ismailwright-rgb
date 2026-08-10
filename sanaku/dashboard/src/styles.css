@@ -674,3 +674,13 @@ tbody tr:hover { background: var(--line-soft); }
   .mk-meta { white-space: normal; }
   .mk-shots figure { width: 100%; }
 }
+
+/* The Generate bar. Sits above the filters because asking for something is a
+   different intent from browsing what already exists. */
+.mk-make { padding: 14px 16px; }
+.mk-make-head {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.mk-make-head b { font-family: "Fraunces", Georgia, serif; font-size: 15px; }
+.mk-make-head .muted { font-size: 12.5px; }
+.mk-make .seg button:disabled { opacity: .45; cursor: default; }
