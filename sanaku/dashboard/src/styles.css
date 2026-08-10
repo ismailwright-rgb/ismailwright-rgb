@@ -581,3 +581,96 @@ tbody tr:hover { background: var(--line-soft); }
    hierarchy. */
 .rowtitle { color: var(--sub); font-size: 12.5px; }
 .rowcontacts { margin-top: 2px; }
+
+/* ============================================================================
+   Content studio (Marketing tab)
+
+   A working bench, not a feed. Each item is a card you read, fix, approve and
+   export from without leaving it, because the job is done one item at a time.
+   Reuses .card, .pill, .rowbtn, .seg and .controls; only what is genuinely new
+   is defined here.
+   ========================================================================= */
+
+.mk { padding: 0; }
+.mk-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 13px 16px; border-bottom: 1px solid var(--line-soft);
+}
+.mk-head .spacer, .mk-actions .spacer { flex: 1; }
+.mk-title {
+  font-family: "Fraunces", Georgia, serif; font-size: 15.5px; font-weight: 600;
+  color: var(--ink); min-width: 0;
+}
+.mk-meta { font-size: 12.5px; white-space: nowrap; }
+
+.mk-body { padding: 16px; }
+
+/* The copy itself. Model output is newline-structured and must survive as
+   written - this is the text that gets pasted, so what is on screen has to be
+   what lands on LinkedIn. */
+.mk-caption, .mk-question {
+  white-space: pre-wrap; font-size: 14px; line-height: 1.62; color: var(--ink-2);
+  margin: 0 0 12px;
+}
+.mk-question { font-weight: 650; color: var(--ink); }
+.mk-options { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.mk-options li {
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 15px;
+  font-size: 13.5px; color: var(--ink-2); background: var(--bg);
+}
+
+/* Carousel slides read left-to-right, the way they will be swiped. */
+.mk-slides {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(190px, 210px);
+  gap: 10px; overflow-x: auto; padding-bottom: 8px;
+}
+.mk-slide {
+  border: 1px solid var(--line); border-radius: var(--r); padding: 12px;
+  background: var(--bg); display: flex; flex-direction: column; gap: 8px;
+}
+.mk-slide-n { font-size: 11px; font-weight: 700; color: var(--sub); letter-spacing: .04em; }
+.mk-slide p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.mk-slide img { width: 100%; border-radius: var(--r-s); display: block; }
+
+.mk-shots { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.mk-shots figure { margin: 0; width: 190px; }
+.mk-shots img {
+  width: 100%; border-radius: var(--r-s); border: 1px solid var(--line); display: block;
+}
+.mk-shots figcaption {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-top: 6px; font-size: 12px;
+}
+
+.mk-actions {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--bg);
+}
+/* .rowbtn + .rowbtn adds a left margin for inline rows; here gap does it. */
+.mk-actions .rowbtn + .rowbtn { margin-left: 0; }
+.mk-danger { color: var(--alert); }
+.mk-danger:hover { border-color: var(--alert); }
+
+.mk-edit { display: grid; gap: 12px; }
+.mk-edit label { display: grid; gap: 5px; font-size: 12.5px; font-weight: 650; color: var(--sub); }
+.mk-edit input, .mk-edit textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: var(--r-s); background: var(--card); color: var(--ink);
+  font: inherit; font-size: 13.5px; line-height: 1.6;
+}
+.mk-edit textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.mk-edit input:focus, .mk-edit textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* One wash per format, so a week's queue is scannable by shape at a glance. */
+.pill.mk-type-post       { background: var(--accent-wash); color: var(--accent); }
+.pill.mk-type-carousel   { background: var(--calm-wash);   color: var(--calm); }
+.pill.mk-type-poll       { background: var(--signal-wash); color: var(--signal); }
+.pill.mk-type-article    { background: var(--line-soft);   color: var(--ink-2); }
+.pill.mk-type-newsletter { background: var(--line-soft);   color: var(--ink-2); }
+.pill.mk-type-featured   { background: var(--accent);      color: #fff; }
+.pill.mk-type-video      { background: var(--line-soft);   color: var(--sub); }
+
+@media (max-width: 640px) {
+  .mk-meta { white-space: normal; }
+  .mk-shots figure { width: 100%; }
+}

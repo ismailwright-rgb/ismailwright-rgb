@@ -206,6 +206,97 @@ baked in at build time. `netlify.toml` handles the SPA redirect.
 
 ---
 
+## M1 — the LinkedIn content studio (Marketing tab)
+
+A content studio for **Ismail's personal LinkedIn**, not a company page. One
+brand brain feeds every format, so voice and positioning stay identical across
+posts, carousels, polls, articles, newsletter editions and Featured assets.
+
+**It generates and stages. It never publishes.** LinkedIn's API will not
+reliably post polls, carousels or articles to a personal profile, so the last
+step is deliberately a human with a clipboard — and the export is built to make
+that one copy and one upload.
+
+### The pieces
+| Piece | Where |
+|---|---|
+| Generator | `n8n/workflows/m1-content-studio.json` (built by `n8n/build/m1-content-studio.mjs`) |
+| Brand brain | `brand_brain` rows with `channel = 'linkedin'` — seeded by `supabase/seed-brand-brain-linkedin.sql` |
+| Queue | `content_queue`, extended by `supabase/migration-022-marketing-studio.sql` |
+| Approval + export | Marketing tab — `dashboard/src/Marketing.jsx`, `dashboard/src/postpack.js` |
+| Illustrations | Alexya wrapper, `POST /generate-illustration` → Supabase Storage bucket `sanaku-marketing` |
+
+### The positioning lives in Supabase, not in the workflow
+Edit `brand_brain` rows, never the prompt. The seed carries positioning
+("AI that never leaves your building"), voice, the five audiences in priority
+order, the five bottlenecks, format briefs, and two hard guardrails:
+**sell the what and the why, never the how**, and **no invented proof** —
+there is no case study yet, so the generator must not manufacture one.
+
+`channel` scopes a row: `NULL` = applies everywhere, `'linkedin'` = this studio,
+`'email'` = outbound only. That is what lets the outbound rule "don't say AI"
+coexist with a LinkedIn voice whose whole subject is privacy-safe AI.
+
+These rows deliberately have **no embedding**. `match_brand_brain()` is a top-k
+similarity search — right for picking snippets for one lead, wrong here, where
+every item needs the whole brief. Leaving them unembedded also keeps LinkedIn
+voice rules out of cold-email retrieval.
+
+### Weekly rotation
+Sun article (first Sunday of the month: a Featured asset) · Mon post ·
+Tue carousel · Wed post · Thu poll · Fri post · Sat newsletter.
+
+Audience rotates on an 8-slot cycle with personal injury law in every other
+slot; bottleneck cycles independently so pairings vary. Over a year that is
+~156 posts, 52 carousels, 53 polls, 52 newsletters, 40 articles, 12 Featured,
+with PI law at ~50% of items.
+
+### Where to install it — read before importing
+The image step calls the Alexya wrapper on the Mac at `127.0.0.1:8000`, so
+placement decides whether artwork works:
+
+| n8n location | `ALEXYA_URL` |
+|---|---|
+| native on the Mac | `http://127.0.0.1:8000` |
+| in a Docker container | `http://host.docker.internal:8000` |
+| the remote droplet | not reachable — needs a tunnel back to the Mac |
+
+The image call is **non-fatal on purpose**. If Alexya is unreachable the item
+still queues with its text complete. A studio that stops writing because an
+illustrator is offline would be a worse studio.
+
+### Illustration style
+Flat 2D cartoon, bold outlines, flat colour — held by prompt wording alone
+(`FLAT_STYLE_PREFIX` in `sydney_server.py`). Alexya exposes no model or
+checkpoint parameter, so wording plus an optional reference image are the only
+levers; verified live, no reference image needed.
+
+Two scene-wording quirks, found by testing rather than assumed:
+- "empty" is ignored for rooms — say "no people, nobody in frame".
+- "inside the building" renders as *on top of* it — ask for a "cutaway view".
+
+### Posting is copy + upload
+Behind the approval gate every item offers:
+- **Copy text** — the exact wording, markdown stripped, ready to paste. (A poll
+  is labelled QUESTION / OPTIONS because LinkedIn takes those in separate
+  fields and no single blob can be pasted in one go.)
+- **Download post pack** — one zip that unzips to one folder:
+  `caption.txt`, `slides.txt` for carousels, and images named `slide-01`,
+  `slide-02`, … so order survives upload. Named `sanaku_<date>_<theme>.zip`.
+- **Download all approved** — one zip of per-item folders; a week in one go.
+
+Images keep their real `.jpg` extension rather than being renamed `.png`, and
+an image that cannot be fetched is recorded in `MISSING-IMAGES.txt` inside the
+pack rather than silently dropped.
+
+### Not built yet
+- **Video** — Phase 2. `content_kind` has the value; nothing generates it. The
+  Sydney path is the local Alexya reel endpoint.
+- **Auto-posting** — optional later, and only for the one format LinkedIn
+  allows: a basic text/image share via OAuth, as **person**, not organization.
+
+---
+
 ## Legal guardrails — where each one lives in the build
 | Guardrail | Implementation |
 |---|---|

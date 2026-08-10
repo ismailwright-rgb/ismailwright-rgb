@@ -51,6 +51,32 @@ export const schedule = (name, minutes, position) => ({
   id: nid('e1200000'), name, type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position,
 });
 
+/** A once-a-day trigger at a fixed local hour. `schedule` above is minutes-only. */
+export const dailyAt = (name, hour, position) => ({
+  parameters: { rule: { interval: [{ field: 'days', daysInterval: 1, triggerAtHour: hour, triggerAtMinute: 0 }] } },
+  id: nid('e1300000'), name, type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position,
+});
+
+/**
+ * OpenRouter chat completion. The request body is built UPSTREAM in a Code node
+ * and passed through whole, which is how the existing content workflows do it -
+ * it keeps the model id, the system prompt and the temperature in readable
+ * JavaScript instead of buried in node parameters.
+ */
+export const openrouter = (name, position, bodyExpr = '={{ $json.requestBody }}') => ({
+  parameters: {
+    method: 'POST', url: 'https://openrouter.ai/api/v1/chat/completions',
+    authentication: 'genericCredentialType', genericAuthType: 'httpHeaderAuth',
+    sendHeaders: true,
+    headerParameters: { parameters: [{ name: 'content-type', value: 'application/json' }] },
+    sendBody: true, contentType: 'raw', rawContentType: 'application/json',
+    body: bodyExpr,
+    options: { timeout: 120000 },
+  },
+  id: nid('e8000000'), name, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+  position, credentials: OPENROUTER_CRED, ...RETRY,
+});
+
 export const code = (name, jsCode, position, mode = 'runOnceForAllItems') => ({
   parameters: { mode, jsCode },
   id: nid('e2000000'), name, type: 'n8n-nodes-base.code', typeVersion: 2, position,

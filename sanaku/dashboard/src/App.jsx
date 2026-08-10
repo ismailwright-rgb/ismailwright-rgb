@@ -4,6 +4,7 @@ import Login from './Login.jsx';
 import Pipeline from './Pipeline.jsx';
 import Clients from './Clients.jsx';
 import Earnings from './Earnings.jsx';
+import Marketing from './Marketing.jsx';
 import Portal from './Portal.jsx';
 import SetPassword from './SetPassword.jsx';
 
@@ -103,13 +104,19 @@ export default function App() {
           <button className={page === 'earnings' ? 'active' : ''} onClick={() => setPage('earnings')}>
             Earnings
           </button>
+          <button className={page === 'marketing' ? 'active' : ''} onClick={() => setPage('marketing')}>
+            Marketing
+          </button>
         </nav>
         <span className="spacer" />
         <ThemeToggle />
         <button className="signout" onClick={signOut}>Sign out</button>
       </div>
       <div className="page">
-        {page === 'pipeline' ? <Pipeline /> : page === 'clients' ? <Clients onPreview={setPreview} /> : <Earnings />}
+        {page === 'pipeline' ? <Pipeline />
+          : page === 'clients' ? <Clients onPreview={setPreview} />
+          : page === 'marketing' ? <Marketing />
+          : <Earnings />}
       </div>
     </>
   );
