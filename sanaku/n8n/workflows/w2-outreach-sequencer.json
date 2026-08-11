@@ -1,5 +1,5 @@
 {
-  "name": "Sanaku - W2 Outreach Sequencer (email, approval-gated)",
+  "name": "Sanaku - W2 Outreach Drafter (approval gate 1)",
   "nodes": [
     {
       "parameters": {
@@ -39,7 +39,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?status=eq.queued&do_not_contact=is.false&contact_email=not.is.null&select=id,company_name,vertical,contact_name,contact_email,signals,last_contacted&order=intent_score.desc&limit=20",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?status=eq.queued&do_not_contact=is.false&email_verified=is.true&decision_maker=is.true&contact_email=not.is.null&select=id,company_name,vertical,contact_name,contact_email,signals,last_contacted&order=intent_score.desc&limit=20",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -68,7 +68,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?status=eq.contacted&do_not_contact=is.false&contact_email=not.is.null&select=id,company_name,vertical,contact_name,contact_email,signals,last_contacted",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?status=eq.contacted&do_not_contact=is.false&email_verified=is.true&decision_maker=is.true&contact_email=not.is.null&select=id,company_name,vertical,contact_name,contact_email,signals,last_contacted",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -246,7 +246,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Build the OpenRouter request for this touch: evidence-based, one question,\n// loss frame not feature pitch.\nconst p = $input.first().json;\nconst sig = p.signals || {};\nconst evidence = [];\nif (sig.detected && sig.detected.ads) evidence.push('they are running paid ads (' + sig.detected.ads.join(', ') + ')');\nif (!sig.detected || !sig.detected.chat) evidence.push('no chat or intake widget on the site');\nif (!sig.detected || !sig.detected.booking) evidence.push('no online booking tool');\nif (sig.has_contact_form) evidence.push('intake goes to a plain contact form');\nif (sig.answer_language) evidence.push('site promises \"we answer 24/7\"-type availability');\nif (sig.review_count) evidence.push(sig.review_count + ' Google reviews at ' + sig.rating);\n\nconst EXAMPLES = {\n  law_firm: 'Noticed [Firm] is running ads but the intake page goes to a form. Curious - of the calls that come in after 6pm, roughly how many end up signing?',\n  medical: 'Quick one - when someone calls to book and gets voicemail at lunch, does anyone track how many of those call back?',\n  home_services: 'When your techs are on a job and the phone rings, where does that call go? Trying to figure out if that is a real problem for shops your size or if I am overthinking it.',\n  accounting_tax: 'Noticed [Firm] is running ads during tax season but the contact page just goes to a form. Curious - of the calls that hit voicemail in the first two weeks of April, how many end up going with someone else?',\n  therapy: 'Quick one - when a prospective client calls looking for an opening and gets voicemail, does anyone track how many just book with the next practice on Google?',\n  financial_advisory: 'Noticed your firm gets referrals but new-client calls seem to route through a general line. When someone calls to talk about moving their assets and gets voicemail, what happens to that call?',\n  family_office: 'Curious how prospective families reach your office - if a referral calls and does not get a same-day response, do you know if they go elsewhere?',\n};\n\nconst ANGLES = {\n  opener: 'First touch. Reference one specific thing we observed on their website and ask ONE question about leads they might be losing.',\n  follow_up: 'Second touch, 3 days later, they did not reply. Different angle from a generic bump - a new observation or a sharper version of the question. Do NOT say \"just following up\". Still exactly one question.',\n  breakup: 'Third and final touch, day 8. Short breakup note - ask if you should close the file. Two sentences max.',\n};\n\nconst system = 'You write cold outreach emails for Sanaku, a one-person AI automation agency. Rules: under 400 characters. Exactly one question. Never pitch features or mention AI/automation tools. The frame is money lost to missed leads, not what we sell. Sound like a busy person typed it - lowercase-ish, direct, zero fluff. Absolutely never write \"I hope this email finds you well\" or any variant. Output ONLY the email body, no subject, no signature, no quotes.';\n\nconst user = 'Business: ' + p.company_name + ' (' + p.vertical + ')\\n' +\n  'Decision maker: ' + (p.contact_name || 'unknown') + '\\n' +\n  'What we found on their site: ' + (evidence.join('; ') || 'nothing notable') + '\\n' +\n  'Touch type: ' + ANGLES[p.angle] + '\\n' +\n  'Style reference for this vertical (do not copy verbatim): ' + EXAMPLES[p.vertical];\n\nreturn [{ json: { ...p, orBody: {\n  model: $env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free',\n  messages: [ { role: 'system', content: system }, { role: 'user', content: user } ],\n  max_tokens: 220,\n  temperature: 0.8,\n} } }];"
+        "jsCode": "// Build the OpenRouter request for this touch, FROM THE BRAND BRAIN.\n//\n// The voice used to live here, hardcoded: a system string plus a per-vertical\n// example line, editable only by opening this node inside a workflow JSON. It\n// now comes from brand_brain rows tagged channel='email', so the copy is\n// versioned with the brand and changing it is a row edit, not a redeploy.\nconst p = $input.first().json;\n\n// --- the brief -------------------------------------------------------------\nconst brain = $('Read the brand brain').all().map((i) => i.json)\n  .filter((r) => r && r.kind && r.content);\nif (!brain.length) {\n  throw new Error('brand_brain returned no email rows - refusing to write off-brief. Check seed-brand-brain-outreach.sql ran.');\n}\n\n// sanaku_prospects.vertical is TEXT and says 'law_firm'. brand_brain.vertical\n// is the enum public.vertical and says 'personal_injury_law'. Same audience,\n// two spellings - the divergence flagged in migration 022. Without this map a\n// law firm silently gets no ICP section and the email is written blind.\nconst BRAIN_VERTICAL = {\n  law_firm: 'personal_injury_law',\n  accounting_tax: 'accounting_tax',\n  therapy: 'therapy',\n  financial_advisory: 'financial_advisory',\n  family_office: 'family_office',\n};\nconst bv = BRAIN_VERTICAL[p.vertical] || null;\n\nconst section = (kinds, vertical) => brain\n  .filter((r) => kinds.includes(r.kind))\n  .filter((r) => vertical === undefined || !r.vertical || r.vertical === vertical)\n  .map((r) => '### ' + r.title + '\\n' + r.content)\n  .join('\\n\\n');\n\nconst rules = section(['rule']);\nconst voice = section(['voice', 'brand_voice']);\nconst positioning = section(['offer']);\nconst icp = section(['icp'], bv);\n\nif (!icp) {\n  // Loud, not silent. An email written with no idea who it is going to is\n  // worse than no email, and this is the failure the vertical map exists to\n  // prevent - so it must not degrade quietly if a new vertical appears.\n  throw new Error('no ICP row for vertical ' + p.vertical + ' (mapped to ' + bv + '). Add one to brand_brain before contacting this vertical.');\n}\n\n// --- what we actually observed about this firm -----------------------------\nconst sig = p.signals || {};\nconst evidence = [];\nif (sig.detected && sig.detected.ads) evidence.push('they are running paid ads');\nif (!sig.detected || !sig.detected.chat) evidence.push('no chat or intake widget on the site');\nif (!sig.detected || !sig.detected.booking) evidence.push('no online booking');\nif (sig.has_contact_form) evidence.push('intake goes to a plain contact form');\nif (sig.review_count) evidence.push(sig.review_count + ' Google reviews at ' + sig.rating);\n\nconst ANGLES = {\n  opener: 'TOUCH 1, the opener.',\n  follow_up: 'TOUCH 2, day 3, no reply. A different angle - not a nudge.',\n  breakup: 'TOUCH 3, day 8, the breakup. Two or three sentences.',\n};\n\nconst first = (p.first_name || (p.contact_name || '').split(' ')[0] || '').trim();\n\nconst system = [\n  'You write cold outreach email for Ismail Rogers-Wright, who builds AI systems that run inside a firm\\'s own building.',\n  'You are writing ONE email. Return it exactly as specified at the end - nothing else.',\n  '',\n  '## Positioning', positioning,\n  '', '## How this brand talks', voice,\n  '', '## Rules - these bind you absolutely', rules,\n  '', '## Who you are writing to', icp,\n].join('\\n');\n\nconst user = [\n  'Firm: ' + p.company_name,\n  'Reader: ' + (p.contact_name || 'unknown') + (p.contact_title ? ' (' + p.contact_title + ')' : ''),\n  first ? 'Greet them as: ' + first : 'No first name known - do not invent one, open without a salutation.',\n  'Vertical: ' + p.vertical,\n  evidence.length ? 'What we observed on their site: ' + evidence.join('; ') : '',\n  '',\n  ANGLES[p.angle] || ANGLES.opener,\n  '',\n  'Return EXACTLY this, no preamble and no commentary:',\n  'SUBJECT: <the subject line on one line>',\n  'BODY:',\n  '<the email body, plain text, as many paragraphs as it needs>',\n].filter(Boolean).join('\\n');\n\n// Same rotating free pool the content studio uses, for the same reason: the\n// free tier throttles constantly and a single model is not schedulable.\nconst __env = (k) => (typeof $env !== 'undefined' && $env[k]) ? $env[k] : null;\nconst __pinned = __env('OPENROUTER_MODEL');\nconst __pool = (__env('OPENROUTER_MODELS') || '').split(',').map((x) => x.trim()).filter(Boolean);\nconst __models = __pool.length ? __pool : ['google/gemma-4-26b-a4b-it:free', 'google/gemma-4-31b-it:free'];\nconst __ordered = __pinned ? [__pinned].concat(__models.filter((m) => m !== __pinned)) : __models;\nconst __trio = __ordered.filter((m, i) => __ordered.indexOf(m) === i).slice(0, 3);\n\nreturn [{ json: { ...p, orBody: {\n  model: __trio[0],\n  models: __trio,\n  messages: [{ role: 'system', content: system }, { role: 'user', content: user }],\n  max_tokens: 600,\n  temperature: 0.75,\n} } }];\n"
       },
       "id": "f2000000-0000-4000-8000-000000000009",
       "name": "Build Prompt",
@@ -293,7 +293,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Validate the LLM output; fall back to the hand-written bank if it broke a rule.\nconst p = $('Build Prompt').first().json;\nconst resp = $input.first().json || {};\nlet body = '';\ntry { body = String(resp.choices[0].message.content || '').trim(); } catch (e) { body = ''; }\nbody = body.replace(/^[\"']|[\"']$/g, '').trim();\n\nconst FALLBACK = {\n  law_firm: {\n    1: 'Noticed ' + p.company_name + ' is running ads but the intake page goes to a form. Curious - of the calls that come in after 6pm, roughly how many end up signing?',\n    2: 'One more thought - when an accident victim calls three firms in a row, whoever answers first usually wins the case. Do you know how fast your intake responds after hours?',\n    3: 'Have not heard back so I will assume missed intake calls are not a priority right now - should I close the file?',\n  },\n  medical: {\n    1: 'Quick one - when someone calls to book and gets voicemail at lunch, does anyone track how many of those call back?',\n    2: 'Was thinking about your front desk - what happens to booking calls that come in after close? Do they land anywhere?',\n    3: 'No worries if the timing is off - should I close the file on this?',\n  },\n  home_services: {\n    1: 'When your techs are on a job and the phone rings, where does that call go? Trying to figure out if that is a real problem for shops your size or if I am overthinking it.',\n    2: 'Curious what an emergency call that hits voicemail is worth to you - the ones that call the next shop when nobody picks up.',\n    3: 'Guessing missed calls are not a burning issue right now - want me to close the file?',\n  },\n  accounting_tax: {\n    1: 'Noticed ' + p.company_name + ' is running ads during tax season but the contact page just goes to a form. Curious - of the calls that hit voicemail in the first two weeks of April, how many end up going with someone else?',\n    2: 'One more thought - clients shopping for a new accountant in busy season are usually calling two or three firms same week. Do you know how fast your intake responds after hours?',\n    3: 'Have not heard back so I will assume missed intake calls are not a priority right now - should I close the file?',\n  },\n  therapy: {\n    1: 'Quick one - when a prospective client calls looking for an opening and gets voicemail, does anyone track how many just book with the next practice on Google?',\n    2: 'Was thinking about your intake line - what happens to a client inquiry that comes in after hours? Does it land anywhere, or just sit?',\n    3: 'No worries if the timing is off - should I close the file on this?',\n  },\n  financial_advisory: {\n    1: 'Noticed your firm gets referrals but new-client calls seem to route through a general line. When someone calls to talk about moving their assets and gets voicemail, what happens to that call?',\n    2: 'One more thought - a prospect who does not hear back quickly usually assumes you are too busy for their account and calls someone else. Do you track how often that happens?',\n    3: 'Have not heard back so I will assume this is not a priority right now - should I close the file?',\n  },\n  family_office: {\n    1: 'Curious how prospective families reach your office - if a referral calls and does not get a same-day response, do you know if they go elsewhere?',\n    2: 'One more thought - referrals to a family office are rare and high-trust. A slow response reads as a signal about how the relationship would be run. Worth knowing how fast yours responds?',\n    3: 'Have not heard back so I will assume this is not a priority right now - should I close the file?',\n  },\n};\n\nconst invalid = !body || body.length > 400 || !body.includes('?') || /hope this (e-?mail )?finds you/i.test(body);\nif (invalid) body = FALLBACK[p.vertical][p.step];\n\nconst first = (p.contact_name || '').split(' ')[0];\nconst greeting = first ? first + ' - ' : '';\nconst footer = '\\n\\n-\\nIsmail | Sanaku\\n' + ($env.SANAKU_MAILING_ADDRESS || '') + \"\\nIf you'd rather not hear from me, reply 'no thanks' and I'll close the file for good.\";\n\nconst SUBJECTS = { 1: 'quick question about ' + p.company_name, 2: 're: quick question about ' + p.company_name, 3: 'closing the file?' };\n\nreturn [{ json: {\n  ...p,\n  email_subject: SUBJECTS[p.step],\n  email_body: greeting + body + footer,\n  message_logged: body,\n  used_fallback: invalid,\n} }];"
+        "jsCode": "// Parse the model's reply into a subject and a body, and hold it for review.\n//\n// SUBJECT:/BODY: rather than JSON, for the reason the content studio learned\n// the hard way: a free-tier model writing multi-paragraph prose inside a JSON\n// string gets the newline escaping wrong and the whole draft is lost. Two\n// labelled lines need no escaping at all.\nconst p = $('Build Prompt').first().json;\nconst res = $input.first().json;\n\nconst raw = res && res.choices && res.choices[0] && res.choices[0].message\n  ? res.choices[0].message.content : null;\nif (!raw) {\n  const e = res && res.error;\n  throw new Error(e ? ('model error: ' + String(e.message || JSON.stringify(e)).slice(0, 160))\n                    : 'model returned no content');\n}\n\n// Reasoning models put their working first; ignore anything before SUBJECT:.\nlet text = String(raw).replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n\nconst sm = text.match(/^\\s*SUBJECT:\\s*(.+)$/mi);\nif (!sm) throw new Error('draft has no SUBJECT: line - got: ' + text.slice(0, 200));\n\n// BODY: is optional. Models reliably label the subject and then just start\n// writing, which is the natural thing to do and not worth rejecting a good\n// draft over - so everything after the subject line is the body unless a\n// BODY: label says otherwise. The subject is the only part that genuinely\n// needs a delimiter, because it has to be lifted out of the prose.\nconst bm = text.match(/^\\s*BODY:\\s*\\n?([\\s\\S]+)$/mi);\nlet subject = sm[1].trim().replace(/^[\"'\u201c]|[\"'\u201d]$/g, '').trim();\nlet body = (bm ? bm[1] : text.slice(sm.index + sm[0].length)).trim();\nif (!body) throw new Error('draft has a subject but no body');\n\n// Guardrails the brief states but a model still breaks. Caught here rather\n// than in review, because a human skimming forty drafts will miss them.\nconst problems = [];\nif (!subject) problems.push('empty subject');\nif (subject.length > 90) problems.push('subject over 90 chars');\nif (/\\bre:\\s/i.test(subject)) problems.push('fake \"Re:\" in subject');\nif (/(free|guarantee|act now|limited time|urgent|unlock|boost|10x|ROI)/i.test(subject)) {\n  problems.push('spam-trigger word in subject');\n}\nif (/hope (this|you)\\s|just following up|quick question/i.test(body)) {\n  problems.push('banned opener phrase in body');\n}\nconst words = body.split(/\\s+/).filter(Boolean).length;\nif (words > 220) problems.push('body ' + words + ' words, over the 130-word brief');\nconst asks = (body.match(/\\?/g) || []).length;\nif (asks > 1) problems.push(asks + ' questions - the brief allows exactly one');\n\nreturn [{ json: {\n  id: p.id,\n  company_name: p.company_name,\n  contact_email: p.contact_email,\n  contact_name: p.contact_name,\n  vertical: p.vertical,\n  step: p.step,\n  angle: p.angle,\n  draft_subject: subject,\n  draft_body: body,\n  draft_model: (res.model || null),\n  draft_words: words,\n  draft_problems: problems,\n} }];\n"
       },
       "id": "f2000000-0000-4000-8000-000000000011",
       "name": "Finalize Message",
@@ -303,171 +303,6 @@
         2100,
         560
       ]
-    },
-    {
-      "parameters": {
-        "sendTo": "={{ $json.contact_email }}",
-        "subject": "={{ $json.email_subject }}",
-        "emailType": "text",
-        "message": "={{ $json.email_body }}",
-        "options": {}
-      },
-      "id": "f2000000-0000-4000-8000-000000000012",
-      "name": "Send Email",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.1,
-      "position": [
-        2320,
-        560
-      ],
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "gmail-oauth2",
-          "name": "Gmail Account"
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000,
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, prospect_id: $('Finalize Message').first().json.id, error: 'email send failed: ' + String(($json.error && $json.error.message) || 'unknown').slice(0, 1000) }) }}",
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "id": "f2000000-0000-4000-8000-000000000013",
-      "name": "Log Send Error",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2540,
-        760
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabase-header-auth",
-          "name": "Supabase Service Role (Header Auth)"
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000,
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_conversations",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ prospect_id: $('Finalize Message').first().json.id, channel: 'email', direction: 'outbound', body: $('Finalize Message').first().json.message_logged, sequence_step: $('Finalize Message').first().json.step }) }}",
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "id": "f2000000-0000-4000-8000-000000000014",
-      "name": "Log Conversation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2540,
-        560
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabase-header-auth",
-          "name": "Supabase Service Role (Header Auth)"
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000,
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "method": "PATCH",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?id=eq.{{ $('Finalize Message').first().json.id }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ status: 'contacted', last_contacted: new Date().toISOString() }) }}",
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "id": "f2000000-0000-4000-8000-000000000015",
-      "name": "Update Prospect",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2760,
-        560
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabase-header-auth",
-          "name": "Supabase Service Role (Header Auth)"
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000,
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "amount": 15,
-        "unit": "seconds"
-      },
-      "id": "f2000000-0000-4000-8000-000000000016",
-      "name": "Pace Sends",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "position": [
-        2980,
-        560
-      ],
-      "webhookId": "f2000000-0000-4000-8000-000000000301"
     },
     {
       "parameters": {
@@ -503,6 +338,89 @@
         "gmailOAuth2": {
           "id": "gmail-oauth2",
           "name": "Gmail Account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/brand_brain?select=kind,title,content,vertical&channel=eq.email&status=in.(proven,testing)&order=kind.asc",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "ec000000-0000-4000-8000-000000000001",
+      "name": "Read the brand brain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        740
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The first gate closes here. The draft is written onto the prospect and the\n// workflow stops - no send node exists on this path at all, which is a stronger\n// guarantee than a disabled one.\nconst d = $input.first().json;\nconst body = {\n  draft_subject: d.draft_subject,\n  draft_body: d.draft_body,\n  draft_step: d.step,\n  draft_angle: d.angle,\n  draft_model: d.draft_model,\n  draft_generated_at: new Date().toISOString(),\n  draft_edited: false,\n  status: 'draft_review',\n};\n// Anything the guardrails flagged rides along in notes so it is visible in the\n// dashboard next to the text, rather than only in an execution log nobody opens.\nif (d.draft_problems && d.draft_problems.length) {\n  body.notes = 'DRAFT WARNINGS: ' + d.draft_problems.join('; ');\n}\nreturn [{ json: { id: d.id, body } }];\n"
+      },
+      "id": "ec100000-0000-4000-8000-000000000001",
+      "name": "Build Draft Patch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?id=eq.{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "ec200000-0000-4000-8000-000000000002",
+      "name": "Save Draft For Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2540,
+        560
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
         }
       },
       "retryOnFail": true,
@@ -548,7 +466,7 @@
       "main": [
         [
           {
-            "node": "Plan Touches",
+            "node": "Read the brand brain",
             "type": "main",
             "index": 0
           }
@@ -639,69 +557,7 @@
       "main": [
         [
           {
-            "node": "Send Email",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send Email": {
-      "main": [
-        [
-          {
-            "node": "Log Conversation",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Log Send Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Log Send Error": {
-      "main": [
-        [
-          {
-            "node": "Per Touch",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Log Conversation": {
-      "main": [
-        [
-          {
-            "node": "Update Prospect",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Prospect": {
-      "main": [
-        [
-          {
-            "node": "Pace Sends",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Pace Sends": {
-      "main": [
-        [
-          {
-            "node": "Per Touch",
+            "node": "Build Draft Patch",
             "type": "main",
             "index": 0
           }
@@ -713,6 +569,39 @@
         [
           {
             "node": "Send Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the brand brain": {
+      "main": [
+        [
+          {
+            "node": "Plan Touches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Draft Patch": {
+      "main": [
+        [
+          {
+            "node": "Save Draft For Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Draft For Review": {
+      "main": [
+        [
+          {
+            "node": "Per Touch",
             "type": "main",
             "index": 0
           }
