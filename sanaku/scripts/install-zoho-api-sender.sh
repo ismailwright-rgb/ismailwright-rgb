@@ -42,7 +42,9 @@ CLIENT_SECRET="${2:-}"
 CODE="${3:-}"
 
 if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ] || [ -z "$CODE" ]; then
-  sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
+  # Print the header comment and stop at the first line of actual code, rather
+  # than a hardcoded line number that goes stale the moment the header is edited.
+  awk 'NR==1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"
   exit 2
 fi
 
