@@ -5,6 +5,7 @@ import Pipeline from './Pipeline.jsx';
 import Clients from './Clients.jsx';
 import Earnings from './Earnings.jsx';
 import Marketing from './Marketing.jsx';
+import OutreachDrafts from './OutreachDrafts.jsx';
 import Portal from './Portal.jsx';
 import SetPassword from './SetPassword.jsx';
 
@@ -104,6 +105,9 @@ export default function App() {
           <button className={page === 'earnings' ? 'active' : ''} onClick={() => setPage('earnings')}>
             Earnings
           </button>
+          <button className={page === 'outreach' ? 'active' : ''} onClick={() => setPage('outreach')}>
+            Outreach
+          </button>
           <button className={page === 'marketing' ? 'active' : ''} onClick={() => setPage('marketing')}>
             Marketing
           </button>
@@ -115,6 +119,7 @@ export default function App() {
       <div className="page">
         {page === 'pipeline' ? <Pipeline />
           : page === 'clients' ? <Clients onPreview={setPreview} />
+          : page === 'outreach' ? <OutreachDrafts />
           : page === 'marketing' ? <Marketing />
           : <Earnings />}
       </div>

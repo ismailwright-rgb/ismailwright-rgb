@@ -1,0 +1,709 @@
+{
+  "name": "Sanaku - W2s Send Approved (gate 2)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## W2s — send approved drafts\n\n**Nothing sends unless `SANAKU_SEND_ENABLED` is exactly `true`.**\nUnset, `TRUE`, `1` and `yes` all mean off, so a misconfiguration fails safe.\n\n### Three brakes\n1. the global switch\n2. the daily ramp — `sanaku_claim_send_slot()` claims atomically, so two runs cannot both take the last slot\n3. the recipient gate — approved **and** verified **and** a decision maker\n\n### Turning it on\nSet `SANAKU_SEND_ENABLED=true` in the n8n environment and restart n8n.\nRaise the ramp by editing `cap` in `sanaku_send_budget` for today —\nstart at 15/day and climb over weeks, never in one jump.\n\nOne message per run, every 30 min, 08:00–17:00 PT weekdays only.",
+        "height": 520,
+        "width": 440,
+        "color": 3
+      },
+      "id": "e0000000-0000-4000-8000-000000000001",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "ed100000-0000-4000-8000-000000000001",
+      "name": "Every 30 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The global brake. Exact string match, deliberately.\nconst raw = (typeof $env !== 'undefined' && $env.SANAKU_SEND_ENABLED) || '';\nconst enabled = raw === 'true';\n\n// Business hours in the recipient's timezone, not the server's. A cold email\n// timestamped 03:40 reads as machinery no matter how well it is written.\nconst hour = Number(new Date().toLocaleString('en-US', {\n  timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false,\n}));\nconst day = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles', weekday: 'short' });\nconst inHours = hour >= 8 && hour < 17 && !['Sat', 'Sun'].includes(day);\n\nif (!enabled) console.log('[w2s] SANAKU_SEND_ENABLED is ' + JSON.stringify(raw) + ' - nothing will send');\nelse if (!inHours) console.log('[w2s] outside 08:00-17:00 PT Mon-Fri (' + day + ' ' + hour + ':00) - holding');\n\nreturn [{ json: { proceed: enabled && inHours, enabled, inHours, hour, day } }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000002",
+      "name": "Send Enabled?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $json.proceed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e3000000-0000-4000-8000-000000000003",
+      "name": "Proceed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sanaku-send-now",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://sanaku-command-center.netlify.app"
+        }
+      },
+      "id": "ed300000-0000-4000-8000-000000000001",
+      "name": "Send Now",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        160
+      ],
+      "webhookId": "ed310000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_staff?select=user_id&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ $json.headers.authorization }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "ed400000-0000-4000-8000-000000000001",
+      "name": "Verify Staff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        160
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $json.user_id != null }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e3000000-0000-4000-8000-000000000004",
+      "name": "Staff?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: 'not authorised' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e7000000-0000-4000-8000-000000000005",
+      "name": "Refuse Send",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ accepted: true }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e7000000-0000-4000-8000-000000000006",
+      "name": "Send Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The one prospect the button was clicked for.\nconst body = $('Send Now').first().json.body || {};\nconst id = String(body.prospect_id || '').trim();\nif (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('send-now called without a valid prospect_id');\nreturn [{ json: { prospect_id: id } }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000007",
+      "name": "Requested Prospect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?status=eq.approved&email_verified=is.true&decision_maker=is.true&do_not_contact=is.false&contact_email=not.is.null&draft_body=not.is.null&select=id,company_name,contact_name,contact_email,vertical,status,email_verified,decision_maker,do_not_contact,draft_subject,draft_body,draft_step&order=draft_generated_at.asc&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e4000000-0000-4000-8000-000000000008",
+      "name": "Get Approved Drafts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?id=eq.{{ $json.prospect_id }}&email_verified=is.true&decision_maker=is.true&do_not_contact=is.false&contact_email=not.is.null&draft_body=not.is.null&status=in.(approved,draft_review)&select=id,company_name,contact_name,contact_email,vertical,status,email_verified,decision_maker,do_not_contact,draft_subject,draft_body,draft_step",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e4000000-0000-4000-8000-000000000009",
+      "name": "Get That Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        160
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// One approved draft per run, oldest first.\n//\n// One, not a batch: each send has to claim its own slot, and a batch that\n// claims fifteen slots and then fails on the third has already spent them.\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.id);\nif (!rows.length) {\n  console.log('[w2s] nothing approved is waiting');\n  return [];\n}\nconst p = rows[0];\n\n// Belt and braces. The query already filters on all of these, but this is the\n// last place before an email leaves, and the cost of being wrong here is a\n// stranger receiving mail they never should have.\nconst problems = [];\nif (!p.email_verified) problems.push('email not verified');\nif (!p.decision_maker) problems.push('not a decision maker');\nif (p.do_not_contact) problems.push('on the do-not-contact list');\nif (!p.contact_email) problems.push('no address');\nif (!p.draft_subject || !p.draft_body) problems.push('no approved draft on the record');\n// A button click approves and sends in one action, so draft_review is\n// acceptable on that path; the scheduled path only ever queries 'approved'.\nif (!['approved', 'draft_review'].includes(p.status)) problems.push('status is ' + p.status);\nif (problems.length) throw new Error('refusing to send to ' + p.company_name + ': ' + problems.join('; '));\n\nconsole.log('[w2s] candidate: ' + p.company_name + ' step ' + (p.draft_step || 1));\nreturn [{ json: p }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000010",
+      "name": "Pick One Approved",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/sanaku_claim_send_slot",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e5000000-0000-4000-8000-000000000011",
+      "name": "Claim A Send Slot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        0
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Assemble the message. The body is what Ismail approved, verbatim - this\n// step adds only the footer, which is a legal requirement rather than copy.\nconst p = $('Pick One Approved').first().json;\nconst claimed = $input.first().json;\n\n// The RPC returns a bare JSON boolean; PostgREST hands it back as the item\n// body, which n8n presents differently depending on version.\nconst ok = claimed === true || claimed?.data === true\n  || (Array.isArray(claimed) && claimed[0] === true)\n  || claimed?.sanaku_claim_send_slot === true;\nif (!ok) {\n  console.log('[w2s] daily send cap reached - stopping');\n  return [];\n}\n\nconst FROM_NAME = 'Ismail Rogers-Wright';\nconst FROM = (typeof $env !== 'undefined' && $env.ZOHO_FROM) || 'ismail@sanakuai.com';\n\n// CAN-SPAM: a real identity, a physical address, and a working opt-out on\n// every message. The address comes from the same env var the outbound guard\n// uses, so there is one place to change it.\nconst ADDRESS = (typeof $env !== 'undefined' && $env.SANAKU_MAILING_ADDRESS)\n  || 'Sanaku, Los Angeles County, CA';\n\nconst footer = [\n  '',\n  '--',\n  FROM_NAME,\n  'Sanaku · ' + FROM,\n  ADDRESS,\n  '',\n  'Reply STOP or say the word and I will not write again.',\n].join('\\n');\n\nreturn [{ json: {\n  id: p.id,\n  to: p.contact_email,\n  from: FROM,\n  fromName: FROM_NAME,\n  subject: p.draft_subject,\n  text: String(p.draft_body).trim() + '\\n' + footer,\n  step: p.draft_step || 1,\n  company_name: p.company_name,\n} }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000012",
+      "name": "Build The Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.fromName }} <{{ $json.from }}>",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {}
+      },
+      "id": "ed200000-0000-4000-8000-000000000001",
+      "name": "Send via Zoho",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        0
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "PLACEHOLDER_SMTP",
+          "name": "Zoho SMTP (sanakuai.com)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Record what went out, and clear the draft so the record cannot be\n// re-approved and re-sent by accident.\nconst e = $('Build The Email').first().json;\nreturn [{ json: {\n  id: e.id,\n  conversation: {\n    prospect_id: e.id,\n    direction: 'outbound',\n    channel: 'email',\n    subject: e.subject,\n    body: e.text,\n    sequence_step: e.step,\n    sent_at: new Date().toISOString(),\n  },\n  prospect: {\n    status: 'contacted',\n    last_contacted: new Date().toISOString(),\n    last_activity_at: new Date().toISOString(),\n    draft_subject: null,\n    draft_body: null,\n    draft_step: null,\n    draft_angle: null,\n    draft_generated_at: null,\n  },\n} }];"
+      },
+      "id": "e2000000-0000-4000-8000-000000000013",
+      "name": "Record The Send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_conversations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.conversation) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e5000000-0000-4000-8000-000000000014",
+      "name": "Log Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        -80
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?id=eq.{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.prospect) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e5000000-0000-4000-8000-000000000015",
+      "name": "Mark Contacted",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        -80
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $workflow.name, error: $json.error?.message || \"zoho send failed\", payload: JSON.stringify({ prospect_id: $(\"Build The Email\").first().json.id, to: $(\"Build The Email\").first().json.to }) }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e5000000-0000-4000-8000-000000000016",
+      "name": "Log Send Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        140
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "supabase-custom-auth",
+          "name": "Supabase Service Role (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Every 30 min": {
+      "main": [
+        [
+          {
+            "node": "Send Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Proceed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proceed?": {
+      "main": [
+        [
+          {
+            "node": "Get Approved Drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Approved Drafts": {
+      "main": [
+        [
+          {
+            "node": "Pick One Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick One Approved": {
+      "main": [
+        [
+          {
+            "node": "Claim A Send Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Now": {
+      "main": [
+        [
+          {
+            "node": "Verify Staff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Staff": {
+      "main": [
+        [
+          {
+            "node": "Staff?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Staff?": {
+      "main": [
+        [
+          {
+            "node": "Send Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refuse Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Accepted": {
+      "main": [
+        [
+          {
+            "node": "Requested Prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requested Prospect": {
+      "main": [
+        [
+          {
+            "node": "Get That Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get That Draft": {
+      "main": [
+        [
+          {
+            "node": "Pick One Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim A Send Slot": {
+      "main": [
+        [
+          {
+            "node": "Build The Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build The Email": {
+      "main": [
+        [
+          {
+            "node": "Send via Zoho",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via Zoho": {
+      "main": [
+        [
+          {
+            "node": "Record The Send",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Send Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record The Send": {
+      "main": [
+        [
+          {
+            "node": "Log Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Conversation": {
+      "main": [
+        [
+          {
+            "node": "Mark Contacted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles"
+  },
+  "pinData": {},
+  "meta": {}
+}
