@@ -706,3 +706,21 @@ tbody tr:hover { background: var(--line-soft); }
 .ob-switch .muted { font-size: 12.5px; margin-top: 2px; max-width: 62ch; }
 .ob-switch.on { border-left: 3px solid var(--accent); }
 .ob-switch.off { border-left: 3px solid var(--sub); }
+
+/* An alarm the eye cannot skip. The 2026-08-11 outage was invisible because a
+   broken sender rendered identically to an idle one - muted text in a normal
+   card. This deliberately breaks the page's rhythm. */
+.ob-alarm {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border-left: 4px solid var(--danger, #d64545);
+  background: color-mix(in srgb, var(--danger, #d64545) 8%, transparent);
+}
+.ob-alarm b { color: var(--danger, #d64545); }
+.ob-alarm code {
+  font-size: .85em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}

@@ -23,9 +23,28 @@
 //    approved as a prospect, then had its draft read and approved, and hold an
 //    address Apollo confirmed, before a single byte leaves.
 //
-// Sending is from ismail@sanakuai.com over Zoho SMTP on 587/STARTTLS. Plain
-// text only - a cold message from a new domain that arrives looking like a
-// newsletter gets filtered like one.
+// Sending is from ismail@sanakuai.com over the Zoho Mail REST API on 443.
+// Plain text only - a cold message from a new domain that arrives looking like
+// a newsletter gets filtered like one.
+//
+// ---------------------------------------------------------------------------
+// Why HTTPS and not SMTP (2026-08-11)
+// ---------------------------------------------------------------------------
+// This used to be an SMTP node on smtppro.zoho.com:587. It never delivered a
+// single message. Every attempt ended in a TCP connection timeout at exactly
+// 120s - the droplet cannot open an outbound SMTP connection at all, while
+// reaching Zoho IMAP on 993 from the same host works fine. A timeout rather
+// than a refusal means the packets are dropped upstream: a network-level block
+// on outbound SMTP, which is standard on DigitalOcean droplets.
+//
+// Port 443 is not blocked - every other workflow talks to Supabase and
+// OpenRouter over it continuously. So the mail goes out the same way.
+//
+// Two further benefits worth stating, because they were the original
+// complaint. The API writes the message into the Sent folder, so sent mail is
+// visible in the mailbox - SMTP submission never does this, and would not have
+// even if the port were open. And it returns a message id, so a send that
+// fails now fails loudly instead of resolving to an empty item.
 import { writeFileSync } from 'node:fs';
 import { code, gate, respond, supaGet, supaWrite, logError, sticky, to, workflow, RETRY } from './lib.mjs';
 
@@ -143,6 +162,22 @@ return [{ json: {
   company_name: p.company_name,
 } }];`;
 
+const confirmDelivered = `// Zoho returns HTTP 200 for "I received your request", and reports the actual
+// outcome inside the body as status.code. Treating the HTTP status as proof of
+// delivery is exactly the mistake that let twelve timeouts read as twelve sends,
+// so this asserts on the payload and throws if it is not a real send.
+const r = $input.first().json || {};
+const code = r?.status?.code;
+const messageId = r?.data?.messageId;
+
+if (code !== 200 || !messageId) {
+  throw new Error('zoho api did not confirm the send: '
+    + JSON.stringify({ code, description: r?.status?.description, messageId }).slice(0, 300));
+}
+
+console.log('[w2s] delivered, zoho messageId ' + messageId);
+return [{ json: { messageId } }];`;
+
 const afterSend = `// Record what went out, and clear the draft so the record cannot be
 // re-approved and re-sent by accident.
 const e = $('Build The Email').first().json;
@@ -166,6 +201,11 @@ return [{ json: {
     draft_step: null,
     draft_angle: null,
     draft_generated_at: null,
+    // A success wipes the failure history, so three failures spread over three
+    // weeks never accumulate into a block.
+    send_failures: 0,
+    send_failed_at: null,
+    send_last_error: null,
   },
 } }];`;
 
@@ -183,7 +223,12 @@ const nodes = [
     + 'Outreach tab → the sending toggle. Takes effect on the next run, ≤30 min.\n'
     + 'Raise the ramp by editing `cap` in `sanaku_send_budget` for today —\n'
     + 'start at 15/day and climb over weeks, never in one jump.\n\n'
-    + 'One message per run, every 30 min, 08:00–17:00 PT weekdays only.',
+    + 'One message per run, every 30 min, 08:00–17:00 PT weekdays only.\n\n'
+    + '### Sending goes over HTTPS, not SMTP\n'
+    + 'The droplet cannot reach `:587` at all — outbound SMTP is blocked and every\n'
+    + 'attempt times out at 120s. Mail goes out through the **Zoho Mail REST API**\n'
+    + 'on 443 instead, which also puts a copy in the Sent folder.\n'
+    + 'Needs the `Zoho Mail OAuth (sanakuai.com)` credential.',
     [-460, -120], { width: 440, height: 520, color: 3 },
   ),
 
@@ -241,7 +286,12 @@ const nodes = [
     + '&contact_email=not.is.null'
     + '&draft_body=not.is.null'
     + '&select=id,company_name,contact_name,contact_email,vertical,status,email_verified,decision_maker,do_not_contact,draft_subject,draft_body,draft_step'
-    + '&order=draft_generated_at.asc&limit=1',
+    // send_failed_at FIRST, nulls first. On 2026-08-11 the sender retried one
+    // unreachable address twelve times in a row and burned the whole day's cap
+    // on it, because the only ordering was by draft age and a failure left no
+    // trace on the row. A prospect that has never failed now always goes ahead
+    // of one that has, and migration-027 parks anything that fails three times.
+    + '&order=send_failed_at.asc.nullsfirst,draft_generated_at.asc&limit=1',
     [660, 0],
   ),
 
@@ -267,25 +317,85 @@ const nodes = [
 
   code('Build The Email', buildEmail, [1320, 0]),
 
+  // Zoho access tokens live one hour, so one is minted per send rather than
+  // stored. The refresh token, client id and client secret live in an n8n
+  // credential (encrypted at rest) which injects them as query parameters -
+  // they must never appear in the workflow JSON, which is committed to git.
   {
     parameters: {
-      fromEmail: '={{ $json.fromName }} <{{ $json.from }}>',
-      toEmail: '={{ $json.to }}',
-      subject: '={{ $json.subject }}',
-      emailFormat: 'text',
-      text: '={{ $json.text }}',
-      options: {},
+      method: 'POST',
+      url: 'https://accounts.zoho.com/oauth/v2/token',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      options: { timeout: 20000 },
     },
-    id: 'ed200000-0000-4000-8000-000000000001',
-    name: 'Send via Zoho',
-    type: 'n8n-nodes-base.emailSend',
-    typeVersion: 2.1,
+    id: 'ed200000-0000-4000-8000-000000000003',
+    name: 'Get Zoho Token',
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
     position: [1540, 0],
-    credentials: { smtp: { id: 'PLACEHOLDER_SMTP', name: 'Zoho SMTP (sanakuai.com)' } },
+    credentials: { httpCustomAuth: { id: 'PLACEHOLDER_ZOHO_OAUTH', name: 'Zoho Mail OAuth (sanakuai.com)' } },
+    onError: 'continueErrorOutput',
+    retryOnFail: true, maxTries: 2, waitBetweenTries: 3000,
+  },
+
+  // The account id is fetched rather than stored. It is not a secret, but it is
+  // one more thing that can be wrong in two places, and this costs one call a
+  // day at fifteen sends.
+  {
+    parameters: {
+      method: 'GET',
+      url: 'https://mail.zoho.com/api/accounts',
+      sendHeaders: true,
+      headerParameters: { parameters: [
+        { name: 'Authorization', value: '=Zoho-oauthtoken {{ $json.access_token }}' },
+      ] },
+      options: { timeout: 20000 },
+    },
+    id: 'ed200000-0000-4000-8000-000000000004',
+    name: 'Get Zoho Account',
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
+    position: [1760, 0],
     onError: 'continueErrorOutput',
   },
 
-  code('Record The Send', afterSend, [1760, -80]),
+  // mailFormat plaintext, deliberately. The brand brief forbids HTML on cold
+  // mail and Zoho will happily send either.
+  {
+    parameters: {
+      method: 'POST',
+      url: '=https://mail.zoho.com/api/accounts/{{ $json.data[0].accountId }}/messages',
+      sendHeaders: true,
+      headerParameters: { parameters: [
+        { name: 'Authorization', value: '=Zoho-oauthtoken {{ $("Get Zoho Token").first().json.access_token }}' },
+      ] },
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: '={{ JSON.stringify({'
+        + ' fromAddress: $("Build The Email").first().json.from,'
+        + ' toAddress: $("Build The Email").first().json.to,'
+        + ' subject: $("Build The Email").first().json.subject,'
+        + ' content: $("Build The Email").first().json.text,'
+        + ' mailFormat: "plaintext",'
+        + ' askReceipt: "no"'
+        + ' }) }}',
+      options: { timeout: 30000 },
+    },
+    id: 'ed200000-0000-4000-8000-000000000005',
+    name: 'Send via Zoho API',
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
+    position: [1980, 0],
+    onError: 'continueErrorOutput',
+  },
+
+  // Zoho answers 200 with status.code 200 on success. A non-200 inside a 200 is
+  // a real failure and must not be recorded as a send - the whole reason this
+  // rewrite exists is that a failure once looked like a success.
+  code('Confirm Delivered', confirmDelivered, [2200, -80]),
+
+  code('Record The Send', afterSend, [2420, -80]),
 
   supaWrite('Log Conversation', 'POST', 'sanaku_conversations',
     '={{ JSON.stringify($json.conversation) }}', [1980, -80], { prefer: 'return=minimal' }),
@@ -294,10 +404,24 @@ const nodes = [
     'sanaku_prospects?id=eq.{{ $json.id }}',
     '={{ JSON.stringify($json.prospect) }}', [2200, -80], { prefer: 'return=minimal' }),
 
+  // A failure now does three things instead of one. It gives the claimed slot
+  // back, so the cap counts sends rather than attempts; it stamps the prospect
+  // so the next run picks somebody else; and it parks the row after three
+  // consecutive failures. All three happen inside one function, because a
+  // failure that half-records is what produced the twelve-attempt retry loop.
+  supaWrite(
+    'Record Send Failure', 'POST', 'rpc/sanaku_record_send_failure',
+    '={{ JSON.stringify({'
+    + ' p_prospect: $("Build The Email").first().json.id,'
+    + ' p_error: String($json.error?.message || $json.error || "zoho send failed").slice(0, 500)'
+    + ' }) }}',
+    [2200, 200], { prefer: 'return=representation' },
+  ),
+
   logError('Log Send Failure',
-    '$json.error?.message || "zoho send failed"',
+    'String($("Send via Zoho API").first().json?.error?.message || "zoho send failed").slice(0, 400)',
     'JSON.stringify({ prospect_id: $("Build The Email").first().json.id, to: $("Build The Email").first().json.to })',
-    [1760, 140]),
+    [2420, 200]),
 ];
 
 const connections = {
@@ -315,10 +439,18 @@ const connections = {
   'Requested Prospect': { main: [to('Get That Draft')] },
   'Get That Draft': { main: [to('Pick One Approved')] },
   'Claim A Send Slot': { main: [to('Build The Email')] },
-  'Build The Email': { main: [to('Send via Zoho')] },
-  'Send via Zoho': { main: [to('Record The Send'), to('Log Send Failure')] },
+  'Build The Email': { main: [to('Get Zoho Token')] },
+
+  // Every step of the send has the same error destination. Any one of them
+  // failing means no email left, so all three must release the slot.
+  'Get Zoho Token': { main: [to('Get Zoho Account'), to('Record Send Failure')] },
+  'Get Zoho Account': { main: [to('Send via Zoho API'), to('Record Send Failure')] },
+  'Send via Zoho API': { main: [to('Confirm Delivered'), to('Record Send Failure')] },
+
+  'Confirm Delivered': { main: [to('Record The Send')] },
   'Record The Send': { main: [to('Log Conversation')] },
   'Log Conversation': { main: [to('Mark Contacted')] },
+  'Record Send Failure': { main: [to('Log Send Failure')] },
 };
 
 const wf = workflow('Sanaku - W2s Send Approved (gate 2)', nodes, connections);

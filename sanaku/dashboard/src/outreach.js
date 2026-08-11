@@ -151,3 +151,40 @@ export async function sendBudget() {
   if (!data) return { cap: 15, sent: 0, left: 15 };
   return { cap: data.cap, sent: data.sent, left: Math.max(0, data.cap - data.sent) };
 }
+
+/**
+ * Whether the sender is actually working.
+ *
+ * On 2026-08-11 this panel reported "11 of 15 sends used" while the sender had
+ * delivered nothing at all - every attempt was timing out against a blocked
+ * SMTP port, and because the counter incremented on the ATTEMPT it read as
+ * success. n8n compounded it by marking the runs "success", since the failure
+ * routed to a handled branch. The failures were being written to sanaku_errors
+ * the whole time; nothing displayed them.
+ *
+ * So the panel no longer infers health from the allowance. It counts what
+ * actually left (outbound email rows) and what actually broke, and says so.
+ */
+export async function sendHealth() {
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+
+  const [delivered, failed, blocked] = await Promise.all([
+    supabase.from('sanaku_conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('channel', 'email').eq('direction', 'outbound').gte('sent_at', since),
+    supabase.from('sanaku_errors')
+      .select('error,occurred_at', { count: 'exact' })
+      .like('workflow', '%W2s%').gte('occurred_at', since)
+      .order('occurred_at', { ascending: false }).limit(1),
+    supabase.from('sanaku_prospects')
+      .select('id', { count: 'exact', head: true }).eq('status', 'send_blocked'),
+  ]);
+
+  return {
+    delivered: delivered.count ?? 0,
+    failed: failed.count ?? 0,
+    blocked: blocked.count ?? 0,
+    lastError: failed.data?.[0]?.error || null,
+    lastErrorAt: failed.data?.[0]?.occurred_at || null,
+  };
+}

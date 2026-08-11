@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import {
   bestEmail, bestPhone, saveDraft, approveDraft, skipDraft, approveAndSend,
-  sendBudget, canSend, sendSwitch, setSendSwitch, canDraft, draftFor, draftableProspects,
+  sendBudget, sendHealth, canSend, sendSwitch, setSendSwitch, canDraft, draftFor, draftableProspects,
 } from './outreach.js';
 
 /**
@@ -28,6 +28,7 @@ export default function OutreachDrafts() {
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState({ subject: '', body: '' });
   const [budget, setBudget] = useState(null);
+  const [health, setHealth] = useState(null);   // is the sender actually working
   const [sending, setSending] = useState(null);   // master switch state
   const [pool, setPool] = useState([]);          // verified people with no draft yet
 
@@ -39,6 +40,7 @@ export default function OutreachDrafts() {
     if (error) setFlash(`Could not load drafts: ${error.message}`);
     setRows(data || []);
     setBudget(await sendBudget().catch(() => null));
+    setHealth(await sendHealth().catch(() => null));
     setSending(await sendSwitch().catch(() => null));
     setPool(await draftableProspects().catch(() => []));
     setLoading(false);
@@ -91,7 +93,38 @@ export default function OutreachDrafts() {
           <div className="v">{budget ? budget.left : '—'}</div>
           <div className="l">Sends left today{budget ? ` of ${budget.cap}` : ''}</div>
         </div>
+        {/* The allowance says what MAY go out. This says what actually did -
+            the distinction the 2026-08-11 outage turned on. */}
+        <div className="metric">
+          <div className="v">{health ? health.delivered : '—'}</div>
+          <div className="l">Delivered, last 24h</div>
+        </div>
       </div>
+
+      {/* A sender that is failing must never look like a sender that is idle. */}
+      {health && (health.failed > 0 || health.blocked > 0) && (
+        <div className="card ob-alarm">
+          <div>
+            <b>
+              {health.failed > 0
+                ? `${health.failed} send${health.failed === 1 ? '' : 's'} failed in the last 24 hours`
+                : `${health.blocked} prospect${health.blocked === 1 ? '' : 's'} parked after repeated send failures`}
+            </b>
+            <div className="muted">
+              {health.delivered === 0 && health.failed > 0
+                ? 'Nothing has been delivered in that time. Treat the sender as down.'
+                : 'Some mail is getting through, but not all of it.'}
+              {health.lastError ? ` Last error: ${health.lastError}` : ''}
+            </div>
+            {health.blocked > 0 && health.failed > 0 && (
+              <div className="muted">
+                {health.blocked} prospect{health.blocked === 1 ? ' is' : 's are'} parked at
+                {' '}<code>send_blocked</code> after three consecutive failures.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className={`card ob-switch ${sending ? 'on' : 'off'}`}>
         <div>
