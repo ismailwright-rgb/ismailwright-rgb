@@ -206,6 +206,57 @@ baked in at build time. `netlify.toml` handles the SPA redirect.
 
 ---
 
+## The outreach chain (Outreach tab)
+
+Finds a decision maker, verifies the address, writes a cold email, and will not
+send it until a human has read it.
+
+```
+W1  ──▶ new ──▶ W1b enriches + verifies ──▶ you queue (Pipeline)
+                                                   │
+                            you click Write draft ─┤
+                                                   ▼
+                                    W2 drafts ──▶ draft_review
+                                                   │  you read it
+                                                   ▼
+                                              approved ──▶ W2s sends ──▶ contacted
+                                                                            │
+                          W2b: replied / dnc   ◀────────────────────────────┤
+                          W3:  demo_booked     ◀────────────────────────────┘
+```
+
+### Two gates, and why the order matters
+The first version drafted only for prospects already approved into the
+sequence — which meant approving an email nobody had seen. **Write draft** in
+the Outreach tab writes one for any verified decision maker without changing
+their status, so the email is judged before anything is committed.
+
+### What has to be true before a byte leaves
+| Brake | Where |
+|---|---|
+| `send_enabled = 1` in `sanaku_settings` | toggle at the top of the Outreach tab |
+| daily ramp not exhausted | `sanaku_claim_send_slot()` — claims atomically |
+| `email_verified` **and** `decision_maker` | set by W1b from Apollo's `email_status` |
+| 08:00–17:00 PT, weekdays | W2s only |
+| a human approved this exact text | `status = 'approved'` |
+
+**Approve & send** bypasses only the first and fourth — a click is the
+authorisation. It cannot bypass verification or the ramp.
+
+### Credentials that are easy to get wrong
+- Supabase nodes must use **Custom Auth**, never Header Auth. Header Auth sends
+  `apikey` alone, PostgREST reads that as anonymous, and RLS returns `[]` with a
+  **200** — a silent empty result with no error anywhere.
+- Sending is Zoho SMTP `smtppro.zoho.com:587`; replies are read over IMAP
+  `imappro.zoho.com:993`. **IMAP has to be enabled in Zoho Mail settings** — it
+  is off by default, and without it no opt-out is ever honoured.
+
+### The voice lives in Supabase
+`brand_brain` rows with `channel = 'email'`. Edit rows, not the workflow.
+`brand_brain.vertical` uses `personal_injury_law` where `sanaku_prospects` uses
+`law_firm`; W2 maps between them and throws if a vertical has no ICP row, rather
+than writing an email with no idea who it is going to.
+
 ## M1 — the LinkedIn content studio (Marketing tab)
 
 A content studio for **Ismail's personal LinkedIn**, not a company page. One
