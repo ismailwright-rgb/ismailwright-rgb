@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Sanaku outreach - the sender.
+
+  This runs here rather than on the n8n droplet because the droplet cannot open
+  an outbound SMTP connection at all. W2s tried for its entire life and never
+  delivered one message: every attempt timed out at exactly 120s against
+  smtppro.zoho.com:587, while Zoho IMAP on 993 works fine from the same host.
+  That is a port-level block, standard on DigitalOcean droplets. This Mac
+  reaches 587 in 0.1s.
+
+  Same shape as com.sanaku.illustrator, for the same reason: the work has to
+  happen where the network allows it. If the Mac is asleep the run is simply
+  missed and the drafts wait - they are queued in Supabase, not held here.
+
+  RunAtLoad is deliberately FALSE. Loading this agent must never be the thing
+  that sends an email; a login or a reboot should not fire outreach. The first
+  send after loading happens on the first interval tick inside business hours.
+
+  Every brake lives in the script and in the database, not here:
+    - sanaku_settings.send_enabled must be 1 (toggle it from the dashboard)
+    - sanaku_claim_send_slot() enforces the daily cap
+    - 08:00-17:00 PT weekdays only
+    - one message per run, so a 30-minute interval is also the drip rate
+
+  Source of truth is the repo: sanaku/scripts/send-approved.py. This agent runs
+  it straight out of the git worktree so there is only ever one copy to edit.
+
+  Stop it in a hurry:
+    launchctl unload ~/Library/LaunchAgents/com.sanaku.sender.plist
+  Or, without touching the machine, turn the switch off in the Outreach tab.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.sanaku.sender</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>python3</string>
+    <string>/Users/ismailrogers-wright/sanaku-studio/sanaku/scripts/send-approved.py</string>
+    <string>--limit</string>
+    <string>1</string>
+  </array>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>/Users/ismailrogers-wright/projects/jarvis/sender.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/ismailrogers-wright/projects/jarvis/sender.err.log</string>
+</dict>
+</plist>
