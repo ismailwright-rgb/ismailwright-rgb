@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import {
   bestEmail, bestPhone, saveDraft, approveDraft, skipDraft, approveAndSend,
-  sendBudget, canSend,
+  sendBudget, canSend, sendSwitch, setSendSwitch,
 } from './outreach.js';
 
 /**
@@ -28,6 +28,7 @@ export default function OutreachDrafts() {
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState({ subject: '', body: '' });
   const [budget, setBudget] = useState(null);
+  const [sending, setSending] = useState(null);   // master switch state
 
   async function load() {
     setLoading(true);
@@ -37,6 +38,7 @@ export default function OutreachDrafts() {
     if (error) setFlash(`Could not load drafts: ${error.message}`);
     setRows(data || []);
     setBudget(await sendBudget().catch(() => null));
+    setSending(await sendSwitch().catch(() => null));
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
@@ -87,6 +89,32 @@ export default function OutreachDrafts() {
           <div className="v">{budget ? budget.left : '—'}</div>
           <div className="l">Sends left today{budget ? ` of ${budget.cap}` : ''}</div>
         </div>
+      </div>
+
+      <div className={`card ob-switch ${sending ? 'on' : 'off'}`}>
+        <div>
+          <b>Automatic sending is {sending === null ? '…' : sending ? 'ON' : 'OFF'}</b>
+          <div className="muted">
+            {sending
+              ? 'W2s sends approved drafts on its own, 08:00–17:00 PT weekdays, one at a time, up to the daily cap.'
+              : 'Approved drafts wait. Approve & send still works — a click is your authorisation.'}
+          </div>
+        </div>
+        <span className="spacer" />
+        <button
+          className={sending ? 'rowbtn mk-danger' : 'rowbtn primary'}
+          disabled={sending === null || busy === 'switch'}
+          onClick={async () => {
+            const next = !sending;
+            if (next && !window.confirm('Turn automatic sending ON?\n\nApproved drafts will start going out without further clicks.')) return;
+            setBusy('switch');
+            try { await setSendSwitch(next); setSending(next); setFlash(next ? 'Automatic sending is on.' : 'Automatic sending is off.'); }
+            catch (e) { setFlash(`Could not change it: ${e.message}`); }
+            finally { setBusy(null); }
+          }}
+        >
+          {sending ? 'Turn sending off' : 'Turn sending on'}
+        </button>
       </div>
 
       {flash && <div className="notice">{flash}</div>}

@@ -86,6 +86,26 @@ export async function approveAndSend(id) {
   return true;
 }
 
+/**
+ * The master send switch, read from the database rather than an env var.
+ *
+ * It lived in n8n's environment, which meant only someone with shell access to
+ * the droplet could stop outbound email, after a restart. The one control that
+ * halts every send now sits next to the drafts it governs.
+ */
+export async function sendSwitch() {
+  const { data } = await supabase.from('sanaku_settings')
+    .select('value').eq('key', 'send_enabled').maybeSingle();
+  return Number(data?.value) === 1;
+}
+
+export async function setSendSwitch(on) {
+  const { error } = await supabase.from('sanaku_settings')
+    .update({ value: on ? 1 : 0, updated_at: new Date().toISOString() })
+    .eq('key', 'send_enabled');
+  if (error) throw new Error(error.message);
+}
+
 /** Today's remaining warm-up allowance, so the bench can show it. */
 export async function sendBudget() {
   const today = new Date().toISOString().slice(0, 10);

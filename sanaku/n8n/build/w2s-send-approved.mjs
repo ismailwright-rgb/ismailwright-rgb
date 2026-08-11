@@ -38,9 +38,18 @@ const schedule = (name, minutes, position) => ({
   type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position,
 });
 
-const checkSwitch = `// The global brake. Exact string match, deliberately.
-const raw = (typeof $env !== 'undefined' && $env.SANAKU_SEND_ENABLED) || '';
-const enabled = raw === 'true';
+const checkSwitch = `// The global brake, read from the DATABASE rather than the environment.
+//
+// It used to be $env.SANAKU_SEND_ENABLED, which only someone with shell access
+// to the droplet could change, followed by an n8n restart. That put the one
+// control that stops every outbound email furthest from the person responsible
+// for it. It is a row now, so the dashboard owns it.
+//
+// sanaku_settings.value is numeric; sanaku_send_enabled() applies the "exactly
+// 1" rule in SQL so no caller can get it subtly wrong.
+const row = $input.first().json;
+const enabled = row === true || row?.sanaku_send_enabled === true
+  || (Array.isArray(row) && row[0] === true);
 
 // Business hours in the recipient's timezone, not the server's. A cold email
 // timestamped 03:40 reads as machinery no matter how well it is written.
@@ -50,7 +59,7 @@ const hour = Number(new Date().toLocaleString('en-US', {
 const day = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles', weekday: 'short' });
 const inHours = hour >= 8 && hour < 17 && !['Sat', 'Sun'].includes(day);
 
-if (!enabled) console.log('[w2s] SANAKU_SEND_ENABLED is ' + JSON.stringify(raw) + ' - nothing will send');
+if (!enabled) console.log('[w2s] send_enabled is off in sanaku_settings - nothing will send');
 else if (!inHours) console.log('[w2s] outside 08:00-17:00 PT Mon-Fri (' + day + ' ' + hour + ':00) - holding');
 
 return [{ json: { proceed: enabled && inHours, enabled, inHours, hour, day } }];`;
@@ -163,21 +172,28 @@ return [{ json: {
 const nodes = [
   sticky(
     '## W2s — send approved drafts\n\n'
-    + '**Nothing sends unless `SANAKU_SEND_ENABLED` is exactly `true`.**\n'
-    + 'Unset, `TRUE`, `1` and `yes` all mean off, so a misconfiguration fails safe.\n\n'
+    + '**Nothing sends unless `send_enabled` = 1 in `sanaku_settings`.**\n'
+    + 'Toggle it from the Outreach tab — it is a row, not an env var, so it can be\n'
+    + 'turned off without shell access the moment something looks wrong.\n\n'
     + '### Three brakes\n'
     + '1. the global switch\n'
     + '2. the daily ramp — `sanaku_claim_send_slot()` claims atomically, so two runs cannot both take the last slot\n'
     + '3. the recipient gate — approved **and** verified **and** a decision maker\n\n'
-    + '### Turning it on\n'
-    + 'Set `SANAKU_SEND_ENABLED=true` in the n8n environment and restart n8n.\n'
+    + '### Turning it off in a hurry\n'
+    + 'Outreach tab → the sending toggle. Takes effect on the next run, ≤30 min.\n'
     + 'Raise the ramp by editing `cap` in `sanaku_send_budget` for today —\n'
     + 'start at 15/day and climb over weeks, never in one jump.\n\n'
     + 'One message per run, every 30 min, 08:00–17:00 PT weekdays only.',
     [-460, -120], { width: 440, height: 520, color: 3 },
   ),
 
-  schedule('Every 30 min', 30, [0, -140]),
+  schedule('Every 30 min', 30, [-220, -140]),
+
+  supaWrite(
+    'Read Send Switch', 'POST', 'rpc/sanaku_send_enabled',
+    '={{ JSON.stringify({}) }}', [0, -140], { prefer: 'return=representation' },
+  ),
+
   code('Send Enabled?', checkSwitch, [220, -140]),
   gate('Proceed?', '$json.proceed', [440, -140]),
 
@@ -285,7 +301,8 @@ const nodes = [
 ];
 
 const connections = {
-  'Every 30 min': { main: [to('Send Enabled?')] },
+  'Every 30 min': { main: [to('Read Send Switch')] },
+  'Read Send Switch': { main: [to('Send Enabled?')] },
   'Send Enabled?': { main: [to('Proceed?')] },
   'Proceed?': { main: [to('Get Approved Drafts')] },
   'Get Approved Drafts': { main: [to('Pick One Approved')] },

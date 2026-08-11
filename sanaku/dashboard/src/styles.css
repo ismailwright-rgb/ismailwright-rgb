@@ -697,3 +697,12 @@ tbody tr:hover { background: var(--line-soft); }
   border-left: 3px solid var(--signal); border-radius: 7px; padding: 9px 13px;
   font-size: 12.5px; margin-bottom: 12px; }
 .ob-warn b { color: var(--signal); }
+
+/* The master send switch. Deliberately the first thing in the tab and colour-
+   coded, because "is this thing currently emailing strangers?" should never
+   require reading a workflow to answer. */
+.ob-switch { display: flex; align-items: center; gap: 14px; padding: 14px 16px; }
+.ob-switch b { font-family: "Fraunces", Georgia, serif; font-size: 15px; }
+.ob-switch .muted { font-size: 12.5px; margin-top: 2px; max-width: 62ch; }
+.ob-switch.on { border-left: 3px solid var(--accent); }
+.ob-switch.off { border-left: 3px solid var(--sub); }
