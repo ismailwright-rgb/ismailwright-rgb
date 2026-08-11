@@ -144,7 +144,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Decide today's touches: step 1 for approved (queued) prospects, step 2 at\n// day 3, step 3 (breakup) at day 8, mark lost 3 days after the breakup.\nconst DAY = 86400000;\nconst now = Date.now();\n\nconst hist = {}; // prospect_id -> { firstAt, lastAt, maxStep }\nfor (const i of $('Get Outbound History').all()) {\n  const c = i.json;\n  if (!c || !c.prospect_id) continue;\n  const t = new Date(c.sent_at).getTime();\n  const h = hist[c.prospect_id] || { firstAt: t, lastAt: t, maxStep: 0 };\n  h.firstAt = Math.min(h.firstAt, t);\n  h.lastAt = Math.max(h.lastAt, t);\n  h.maxStep = Math.max(h.maxStep, c.sequence_step || 1);\n  hist[c.prospect_id] = h;\n}\n\nconst out = [];\n\nfor (const i of $('Get Queued').all()) {\n  const p = i.json;\n  if (!p || !p.id) continue;\n  // 45-day re-contact lockout\n  if (p.last_contacted && now - new Date(p.last_contacted).getTime() < 45 * DAY) continue;\n  out.push({ json: { action: 'send', step: 1, angle: 'opener', ...p } });\n}\n\nfor (const i of $('Get In Sequence').all()) {\n  const p = i.json;\n  if (!p || !p.id) continue;\n  const h = hist[p.id];\n  if (!h) continue;\n  if (h.maxStep >= 3) {\n    if (now - h.lastAt >= 3 * DAY) out.push({ json: { action: 'mark_lost', ...p } });\n  } else if (h.maxStep === 2) {\n    if (now - h.firstAt >= 8 * DAY) out.push({ json: { action: 'send', step: 3, angle: 'breakup', ...p } });\n  } else if (h.maxStep === 1) {\n    if (now - h.firstAt >= 3 * DAY) out.push({ json: { action: 'send', step: 2, angle: 'follow_up', ...p } });\n  }\n}\n\nreturn out;"
+        "jsCode": "// ON-DEMAND PATH FIRST.\n//\n// Two triggers feed this node. The daily schedule plans touches across every\n// prospect in the sequence; the dashboard's \"Write draft\" button asks for one\n// specific prospect that has NOT been approved into anything yet.\n//\n// Referencing a node that did not run throws in n8n, and that throw is the\n// signal - $('One Prospect') only resolves when the button fired. Without this\n// the on-demand path would reach $('Get Queued'), which never ran, and die.\ntry {\n  const only = $('One Prospect').all().map((i) => i.json).filter((x) => x && x.id);\n  if (only.length) {\n    console.log('[w2] on-demand draft for ' + only[0].company_name);\n    return only.map((p) => ({ json: { action: 'send', step: 1, angle: 'opener', ...p } }));\n  }\n} catch (e) { /* scheduled run - fall through to the normal planner */ }\n\n// Decide today's touches: step 1 for approved (queued) prospects, step 2 at\n// day 3, step 3 (breakup) at day 8, mark lost 3 days after the breakup.\nconst DAY = 86400000;\nconst now = Date.now();\n\nconst hist = {}; // prospect_id -> { firstAt, lastAt, maxStep }\nfor (const i of $('Get Outbound History').all()) {\n  const c = i.json;\n  if (!c || !c.prospect_id) continue;\n  const t = new Date(c.sent_at).getTime();\n  const h = hist[c.prospect_id] || { firstAt: t, lastAt: t, maxStep: 0 };\n  h.firstAt = Math.min(h.firstAt, t);\n  h.lastAt = Math.max(h.lastAt, t);\n  h.maxStep = Math.max(h.maxStep, c.sequence_step || 1);\n  hist[c.prospect_id] = h;\n}\n\nconst out = [];\n\nfor (const i of $('Get Queued').all()) {\n  const p = i.json;\n  if (!p || !p.id) continue;\n  // 45-day re-contact lockout\n  if (p.last_contacted && now - new Date(p.last_contacted).getTime() < 45 * DAY) continue;\n  out.push({ json: { action: 'send', step: 1, angle: 'opener', ...p } });\n}\n\nfor (const i of $('Get In Sequence').all()) {\n  const p = i.json;\n  if (!p || !p.id) continue;\n  const h = hist[p.id];\n  if (!h) continue;\n  if (h.maxStep >= 3) {\n    if (now - h.lastAt >= 3 * DAY) out.push({ json: { action: 'mark_lost', ...p } });\n  } else if (h.maxStep === 2) {\n    if (now - h.firstAt >= 8 * DAY) out.push({ json: { action: 'send', step: 3, angle: 'breakup', ...p } });\n  } else if (h.maxStep === 1) {\n    if (now - h.firstAt >= 3 * DAY) out.push({ json: { action: 'send', step: 2, angle: 'follow_up', ...p } });\n  }\n}\n\nreturn out;"
       },
       "id": "f2000000-0000-4000-8000-000000000005",
       "name": "Plan Touches",
@@ -426,6 +426,167 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sanaku-draft-now",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://sanaku-command-center.netlify.app"
+        }
+      },
+      "id": "ee000000-0000-4000-8000-000000000001",
+      "name": "Draft Now",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        420
+      ],
+      "webhookId": "ee010000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_staff?select=user_id&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ $json.headers.authorization }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "ee100000-0000-4000-8000-000000000001",
+      "name": "Verify Staff (draft)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $json.user_id != null }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ee200000-0000-4000-8000-000000000001",
+      "name": "Staff (draft)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -20,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: 'not authorised' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "ee300000-0000-4000-8000-000000000001",
+      "name": "Refuse Draft",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ accepted: true }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "ee400000-0000-4000-8000-000000000001",
+      "name": "Draft Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?id=eq.{{ $('Draft Now').first().json.body.prospect_id }}&email_verified=is.true&decision_maker=is.true&do_not_contact=is.false&select=*",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "ee500000-0000-4000-8000-000000000001",
+      "name": "Get That Prospect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        420
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// One prospect, drafted on demand, WITHOUT approving it first.\n//\n// The scheduled path drafts only for prospects already approved into the\n// sequence - which meant the email had to be committed to before it could be\n// read. This exists so the draft can be judged on its merits: nothing about\n// this prospect's status changes until the draft is approved.\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.id);\nif (!rows.length) throw new Error('no verified decision-maker matches that id - it may be unverified, or on the do-not-contact list');\nconst p = rows[0];\nreturn [{ json: { ...p, step: 1, angle: 'opener', action: 'send' } }];"
+      },
+      "id": "ee600000-0000-4000-8000-000000000001",
+      "name": "One Prospect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        420
+      ]
     }
   ],
   "connections": {
@@ -602,6 +763,79 @@
         [
           {
             "node": "Per Touch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Now": {
+      "main": [
+        [
+          {
+            "node": "Verify Staff (draft)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Staff (draft)": {
+      "main": [
+        [
+          {
+            "node": "Staff (draft)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Staff (draft)?": {
+      "main": [
+        [
+          {
+            "node": "Draft Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refuse Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Accepted": {
+      "main": [
+        [
+          {
+            "node": "Get That Prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get That Prospect": {
+      "main": [
+        [
+          {
+            "node": "One Prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One Prospect": {
+      "main": [
+        [
+          {
+            "node": "Read the brand brain",
             "type": "main",
             "index": 0
           }

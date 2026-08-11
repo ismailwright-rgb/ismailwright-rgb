@@ -6,7 +6,45 @@
 import { supabase } from './supabase.js';
 
 const SEND_ENDPOINT = import.meta.env.VITE_N8N_SEND_URL;
+const DRAFT_ENDPOINT = import.meta.env.VITE_N8N_DRAFT_URL;
 export const canSend = Boolean(SEND_ENDPOINT);
+export const canDraft = Boolean(DRAFT_ENDPOINT);
+
+/**
+ * Write a draft for one prospect, WITHOUT approving anything.
+ *
+ * The scheduled drafter only writes for prospects already approved into the
+ * sequence, which meant the email had to be committed to before it could be
+ * read - approve first, see what you approved afterwards. This lets the draft
+ * be judged on its own merits; the prospect's status does not change until the
+ * draft itself is approved.
+ */
+export async function draftFor(id) {
+  if (!DRAFT_ENDPOINT) throw new Error('VITE_N8N_DRAFT_URL is not set in this build');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('your session expired — sign in again');
+  const res = await fetch(DRAFT_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ prospect_id: id }),
+  });
+  let payload = {};
+  try { payload = await res.json(); } catch { /* empty */ }
+  if (!res.ok) throw new Error(`the drafter returned ${res.status}`);
+  if (payload.error) throw new Error(payload.error);
+  return true;
+}
+
+/** Verified decision-makers with no draft yet — the pool to write for. */
+export async function draftableProspects() {
+  const { data, error } = await supabase.from('sanaku_prospects')
+    .select('id,company_name,contact_name,contact_title,contact_email,contact_email_personal,contact_phone,contact_phone_source,company_phone,vertical,email_verified,status')
+    .eq('email_verified', true).eq('decision_maker', true).eq('do_not_contact', false)
+    .in('status', ['new', 'queued']).is('draft_body', null)
+    .order('company_name');
+  if (error) throw new Error(error.message);
+  return data || [];
+}
 
 /** The most direct address we hold, and how much to trust it. */
 export function bestEmail(p) {

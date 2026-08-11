@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import {
   bestEmail, bestPhone, saveDraft, approveDraft, skipDraft, approveAndSend,
-  sendBudget, canSend, sendSwitch, setSendSwitch,
+  sendBudget, canSend, sendSwitch, setSendSwitch, canDraft, draftFor, draftableProspects,
 } from './outreach.js';
 
 /**
@@ -29,6 +29,7 @@ export default function OutreachDrafts() {
   const [draft, setDraft] = useState({ subject: '', body: '' });
   const [budget, setBudget] = useState(null);
   const [sending, setSending] = useState(null);   // master switch state
+  const [pool, setPool] = useState([]);          // verified people with no draft yet
 
   async function load() {
     setLoading(true);
@@ -39,6 +40,7 @@ export default function OutreachDrafts() {
     setRows(data || []);
     setBudget(await sendBudget().catch(() => null));
     setSending(await sendSwitch().catch(() => null));
+    setPool(await draftableProspects().catch(() => []));
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
@@ -119,10 +121,56 @@ export default function OutreachDrafts() {
 
       {flash && <div className="notice">{flash}</div>}
 
+      {canDraft && pool.length > 0 && (
+        <div className="card">
+          <h3 style={{ padding: '13px 16px 0', margin: 0 }}>
+            Write a draft — {pool.length} verified decision-maker{pool.length === 1 ? '' : 's'} with nothing written yet
+          </h3>
+          <div className="muted" style={{ padding: '4px 16px 10px', fontSize: '12.5px' }}>
+            Nothing is approved by writing a draft. You read it first, then decide.
+          </div>
+          <table>
+            <tbody>
+              {pool.map((p) => {
+                const em = bestEmail(p); const ph = bestPhone(p);
+                return (
+                  <tr key={p.id}>
+                    <td><b>{p.company_name}</b><div className="muted">{VERTICAL[p.vertical] || p.vertical}</div></td>
+                    <td>{p.contact_name || '—'}<div className="muted">{p.contact_title || ''}</div></td>
+                    <td>{em.email}<div className="muted">{em.kind}</div></td>
+                    <td>{ph.phone || '—'}<div className="muted">{ph.kind}</div></td>
+                    <td style={{ width: '1%', whiteSpace: 'nowrap' }}>
+                      <button className="rowbtn primary" disabled={busy === p.id}
+                        onClick={async () => {
+                          setBusy(p.id);
+                          try {
+                            await draftFor(p.id);
+                            setFlash('Writing… the draft appears here in under a minute.');
+                            for (let i = 0; i < 12; i++) {
+                              await new Promise((r) => setTimeout(r, 6000));
+                              const { data } = await supabase.from('sanaku_prospects')
+                                .select('draft_body').eq('id', p.id).maybeSingle();
+                              if (data && data.draft_body) { setFlash('Draft ready — read it below.'); break; }
+                            }
+                            await load();
+                          } catch (e) { setFlash(`Could not draft: ${e.message}`); }
+                          finally { setBusy(null); }
+                        }}>
+                        {busy === p.id ? 'Writing…' : 'Write draft'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {loading ? <div className="card"><div className="empty">Loading…</div></div>
         : rows.length === 0 ? (
           <div className="card"><div className="empty">
-            No drafts waiting. W2 writes one per approved prospect and stops — nothing sends unread.
+            No drafts waiting. Use “Write draft” above to see an email before you commit to anything.
           </div></div>
         ) : rows.map((p) => {
           const em = bestEmail(p);
