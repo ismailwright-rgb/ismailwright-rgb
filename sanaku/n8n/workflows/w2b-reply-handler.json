@@ -11,25 +11,35 @@
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [40, 20]
+      "position": [
+        40,
+        20
+      ]
     },
     {
       "parameters": {
-        "pollTimes": {
-          "item": [ { "mode": "everyMinute" } ]
-        },
-        "simple": true,
-        "filters": {},
-        "options": {}
+        "postProcessAction": "read",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "forceReconnect": 60
+        }
       },
       "id": "f3000000-0000-4000-8000-000000000001",
-      "name": "Gmail Trigger",
-      "type": "n8n-nodes-base.gmailTrigger",
-      "typeVersion": 1.2,
-      "position": [120, 500],
+      "name": "Zoho Inbox",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        120,
+        500
+      ],
       "credentials": {
-        "gmailOAuth2": { "id": "gmail-oauth2", "name": "Gmail Account" }
-      }
+        "imap": {
+          "id": "WCg6LLmWeFctt73F",
+          "name": "Zoho IMAP (sanakuai.com)"
+        }
+      },
+      "notes": "Watches ismail@sanakuai.com, the address W2s sends from. It used to watch Gmail, which is a different mailbox entirely - every reply to a Zoho send would have arrived somewhere this workflow never looked.",
+      "notesInFlow": false
     },
     {
       "parameters": {
@@ -40,7 +50,10 @@
       "name": "Extract Sender",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [340, 500]
+      "position": [
+        340,
+        500
+      ]
     },
     {
       "parameters": {
@@ -48,15 +61,23 @@
         "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?contact_email=ilike.{{ $json.from_email }}&select=id,company_name,vertical,contact_name,status&limit=1",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f3000000-0000-4000-8000-000000000003",
       "name": "Get Prospect",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [560, 500],
+      "position": [
+        560,
+        500
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -67,13 +88,22 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "found",
               "leftValue": "={{ !!$json.id }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -84,7 +114,10 @@
       "name": "Prospect Found?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [780, 500]
+      "position": [
+        780,
+        500
+      ]
     },
     {
       "parameters": {},
@@ -92,7 +125,10 @@
       "name": "Not A Prospect",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1000, 680]
+      "position": [
+        1000,
+        680
+      ]
     },
     {
       "parameters": {
@@ -103,15 +139,23 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ model: $env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free', messages: [ { role: 'system', content: 'Classify a reply to a cold B2B email. Respond with exactly one word from: positive, question, not_now, opt_out. \\'positive\\' = interested, wants to talk, gives useful info about their problem. \\'question\\' = asks who we are / what this is. \\'not_now\\' = polite decline or bad timing. \\'opt_out\\' = any variant of stop, unsubscribe, no thanks, remove me, not interested at all. When in doubt between not_now and opt_out, choose opt_out.' }, { role: 'user', content: $('Extract Sender').first().json.reply_body } ], max_tokens: 5, temperature: 0 }) }}",
-        "options": { "timeout": 45000 }
+        "options": {
+          "timeout": 45000
+        }
       },
       "id": "f3000000-0000-4000-8000-000000000006",
       "name": "Classify Reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1000, 420],
+      "position": [
+        1000,
+        420
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "openrouter-header-auth", "name": "OpenRouter (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "openrouter-header-auth",
+          "name": "OpenRouter (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -128,7 +172,10 @@
       "name": "Parse Classification",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1220, 420]
+      "position": [
+        1220,
+        420
+      ]
     },
     {
       "parameters": {
@@ -139,21 +186,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ prospect_id: $json.prospect_id, channel: 'email', direction: 'inbound', body: $json.reply_body, sentiment: $json.sentiment }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f3000000-0000-4000-8000-000000000008",
       "name": "Log Inbound",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 420],
+      "position": [
+        1440,
+        420
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -163,13 +221,22 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "optout",
               "leftValue": "={{ $('Parse Classification').first().json.classification === 'opt_out' }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -180,7 +247,10 @@
       "name": "Opt Out?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1660, 420]
+      "position": [
+        1660,
+        420
+      ]
     },
     {
       "parameters": {
@@ -191,26 +261,39 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ do_not_contact: true, status: 'dnc' }) }}",
-        "options": { "timeout": 15000 }
+        "jsonBody": "={{ JSON.stringify({ draft_subject: null, draft_body: null, draft_step: null, draft_angle: null, draft_generated_at: null, do_not_contact: true, status: 'dnc' }) }}",
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f3000000-0000-4000-8000-000000000010",
       "name": "Set DNC",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1880, 300],
+      "position": [
+        1880,
+        300
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "notes": "Clears the pending draft too. Without this a draft written before the reply arrived stays on the record and can still be approved and sent to someone who has already answered - or opted out.",
+      "notesInFlow": false
     },
     {
       "parameters": {
@@ -221,37 +304,59 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ status: 'replied' }) }}",
-        "options": { "timeout": 15000 }
+        "jsonBody": "={{ JSON.stringify({ draft_subject: null, draft_body: null, draft_step: null, draft_angle: null, draft_generated_at: null, status: 'replied' }) }}",
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "f3000000-0000-4000-8000-000000000011",
       "name": "Set Replied",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1880, 540],
+      "position": [
+        1880,
+        540
+      ],
       "credentials": {
-        "httpHeaderAuth": { "id": "supabase-header-auth", "name": "Supabase Service Role (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "supabase-header-auth",
+          "name": "Supabase Service Role (Header Auth)"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "notes": "Clears the pending draft too. Without this a draft written before the reply arrived stays on the record and can still be approved and sent to someone who has already answered - or opted out.",
+      "notesInFlow": false
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "notify",
               "leftValue": "={{ ['positive', 'question'].includes($('Parse Classification').first().json.classification) }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -262,7 +367,10 @@
       "name": "Worth An Alert?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [2100, 540]
+      "position": [
+        2100,
+        540
+      ]
     },
     {
       "parameters": {
@@ -276,9 +384,15 @@
       "name": "Alert Me",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [2320, 420],
+      "position": [
+        2320,
+        420
+      ],
       "credentials": {
-        "gmailOAuth2": { "id": "gmail-oauth2", "name": "Gmail Account" }
+        "gmailOAuth2": {
+          "id": "gmail-oauth2",
+          "name": "Gmail Account"
+        }
       },
       "retryOnFail": true,
       "maxTries": 3,
@@ -290,47 +404,142 @@
       "name": "Done",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [2320, 660]
+      "position": [
+        2320,
+        660
+      ]
     }
   ],
   "connections": {
-    "Gmail Trigger": {
-      "main": [ [ { "node": "Extract Sender", "type": "main", "index": 0 } ] ]
-    },
     "Extract Sender": {
-      "main": [ [ { "node": "Get Prospect", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Get Prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get Prospect": {
-      "main": [ [ { "node": "Prospect Found?", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Prospect Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prospect Found?": {
       "main": [
-        [ { "node": "Classify Reply", "type": "main", "index": 0 } ],
-        [ { "node": "Not A Prospect", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Classify Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not A Prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Classify Reply": {
-      "main": [ [ { "node": "Parse Classification", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Parse Classification": {
-      "main": [ [ { "node": "Log Inbound", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Log Inbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Log Inbound": {
-      "main": [ [ { "node": "Opt Out?", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Opt Out?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Opt Out?": {
       "main": [
-        [ { "node": "Set DNC", "type": "main", "index": 0 } ],
-        [ { "node": "Set Replied", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Set DNC",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Replied",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Set Replied": {
-      "main": [ [ { "node": "Worth An Alert?", "type": "main", "index": 0 } ] ]
+      "main": [
+        [
+          {
+            "node": "Worth An Alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Worth An Alert?": {
       "main": [
-        [ { "node": "Alert Me", "type": "main", "index": 0 } ],
-        [ { "node": "Done", "type": "main", "index": 0 } ]
+        [
+          {
+            "node": "Alert Me",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zoho Inbox": {
+      "main": [
+        [
+          {
+            "node": "Extract Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
