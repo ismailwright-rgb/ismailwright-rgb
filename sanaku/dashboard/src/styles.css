@@ -508,6 +508,18 @@ tbody tr:hover { background: var(--line-soft); }
   display: block; font-size: 10.5px; font-weight: 700; margin: 15px 0 5px;
   text-transform: uppercase; letter-spacing: .08em; color: var(--sub);
 }
+/* Inputs in a .form had no rule at all — only select and textarea did. Every
+   text field on the Factory page therefore rendered at the browser's default
+   width, inline after its own label, while the textarea beside it filled the
+   row. The existing onboarding form was unaffected because it uses .onboard,
+   which has its own. Found by rendering the page at 375px and looking at it. */
+.form input {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: var(--r-s); background: var(--card); font-size: 15px;
+}
+.form input:focus, .form textarea:focus, .form select:focus {
+  outline: 2px solid var(--accent); outline-offset: -1px;
+}
 .form textarea {
   width: 100%; padding: 9px 12px; border: 1px solid var(--line);
   border-radius: var(--r-s); background: var(--card);
@@ -724,3 +736,168 @@ tbody tr:hover { background: var(--line-soft); }
   border-radius: 4px;
   background: color-mix(in srgb, currentColor 12%, transparent);
 }
+
+/* ---------------------------------------------------------------- factory --
+   The privacy-first build page. Uses the same tokens as everything else so it
+   follows the light/dark toggle; nothing here hardcodes a colour.
+   ------------------------------------------------------------------------- */
+.card.fx-locked { border-color: color-mix(in srgb, var(--calm) 45%, var(--line)); background: var(--calm-wash); }
+.card.fx-locked h3::after {
+  content: " 🔒"; font-size: 13px;
+}
+
+.fx-foundation { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 7px; }
+.fx-foundation li {
+  display: grid; grid-template-columns: minmax(190px, 260px) 1fr; gap: 12px;
+  padding: 8px 11px; background: var(--card); border: 1px solid var(--line-soft);
+  border-radius: var(--r-s); font-size: 13.5px;
+}
+.fx-foundation li b { font-weight: 650; }
+.fx-foundation li span { color: var(--sub); }
+
+/* selectable cards — model tiers and workflows */
+.fx-card {
+  display: grid; gap: 4px; width: 100%; text-align: left; margin-top: 10px;
+  background: var(--card); border: 1.5px solid var(--line); border-radius: var(--r-s);
+  padding: 13px 15px; font: inherit; color: var(--ink); cursor: pointer;
+}
+.fx-card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.fx-card.sel { border-color: var(--accent); background: var(--accent-wash); }
+.fx-card.off { opacity: .5; cursor: not-allowed; }
+.fx-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.fx-head b { font-size: 14.5px; font-weight: 650; }
+.fx-head code { font-size: 12px; color: var(--sub); white-space: nowrap; }
+.fx-sub { font-size: 13.5px; color: var(--ink-2); }
+.fx-detail { font-size: 12.5px; color: var(--sub); }
+.fx-trade { font-size: 12.5px; color: var(--sub); font-style: italic; }
+
+.fx-pill {
+  font-size: 10.5px; font-style: normal; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .04em; padding: 2px 7px; border-radius: 4px; margin-left: 7px;
+  background: var(--line-soft); color: var(--sub); white-space: nowrap;
+}
+.fx-pill.rec, .fx-pill.add { background: var(--accent-wash); color: var(--accent-2); }
+.fx-pill.inc, .fx-pill.loc { background: var(--calm-wash); color: var(--calm); }
+.fx-pill.out { background: var(--signal-wash); color: var(--signal); }
+
+.fx-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.fx-chip {
+  background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+  padding: 6px 13px; font: inherit; font-size: 13px; color: var(--ink-2); cursor: pointer;
+}
+.fx-chip.sel { border-color: var(--accent); background: var(--accent-wash); color: var(--accent-2); }
+
+.fx-spec {
+  background: var(--shell); border: 1px solid var(--line); border-radius: var(--r-s);
+  padding: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; line-height: 1.5; color: var(--ink-2);
+  max-height: 320px; overflow: auto; margin-top: 12px;
+}
+
+@media (max-width: 620px) {
+  .fx-foundation li { grid-template-columns: 1fr; gap: 3px; }
+}
+
+/* ------------------------------------------------- working from elsewhere --
+   Banners, and the responsive rules that make the console usable on a phone in
+   a car park rather than only on a desk.
+   ------------------------------------------------------------------------- */
+
+.netbanner {
+  padding: 9px 22px; font-size: 13.5px; text-align: center;
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 40;
+}
+.netbanner.off { background: var(--alert-wash, #fdecea); color: var(--alert); font-weight: 600; }
+.netbanner.tz { background: var(--accent-wash); color: var(--accent-2); }
+.netbanner b { font-weight: 700; }
+
+/* This block deliberately re-opens the same 760px breakpoint used further up
+   (where .hide-m is defined). Those rules stay as they are; these extend them
+   for actually holding the thing in one hand. Later in the file wins, so the
+   two .topbar declarations do not fight — this one supersedes. */
+@media (max-width: 760px) {
+  /* Below 760 the remaining columns get nowrap so they stay readable and
+     scroll rather than squashing into slivers. The scroll container itself is
+     set globally further down — a tablet at 768px overflowed the page when
+     this was mobile-only. */
+  .card > table { white-space: nowrap; }
+
+  /* Brand and controls on one line, nav scrolling underneath it. Six tabs will
+     not fit across a phone, and letting them wrap pushes the page content down
+     past the fold. */
+  .topbar {
+    height: auto; flex-wrap: wrap; padding: 8px 14px; gap: 10px; row-gap: 6px;
+  }
+  .topbar .brand { font-size: 17px; }
+  .topbar nav {
+    order: 10; width: 100%;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px; scrollbar-width: none;
+  }
+  .topbar nav::-webkit-scrollbar { display: none; }
+  .topbar nav button { white-space: nowrap; }
+
+  .netbanner { padding: 8px 14px; font-size: 12.5px; text-align: left; }
+
+  /* Touch targets sized for a thumb rather than a cursor. */
+  .btn, .topbar .signout, .fx-chip { min-height: 40px; }
+  .card h3 { padding: 13px 15px 2px; font-size: 15px; }
+  .form { padding: 4px 15px 16px; }
+
+  /* Anything under 16px makes iOS Safari zoom the page on focus, and it does
+     not zoom back out. */
+  .form input, .form select, .form textarea { font-size: 16px; }
+
+  .metrics { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 9px; }
+  th, td { padding: 9px 11px; }
+}
+
+@media (max-width: 420px) {
+  .topbar .brand { font-size: 16px; letter-spacing: .06em; }
+  .metrics { grid-template-columns: 1fr 1fr; }
+  .fx-head { flex-direction: column; align-items: flex-start; gap: 3px; }
+}
+
+/* "could not load" — deliberately not styled like the neutral .empty state,
+   because the whole problem was that a failed read looked like a real answer */
+.loaderr {
+  margin: 14px 18px 18px; padding: 14px 16px;
+  background: var(--alert-wash); border: 1px solid color-mix(in srgb, var(--alert) 35%, var(--line));
+  border-left: 3px solid var(--alert); border-radius: var(--r-s);
+}
+.loaderr b { display: block; color: var(--alert); font-size: 14px; margin-bottom: 4px; }
+.loaderr p { color: var(--ink-2); font-size: 13.5px; margin: 0; }
+.loaderr .btn { margin-top: 12px; }
+
+/* Tables are what breaks first on a narrow viewport: they drag the whole PAGE
+   sideways, so the header and every card slide off with them.
+   
+   Applied at ALL widths, not just phones — an iPad in portrait (768px) sits
+   just above any sensible mobile breakpoint and overflowed exactly the same
+   way. Safe to apply globally because the sheet already sets `table { width:
+   100% }`: as a block the table still fills its card on a desktop, and only the
+   anonymous table box inside it overflows when the content genuinely does not
+   fit. Width must stay 100%/auto — `width: max-content` makes the TABLE the
+   wide element, so its own overflow-x has nothing to scroll and the card's
+   `overflow: hidden` simply clips the columns away with no scrollbar and no
+   hint they exist. */
+.card > table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* The topbar had the same disease as the tables, in a band nobody tests: at
+   768px (iPad portrait) the row of six tabs plus the wordmark and two buttons
+   came to 827px and pushed the whole PAGE sideways by 59px. It was invisible in
+   a screenshot — nothing bled past the edge — and only showed up by asking the
+   page whether it could actually scroll horizontally. It was not caught by the
+   mobile rules because those stop at 760.
+   
+   Rather than pick another breakpoint and hope, the nav is made shrinkable at
+   every width: `min-width: 0` lets a flex item go narrower than its content,
+   and its own overflow-x then scrolls the tabs. Above a laptop width there is
+   room for everything and nothing looks different; below it, the tabs scroll
+   instead of shoving the page. Adding a seventh tab cannot reintroduce this. */
+.topbar nav {
+  min-width: 0; overflow-x: auto; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.topbar nav::-webkit-scrollbar { display: none; }
+.topbar nav button { flex: 0 0 auto; }

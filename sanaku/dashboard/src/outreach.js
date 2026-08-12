@@ -4,6 +4,7 @@
 // caller's own Supabase session is forwarded and n8n reads sanaku_staff AS
 // THAT USER. No shared token ships in this bundle.
 import { supabase } from './supabase.js';
+import { todayISO } from './dates.js';
 
 const SEND_ENDPOINT = import.meta.env.VITE_N8N_SEND_URL;
 const DRAFT_ENDPOINT = import.meta.env.VITE_N8N_DRAFT_URL;
@@ -146,7 +147,8 @@ export async function setSendSwitch(on) {
 
 /** Today's remaining warm-up allowance, so the bench can show it. */
 export async function sendBudget() {
-  const today = new Date().toISOString().slice(0, 10);
+  // The send budget resets on the business day, not the UTC day.
+  const today = todayISO();
   const { data } = await supabase.from('sanaku_send_budget').select('cap,sent').eq('day', today).maybeSingle();
   if (!data) return { cap: 15, sent: 0, left: 15 };
   return { cap: data.cap, sent: data.sent, left: Math.max(0, data.cap - data.sent) };

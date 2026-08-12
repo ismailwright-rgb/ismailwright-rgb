@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { WORKFLOWS, recommendWorkflow, buildScript, scriptToText } from './playbook.js';
+import { formatDateTime } from './dates.js';
 
 const STATUSES = ['new', 'queued', 'contacted', 'replied', 'demo_booked', 'won', 'lost', 'dnc'];
 
@@ -120,7 +121,7 @@ function WhoYouAreCalling({ p }) {
   );
 }
 const CHANNELS = [['call', 'Call'], ['email', 'Email'], ['sms', 'Text']];
-const fmt = (d) => (d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
+const fmt = (d) => (d ? formatDateTime(d) : '');
 const inDays = (n) => {
   const d = new Date(Date.now() + n * 86400000);
   d.setHours(9, 0, 0, 0);

@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## W2s — send approved drafts\n\n**Nothing sends unless `send_enabled` = 1 in `sanaku_settings`.**\nToggle it from the Outreach tab — it is a row, not an env var, so it can be\nturned off without shell access the moment something looks wrong.\n\n### Three brakes\n1. the global switch\n2. the daily ramp — `sanaku_claim_send_slot()` claims atomically, so two runs cannot both take the last slot\n3. the recipient gate — approved **and** verified **and** a decision maker\n\n### Turning it off in a hurry\nOutreach tab → the sending toggle. Takes effect on the next run, ≤30 min.\nRaise the ramp by editing `cap` in `sanaku_send_budget` for today —\nstart at 15/day and climb over weeks, never in one jump.\n\nOne message per run, every 30 min, 08:00–17:00 PT weekdays only.\n\n### Sending goes over HTTPS, not SMTP\nThe droplet cannot reach `:587` at all — outbound SMTP is blocked and every\nattempt times out at 120s. Mail goes out through the **Zoho Mail REST API**\non 443 instead, which also puts a copy in the Sent folder.\nNeeds the `Zoho Mail OAuth (sanakuai.com)` credential.",
+        "content": "## W2s \u2014 send approved drafts\n\n**Nothing sends unless `send_enabled` = 1 in `sanaku_settings`.**\nToggle it from the Outreach tab \u2014 it is a row, not an env var, so it can be\nturned off without shell access the moment something looks wrong.\n\n### Three brakes\n1. the global switch\n2. the daily ramp \u2014 `sanaku_claim_send_slot()` claims atomically, so two runs cannot both take the last slot\n3. the recipient gate \u2014 approved **and** verified **and** a decision maker\n\n### Turning it off in a hurry\nOutreach tab \u2192 the sending toggle. Takes effect on the next run, \u226430 min.\nRaise the ramp by editing `cap` in `sanaku_send_budget` for today \u2014\nstart at 15/day and climb over weeks, never in one jump.\n\nOne message per run, every 30 min, 08:00\u201317:00 PT weekdays only.\n\n### Sending goes over HTTPS, not SMTP\nThe droplet cannot reach `:587` at all \u2014 outbound SMTP is blocked and every\nattempt times out at 120s. Mail goes out through the **Zoho Mail REST API**\non 443 instead, which also puts a copy in the Sent folder.\nNeeds the `Zoho Mail OAuth (sanakuai.com)` credential.",
         "height": 520,
         "width": 440,
         "color": 3
@@ -69,8 +69,8 @@
       ],
       "credentials": {
         "httpCustomAuth": {
-          "id": "supabase-custom-auth",
-          "name": "Supabase Service Role (Custom Auth)"
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       },
       "retryOnFail": true,
@@ -279,8 +279,8 @@
       ],
       "credentials": {
         "httpCustomAuth": {
-          "id": "supabase-custom-auth",
-          "name": "Supabase Service Role (Custom Auth)"
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       },
       "retryOnFail": true,
@@ -308,8 +308,8 @@
       ],
       "credentials": {
         "httpCustomAuth": {
-          "id": "supabase-custom-auth",
-          "name": "Supabase Service Role (Custom Auth)"
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       },
       "retryOnFail": true,
@@ -363,8 +363,8 @@
       ],
       "credentials": {
         "httpCustomAuth": {
-          "id": "supabase-custom-auth",
-          "name": "Supabase Service Role (Custom Auth)"
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       },
       "retryOnFail": true,
@@ -375,7 +375,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Assemble the message. The body is what Ismail approved, verbatim - this\n// step adds only the footer, which is a legal requirement rather than copy.\nconst p = $('Pick One Approved').first().json;\nconst claimed = $input.first().json;\n\n// The RPC returns a bare JSON boolean; PostgREST hands it back as the item\n// body, which n8n presents differently depending on version.\nconst ok = claimed === true || claimed?.data === true\n  || (Array.isArray(claimed) && claimed[0] === true)\n  || claimed?.sanaku_claim_send_slot === true;\nif (!ok) {\n  console.log('[w2s] daily send cap reached - stopping');\n  return [];\n}\n\nconst FROM_NAME = 'Ismail Rogers-Wright';\nconst FROM = (typeof $env !== 'undefined' && $env.ZOHO_FROM) || 'ismail@sanakuai.com';\n\n// CAN-SPAM: a real identity, a physical address, and a working opt-out on\n// every message. The address comes from the same env var the outbound guard\n// uses, so there is one place to change it.\nconst ADDRESS = (typeof $env !== 'undefined' && $env.SANAKU_MAILING_ADDRESS)\n  || 'Sanaku, Los Angeles County, CA';\n\nconst footer = [\n  '',\n  '--',\n  FROM_NAME,\n  'Sanaku · ' + FROM,\n  ADDRESS,\n  '',\n  'Reply STOP or say the word and I will not write again.',\n].join('\\n');\n\nreturn [{ json: {\n  id: p.id,\n  to: p.contact_email,\n  from: FROM,\n  fromName: FROM_NAME,\n  subject: p.draft_subject,\n  text: String(p.draft_body).trim() + '\\n' + footer,\n  step: p.draft_step || 1,\n  company_name: p.company_name,\n} }];"
+        "jsCode": "// Assemble the message. The body is what Ismail approved, verbatim - this\n// step adds only the footer, which is a legal requirement rather than copy.\nconst p = $('Pick One Approved').first().json;\nconst claimed = $input.first().json;\n\n// The RPC returns a bare JSON boolean; PostgREST hands it back as the item\n// body, which n8n presents differently depending on version.\nconst ok = claimed === true || claimed?.data === true\n  || (Array.isArray(claimed) && claimed[0] === true)\n  || claimed?.sanaku_claim_send_slot === true;\nif (!ok) {\n  console.log('[w2s] daily send cap reached - stopping');\n  return [];\n}\n\nconst FROM_NAME = 'Ismail Rogers-Wright';\nconst FROM = (typeof $env !== 'undefined' && $env.ZOHO_FROM) || 'ismail@sanakuai.com';\n\n// CAN-SPAM: a real identity, a physical address, and a working opt-out on\n// every message. The address comes from the same env var the outbound guard\n// uses, so there is one place to change it.\nconst ADDRESS = (typeof $env !== 'undefined' && $env.SANAKU_MAILING_ADDRESS)\n  || 'Sanaku, Los Angeles County, CA';\n\nconst footer = [\n  '',\n  '--',\n  FROM_NAME,\n  'Sanaku \u00b7 ' + FROM,\n  ADDRESS,\n  '',\n  'Reply STOP or say the word and I will not write again.',\n].join('\\n');\n\nreturn [{ json: {\n  id: p.id,\n  to: p.contact_email,\n  from: FROM,\n  fromName: FROM_NAME,\n  subject: p.draft_subject,\n  text: String(p.draft_body).trim() + '\\n' + footer,\n  step: p.draft_step || 1,\n  company_name: p.company_name,\n} }];"
       },
       "id": "e2000000-0000-4000-8000-000000000013",
       "name": "Build The Email",
@@ -406,7 +406,7 @@
       ],
       "credentials": {
         "httpCustomAuth": {
-          "id": "PLACEHOLDER_ZOHO_OAUTH",
+          "id": "9fcfyP74zGuil81m",
           "name": "Zoho Mail OAuth (sanakuai.com)"
         }
       },
@@ -532,8 +532,8 @@
       ],
       "credentials": {
         "httpCustomAuth": {
-          "id": "supabase-custom-auth",
-          "name": "Supabase Service Role (Custom Auth)"
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       },
       "retryOnFail": true,
@@ -573,8 +573,8 @@
       ],
       "credentials": {
         "httpCustomAuth": {
-          "id": "supabase-custom-auth",
-          "name": "Supabase Service Role (Custom Auth)"
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       },
       "retryOnFail": true,
@@ -614,8 +614,8 @@
       ],
       "credentials": {
         "httpCustomAuth": {
-          "id": "supabase-custom-auth",
-          "name": "Supabase Service Role (Custom Auth)"
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       },
       "retryOnFail": true,
@@ -655,8 +655,8 @@
       ],
       "credentials": {
         "httpCustomAuth": {
-          "id": "supabase-custom-auth",
-          "name": "Supabase Service Role (Custom Auth)"
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       },
       "retryOnFail": true,

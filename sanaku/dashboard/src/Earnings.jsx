@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
+import { monthPeriod } from './dates.js';
 import Statements from './Statements.jsx';
+import LoadError, { firstError } from './LoadError.jsx';
 
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-const monthStart = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; };
+
 const monthLabel = () => new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
 /**
@@ -19,20 +21,30 @@ const monthLabel = () => new Date().toLocaleString('en-US', { month: 'long', yea
 export default function Earnings() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState(null);
 
   async function load() {
     setLoading(true);
-    const start = monthStart();
-    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-    const iso = (d) => d.toISOString().slice(0, 10);
+    setLoadErr(null);
+    // Business-timezone month. `startAt`/`endAt` are instants for timestamp
+    // comparisons; `startISO`/`endISO` are civil dates for the RPC. Mixing the
+    // two is what made month-end figures land in the wrong month abroad.
+    const { startISO, endISO, startAt } = monthPeriod(0);
     const [c, l, f] = await Promise.all([
       // is_demo excluded: the demo client used for sales calls has a retainer
       // on it so the portal looks real, and counting it here would quote you
       // revenue from a company that does not exist.
       supabase.from('sanaku_clients').select('*').eq('status', 'active').eq('is_demo', false).order('company_name'),
-      supabase.from('sanaku_client_leads').select('client_id, qualified, after_hours, billable, reported_value, captured_at').gte('captured_at', start.toISOString()),
-      supabase.rpc('sanaku_statements_for_period', { _start: iso(start), _end: iso(end) }),
+      supabase.from('sanaku_client_leads').select('client_id, qualified, after_hours, billable, reported_value, captured_at').gte('captured_at', startAt.toISOString()),
+      supabase.rpc('sanaku_statements_for_period', { _start: startISO, _end: endISO }),
     ]);
+    // Supabase resolves rather than throws on a network failure, so an empty
+    // array here can mean "no clients" OR "the request never arrived". Those
+    // must not render the same way.
+    const failure = firstError(c, l, f);
+    setLoadErr(failure || null);
+    if (failure) { setRows([]); setLoading(false); return; }
+
     const leads = l.data || [];
     const due = Object.fromEntries((f.data || []).map((r) => [r.client_id, r]));
     const out = (c.data || []).map((cl) => {
@@ -79,7 +91,9 @@ export default function Earnings() {
 
       <div className="card">
         <h3>What each client owes — {monthLabel()}</h3>
-        {loading ? <div className="empty">Loading…</div> : rows.length === 0 ? (
+        {loading ? <div className="empty">Loading…</div> : loadErr ? (
+          <LoadError error={loadErr} onRetry={load} what="earnings" />
+        ) : rows.length === 0 ? (
           <div className="empty">No active clients yet. Earnings appear here the moment one is onboarded.</div>
         ) : (
           <table>

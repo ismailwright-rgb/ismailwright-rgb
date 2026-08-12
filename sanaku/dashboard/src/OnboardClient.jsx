@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from './supabase.js';
 import Branding from './Branding.jsx';
 import { invitePortalUser, manualInviteSteps } from './invite.js';
+import { todayISO, addDaysISO } from './dates.js';
 
 // Pricing structures that survive review, by vertical. The database enforces
 // this too (migration-002) - this is the friendly half of the same rule.
@@ -30,8 +31,10 @@ const DEFAULTS = {
   medical: { retainer: 800, perLead: 0, cap: 0, setup: 500 },
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
-const plusDays = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+// Business timezone, not UTC. Onboarding a client at 6pm Pacific used to write
+// tomorrow's date into pilot_ends_on and billing_starts_on.
+const today = () => todayISO();
+const plusDays = (n) => addDaysISO(n);
 
 export default function OnboardClient({ onDone, onCancel }) {
   const [vertical, setVertical] = useState('home_services');

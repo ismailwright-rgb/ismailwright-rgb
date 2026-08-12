@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
+import { formatDay } from './dates.js';
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US'));
-const day = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
+const day = (d) => formatDay(d);
 
 /**
  * Pending add-on requests. Approving freezes the catalog terms onto the row

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
+import { monthPeriod } from './dates.js';
+import LoadError, { firstError } from './LoadError.jsx';
 import OnboardClient from './OnboardClient.jsx';
 import Branding from './Branding.jsx';
 import AddOnRequests from './AddOnRequests.jsx';
@@ -57,20 +59,29 @@ export default function Clients({ onPreview }) {
   const [clients, setClients] = useState([]);
   const [leadStats, setLeadStats] = useState({});
   const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState(null);
   const [onboarding, setOnboarding] = useState(false);
   const [branding, setBranding] = useState(null);
   const [notice, setNotice] = useState(null);   // { bad, text }
 
   async function load() {
     setLoading(true);
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
+    setLoadErr(null);
+    // Business-timezone month start, not the reader's. This counted a client's
+    // leads from local midnight, so the month-to-date figures moved depending
+    // on which country the dashboard was opened in.
+    const { startAt: monthStart } = monthPeriod(0);
     const [c, l] = await Promise.all([
       supabase.from('sanaku_clients').select('*').order('onboarded_at', { ascending: true }),
       supabase.from('sanaku_client_leads').select('client_id, after_hours, qualified, reported_value, billable, captured_at')
         .gte('captured_at', monthStart.toISOString()),
     ]);
+    // A failed request resolves with data:null, which would otherwise render as
+    // "No clients yet" — a wrong answer that looks like a real one.
+    const failure = firstError(c, l);
+    setLoadErr(failure || null);
+    if (failure) { setClients([]); setLoading(false); return; }
+
     setClients(c.data || []);
     const stats = {};
     for (const lead of l.data || []) {
@@ -243,7 +254,9 @@ export default function Clients({ onPreview }) {
             <button className="rowbtn primary" onClick={() => setOnboarding(true)}>+ Onboard client</button>
           )}
         </h3>
-        {loading ? <div className="empty">Loading…</div> : clients.length === 0 ? (
+        {loading ? <div className="empty">Loading…</div> : loadErr ? (
+          <LoadError error={loadErr} onRetry={load} what="your clients" />
+        ) : clients.length === 0 ? (
           <div className="empty">
             No clients yet — close the first demo, then hit <b>Onboard client</b>.
             Pricing rules for each vertical are enforced for you.

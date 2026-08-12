@@ -96,7 +96,7 @@
         "method": "POST",
         "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -123,18 +123,18 @@
       ],
       "retryOnFail": true,
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabase-header-auth",
-          "name": "Supabase Service Role (Header Auth)"
+        "httpCustomAuth": {
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       }
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?select=id,domain,company_name,vertical,city,state,contact_name,contact_email,contact_email_personal,contact_linkedin_url,contact_phone_source,tier,intent_score&source=eq.google_places&status=eq.new&vertical=in.(law_firm,accounting_tax,therapy,financial_advisory,family_office)&do_not_contact=eq.false&or=(contact_name.is.null,and(contact_name.not.is.null,contact_phone_source.eq.google_places,phone_reveal_request_id.is.null))&order=tier.asc.nullslast,intent_score.desc.nullslast,first_seen.asc&limit={{ $json.maxRevealsPerRun }}",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?select=id,domain,company_name,vertical,city,state,contact_name,contact_email,contact_email_personal,contact_linkedin_url,contact_phone_source,tier,intent_score&source=eq.google_places&status=eq.new&vertical=in.(law_firm,accounting_tax,therapy,financial_advisory,family_office)&do_not_contact=eq.false&contact_name=is.null&order=tier.asc.nullslast,intent_score.desc.nullslast,first_seen.asc&limit={{ $json.maxRevealsPerRun }}",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpCustomAuth",
         "options": {
           "timeout": 15000
         }
@@ -149,9 +149,9 @@
       ],
       "retryOnFail": true,
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabase-header-auth",
-          "name": "Supabase Service Role (Header Auth)"
+        "httpCustomAuth": {
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       },
       "notes": "Target verticals only. medical and home_services are still in the table from before the retarget and are never contacted, so enriching them spends a lead credit per row for nothing - 28 of the 69 outstanding at the time this was added.",
@@ -195,7 +195,7 @@
       "retryOnFail": true,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "apollo-header-auth",
+          "id": "LsIuGD0l1RwjEWGD",
           "name": "Apollo API Key (Header Auth)"
         }
       }
@@ -205,7 +205,7 @@
         "method": "POST",
         "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -232,9 +232,9 @@
       ],
       "retryOnFail": true,
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabase-header-auth",
-          "name": "Supabase Service Role (Header Auth)"
+        "httpCustomAuth": {
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       }
     },
@@ -263,7 +263,7 @@
       "retryOnFail": true,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "apollo-header-auth",
+          "id": "LsIuGD0l1RwjEWGD",
           "name": "Apollo API Key (Header Auth)"
         }
       }
@@ -273,7 +273,7 @@
         "method": "POST",
         "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_errors",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -300,9 +300,9 @@
       ],
       "retryOnFail": true,
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabase-header-auth",
-          "name": "Supabase Service Role (Header Auth)"
+        "httpCustomAuth": {
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       }
     },
@@ -382,7 +382,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "apollo-header-auth",
+          "id": "LsIuGD0l1RwjEWGD",
           "name": "Apollo API Key (Header Auth)"
         }
       }
@@ -420,7 +420,7 @@
         "method": "PATCH",
         "url": "={{ $env.SUPABASE_URL }}/rest/v1/sanaku_prospects?id=eq.{{ $json.id }}",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -447,9 +447,9 @@
       ],
       "retryOnFail": true,
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabase-header-auth",
-          "name": "Supabase Service Role (Header Auth)"
+        "httpCustomAuth": {
+          "id": "bewGewKvzpMCFasR",
+          "name": "Supabase Service Role (Custom Auth) - M1"
         }
       }
     },
@@ -681,5 +681,7 @@
   "settings": {
     "executionOrder": "v1",
     "timezone": "America/Los_Angeles"
-  }
+  },
+  "pinData": {},
+  "meta": {}
 }

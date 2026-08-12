@@ -5,6 +5,7 @@ import {
   downloadPostPack, downloadBatchPack,
 } from './postpack.js';
 import { requestGeneration, canGenerate } from './generate.js';
+import { formatDay } from './dates.js';
 
 /**
  * The content studio.
@@ -50,7 +51,7 @@ const VERTICAL_LABEL = {
   family_office: 'Family office',
 };
 const pretty = (s) => String(s || '').replace(/_/g, ' ');
-const day = (s) => (s ? new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
+const day = (s) => (s ? formatDay(s) : '');
 
 export default function Marketing() {
   const [rows, setRows] = useState([]);

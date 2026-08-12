@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
+import { monthPeriod } from './dates.js';
 
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-const iso = (d) => d.toISOString().slice(0, 10);
-const monthName = (d) => d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-
-/** First and last day of the month `back` months ago (0 = this month). */
+/**
+ * First and last day of the month `back` months ago (0 = this month), in the
+ * BUSINESS timezone — see dates.js. This used to build a local Date and then
+ * read its UTC date back out, which shifted the whole period a day earlier
+ * whenever the statement was pulled from a UTC+ timezone.
+ */
 function period(back) {
-  const s = new Date();
-  s.setDate(1);
-  s.setMonth(s.getMonth() - back);
-  s.setHours(0, 0, 0, 0);
-  const e = new Date(s);
-  e.setMonth(e.getMonth() + 1);
-  e.setDate(0);
-  return { start: s, end: e, label: monthName(s) };
+  const p = monthPeriod(back);
+  return { start: p.startISO, end: p.endISO, label: p.label, startAt: p.startAt, endAt: p.endAt };
 }
+
+// start/end are already YYYY-MM-DD strings now; kept as a named step so the
+// call sites still read as "the iso date of the period boundary".
+const iso = (d) => d;
 
 /**
  * Turning a month's activity into a statement the client can see.

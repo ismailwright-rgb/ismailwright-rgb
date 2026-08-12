@@ -7,7 +7,54 @@ import Earnings from './Earnings.jsx';
 import Marketing from './Marketing.jsx';
 import OutreachDrafts from './OutreachDrafts.jsx';
 import Portal from './Portal.jsx';
+import Factory from './Factory.jsx';
+import { BUSINESS_TZ, tzLabel, isAwayFromBusinessTz } from './dates.js';
 import SetPassword from './SetPassword.jsx';
+
+/**
+ * Two things the operator needs to know when working from somewhere else, and
+ * nowhere else in the UI would tell them.
+ *
+ * Offline: the dashboard is read-mostly and the fetch layer retries GETs, so a
+ * brief drop is survivable — but a write attempted while offline will fail, and
+ * silently sitting on a stale screen is worse than a line of text saying so.
+ *
+ * Timezone: every date in here is business time (see dates.js). If you are
+ * reading it from Tokyo, "Aug 12" means Aug 12 in California. Without the
+ * label, a figure looks like it disagrees with your watch.
+ */
+function ConnectionBanner() {
+  const [online, setOnline] = useState(() => navigator.onLine !== false);
+  const [away] = useState(() => isAwayFromBusinessTz());
+
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
+
+  if (!online) {
+    return (
+      <div className="netbanner off" role="status">
+        <b>No connection.</b> Reading will resume on its own; anything you save right now will not go through.
+      </div>
+    );
+  }
+  if (away) {
+    return (
+      <div className="netbanner tz" role="status">
+        Dates and totals are shown in business time ({tzLabel()}, {BUSINESS_TZ.split('/')[1].replace('_', ' ')}),
+        not your current timezone — so month-end matches the books.
+      </div>
+    );
+  }
+  return null;
+}
 
 function ThemeToggle() {
   const [theme, setTheme] = useState(() => localStorage.getItem('sanaku-theme') || 'auto');
@@ -93,6 +140,7 @@ export default function App() {
 
   return (
     <>
+      <ConnectionBanner />
       <div className="topbar">
         <span className="brand">SANAKU<span className="dot">.</span></span>
         <nav>
@@ -111,6 +159,9 @@ export default function App() {
           <button className={page === 'marketing' ? 'active' : ''} onClick={() => setPage('marketing')}>
             Marketing
           </button>
+          <button className={page === 'factory' ? 'active' : ''} onClick={() => setPage('factory')}>
+            Factory
+          </button>
         </nav>
         <span className="spacer" />
         <ThemeToggle />
@@ -121,6 +172,7 @@ export default function App() {
           : page === 'clients' ? <Clients onPreview={setPreview} />
           : page === 'outreach' ? <OutreachDrafts />
           : page === 'marketing' ? <Marketing />
+          : page === 'factory' ? <Factory />
           : <Earnings />}
       </div>
     </>

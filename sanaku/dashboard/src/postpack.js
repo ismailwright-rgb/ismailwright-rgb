@@ -232,7 +232,7 @@ export async function downloadBatchPack(items, onProgress) {
     missing += await fill(zip.folder(name), items[i]);
     if (onProgress) onProgress(i + 1, items.length);
   }
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = todayISO();
   saveBlob(await zip.generateAsync({ type: 'blob' }), `sanaku_approved_${stamp}.zip`);
   return { missing, count: items.length };
 }

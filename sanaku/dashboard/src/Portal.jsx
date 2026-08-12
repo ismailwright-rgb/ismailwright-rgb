@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import AddOns from './AddOns.jsx';
+import { formatDay, formatDateTime } from './dates.js';
 
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-const day = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-const time = (d) => new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const day = (d) => formatDay(d);
+const time = (d) => formatDateTime(d);
 const startOfMonth = (offset = 0) => { const d = new Date(); d.setMonth(d.getMonth() + offset, 1); d.setHours(0, 0, 0, 0); return d; };
 
 // Exactly the columns sanaku_my_client exposes. Staff previewing a portal read

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { WORKFLOWS, recommendWorkflow, buildScript, scriptToText } from './playbook.js';
 import ProspectDrawer from './ProspectDrawer.jsx';
+import { formatDay, formatSchedule } from './dates.js';
 
 // Privacy-regulated retargeting (2026-08): dropped medical/home_services from
 // the filter dropdown - sourcing no longer targets them, in this priority
@@ -16,7 +17,7 @@ const VERTICALS = {
   family_office: 'Family office',
 };
 const fmtMoney = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US'));
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
+const fmtDate = (d) => formatDay(d);
 
 export default function Pipeline() {
   const [prospects, setProspects] = useState([]);
@@ -132,7 +133,7 @@ export default function Pipeline() {
             <tbody>
               {demos.map((d) => (
                 <tr key={d.id}>
-                  <td>{new Date(d.scheduled_for).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+                  <td>{formatSchedule(d.scheduled_for)}</td>
                   <td>
                     {d.sanaku_prospects?.company_name || '—'}
                     <div className="muted">{d.sanaku_prospects?.contact_name} · {d.sanaku_prospects?.contact_phone}</div>
@@ -160,7 +161,7 @@ export default function Pipeline() {
                   <td className="hide-m">
                     {f.contact_phone && <a href={`tel:${f.contact_phone.replace(/[^\d+]/g, '')}`}>{f.contact_phone}</a>}
                   </td>
-                  <td className="num muted">{new Date(f.next_action_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+                  <td className="num muted">{formatDay(f.next_action_at)}</td>
                   <td style={{ textAlign: 'right' }}>
                     <button
                       className="rowbtn primary"

@@ -4,6 +4,7 @@ import {
   bestEmail, bestPhone, saveDraft, approveDraft, skipDraft, approveAndSend,
   sendBudget, sendHealth, canSend, sendSwitch, setSendSwitch, canDraft, draftFor, draftableProspects,
 } from './outreach.js';
+import { formatDay } from './dates.js';
 
 /**
  * The outreach bench — the second approval gate.
@@ -17,7 +18,7 @@ const VERTICAL = {
   law_firm: 'PI law', accounting_tax: 'Accounting & tax', therapy: 'Therapy',
   financial_advisory: 'Financial advisory', family_office: 'Family office',
 };
-const day = (s) => (s ? new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
+const day = (s) => (s ? formatDay(s) : '');
 const STEP = { 1: 'Opener', 2: 'Follow-up · day 3', 3: 'Breakup · day 8' };
 
 export default function OutreachDrafts() {
