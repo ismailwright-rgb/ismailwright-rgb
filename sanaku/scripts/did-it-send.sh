@@ -47,9 +47,9 @@ today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
 # string is decoded as a space, so PostgREST reads "...142376 00:00" and rejects
 # it as a malformed timestamp. Encoding it turns the filter back into a filter
 # instead of an error that reads as "no failures found".
-since = urllib.parse.quote(
-    (datetime.datetime.now(datetime.timezone.utc)
-     - datetime.timedelta(hours=24)).isoformat())
+since_raw = (datetime.datetime.now(datetime.timezone.utc)
+             - datetime.timedelta(hours=24)).isoformat()
+since = urllib.parse.quote(since_raw)
 
 ERRORS = []
 
@@ -118,11 +118,19 @@ if sent_today is not None and claimed != len(sent_today):
     verdict.append(
         f"MISMATCH: {claimed} slot(s) claimed today but {len(sent_today)} delivered. "
         "Slots were spent on sends that did not happen.")
-if failures and not sent_today:
+# Compare like with like. FAILED counts a rolling 24 hours; sent_today counts
+# the calendar day. Judging one against the other declared the sender DOWN every
+# morning, because yesterday afternoon's failures outlived midnight while the
+# day's delivery count reset to zero. Both sides of this test are now 24h.
+sent_24h = ([r for r in sent_all if str(r.get('sent_at', '')) >= since_raw]
+            if sent_all is not None else None)
+if failures and sent_24h is not None and not sent_24h:
     verdict.append(
         f"The sender looks DOWN: {len(failures)} failure(s) and nothing delivered in 24h.")
 elif failures:
-    verdict.append(f"Partially working: {len(failures)} failure(s) alongside real deliveries.")
+    verdict.append(
+        f"{len(failures)} failure(s) in the last 24h alongside {len(sent_24h or [])} delivery(ies) "
+        "in the same window.")
 if sent_all is not None and not sent_all:
     verdict.append("No email has EVER been sent from this system.")
 

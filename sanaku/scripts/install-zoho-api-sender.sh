@@ -184,9 +184,10 @@ say "credential id $CRED_ID"
 # 5. Install the workflow, with placeholders resolved
 # ---------------------------------------------------------------------------
 say "installing W2s..."
-python3 - "$N8N_URL" "$N8N_KEY" "$WF_ID" "$CRED_ID" "$CRED_NAME" "$SUPA_CRED" <<'PY'
+python3 - "$N8N_URL" "$N8N_KEY" "$WF_ID" "$CRED_ID" "$CRED_NAME" "$SUPA_CRED" \
+         "$SUPABASE_URL" "$SUPABASE_ANON_KEY" <<'PY'
 import json, os, subprocess, sys
-url, key, wf_id, zoho_id, zoho_name, supa_id = sys.argv[1:7]
+url, key, wf_id, zoho_id, zoho_name, supa_id, supa_url, supa_anon = sys.argv[1:9]
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) \
     if "__file__" in dir() else "."
@@ -204,6 +205,30 @@ left = [c.get("id") for n in wf["nodes"] for c in (n.get("credentials") or {}).v
         if str(c.get("id", "")).startswith(("PLACEHOLDER", "REPLACE"))]
 if left:
     print("  refusing to install - unresolved placeholders:", left)
+    sys.exit(1)
+
+# Pin $env.SUPABASE_* to literals, exactly as install-m1.sh does.
+#
+# The droplet's SUPABASE_URL points at a DIFFERENT Supabase project
+# (egrouxublcekfsrplxdv, not Sanaku's ewqtqkabtzdmbrlvhnjx) and it has no
+# SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY set at all. So an expression that
+# looks correct in the repo silently resolves to the wrong database on the
+# server, and every Supabase call comes back 401 "Invalid API key".
+#
+# An earlier install of this workflow shipped the raw expressions and did
+# exactly that - and the failure looked like a broken credential, because the
+# error names the key rather than the host. Pinning here means the workflow
+# JSON in git stays readable ($env) while what runs on the droplet is explicit.
+blob = json.dumps(wf)
+n_url = blob.count("{{ $env.SUPABASE_URL }}")
+n_key = blob.count("{{ $env.SUPABASE_ANON_KEY }}")
+blob = blob.replace("{{ $env.SUPABASE_URL }}", supa_url) \
+           .replace("{{ $env.SUPABASE_ANON_KEY }}", supa_anon)
+wf = json.loads(blob)
+print(f"  pinned {n_url} SUPABASE_URL and {n_key} ANON_KEY expression(s) to literals")
+
+if "$env.SUPABASE" in json.dumps(wf):
+    print("  refusing to install - an unpinned $env.SUPABASE reference remains")
     sys.exit(1)
 
 # n8n rejects unknown keys on update.

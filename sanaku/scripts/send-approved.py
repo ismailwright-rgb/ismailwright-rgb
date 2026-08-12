@@ -54,6 +54,7 @@ import os
 import smtplib
 import ssl
 import sys
+import time
 import urllib.parse
 import urllib.request
 from email.message import EmailMessage
@@ -215,6 +216,10 @@ def main():
                     help="run the real send path but redirect to this address "
                          "('me' = your own). Touches no prospect rows.")
     ap.add_argument("--force", action="store_true", help="ignore the business-hours window")
+    ap.add_argument("--pace", type=int, default=0, metavar="SECONDS",
+                    help="wait this long between sends. Fifteen messages leaving a "
+                         "new domain inside one minute is the shape of a mailing, not "
+                         "a person - pace them when sending more than a couple.")
     args = ap.parse_args()
 
     load_env()
@@ -258,7 +263,13 @@ def main():
           f"{f' [TEST -> {test_to}]' if test_to else ''}")
 
     sent = 0
-    for p in rows:
+    for idx, p in enumerate(rows):
+        # Pace BEFORE each send after the first, so the gap is between messages
+        # rather than trailing pointlessly after the last one.
+        if idx and args.pace and not args.dry_run:
+            print(f"     (pausing {args.pace}s)")
+            time.sleep(args.pace)
+
         who = p.get("contact_name") or p.get("company_name") or "?"
         dest = test_to or p["contact_email"]
         print(f"  -> {who} <{dest}>")
