@@ -42,6 +42,32 @@ echo "==> Building with your Supabase config baked in..."
 VITE_SUPABASE_URL="$SUPABASE_URL" VITE_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
   VITE_N8N_WEBHOOK_BASE="${N8N_URL:+$N8N_URL/webhook}" npm run build
 
+# ----------------------------------------------------------------------------
+# Refuse to deploy a bundle with no database in it
+# ----------------------------------------------------------------------------
+# Vite inlines import.meta.env at BUILD time. If the VITE_ variables are absent
+# it does not warn - it emits a bundle where the config is simply gone, and the
+# result is a dashboard that loads, runs, and shows nothing.
+#
+# That shipped on 2026-08-12, from a hand-run `npm run build` in a checkout with
+# no .env. The deploy succeeded, every asset returned 200, and the page was
+# blank. Checking HTTP status told us nothing, because the server was fine.
+#
+# The bundle either contains the Supabase host or it does not, and that is
+# cheap to assert. Anything that reaches Netlify has passed this.
+echo "==> Verifying the build actually contains its configuration..."
+SUPA_HOST="$(printf '%s' "$SUPABASE_URL" | sed -E 's#^https?://##; s#/.*##')"
+if ! grep -rqF "$SUPA_HOST" dist/assets/*.js 2>/dev/null; then
+  echo ""
+  echo "REFUSING TO DEPLOY: no Supabase host found in the built bundle."
+  echo "  expected to find: $SUPA_HOST"
+  echo ""
+  echo "  The build ran without VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY."
+  echo "  Deploying this would replace the dashboard with a blank page."
+  exit 1
+fi
+echo "    ok - $SUPA_HOST is baked in"
+
 echo "==> Netlify login (a browser tab may open ONCE - click 'Authorize')..."
 npx -y netlify-cli@17 status >/dev/null 2>&1 || npx -y netlify-cli@17 login
 
