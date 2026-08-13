@@ -3,63 +3,108 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Book a call — Sanaku</title>
+<title>Book a discovery call — Sanaku</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { --ink:#111418; --sub:#5b6470; --line:#e3e6ea; --accent:#0f62fe; --bg:#f7f8fa; }
-  * { box-sizing:border-box; margin:0; }
-  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
-  .wrap { max-width:640px; margin:0 auto; padding:40px 20px 80px; }
-  h1 { font-size:26px; margin-bottom:6px; }
-  .sub { color:var(--sub); margin-bottom:28px; line-height:1.5; }
-  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:var(--sub); margin:26px 0 10px; }
-  .slots { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
-  .slot { padding:10px 8px; border:1px solid var(--line); background:#fff; border-radius:8px; font-size:13px; cursor:pointer; text-align:center; }
-  .slot:hover { border-color:var(--accent); }
-  .slot.sel { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .day-label { grid-column:1/-1; font-size:12px; font-weight:600; color:var(--sub); margin-top:10px; }
-  form { margin-top:10px; }
-  label { display:block; font-size:13px; font-weight:600; margin:14px 0 4px; }
-  input, textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:15px; background:#fff; }
-  input:focus, textarea:focus { outline:2px solid var(--accent); border-color:transparent; }
-  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  .hint { font-size:12px; color:var(--sub); margin-top:3px; }
-  button { margin-top:22px; width:100%; padding:14px; background:var(--accent); color:#fff; border:0; border-radius:8px; font-size:16px; font-weight:600; cursor:pointer; }
-  button:disabled { opacity:.5; cursor:default; }
-  .msg { margin-top:16px; padding:12px; border-radius:8px; font-size:14px; display:none; }
-  .msg.ok { display:block; background:#e6f4ea; color:#1e6b34; }
-  .msg.err { display:block; background:#fdecea; color:#a12622; }
-  .loss { margin-top:10px; font-size:14px; color:var(--sub); }
-  .loss b { color:var(--ink); }
+  :root {
+    --paper: #faf8f3;
+    --paper-2: #f2eee5;
+    --ink: #172a23;
+    --ink-soft: #51625b;
+    --line: #e2ddd1;
+    --green: #0d6b42;
+    --green-deep: #0a5434;
+    --gold: #b98a2f;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Instrument Sans", -apple-system, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, .serif { font-family: "Fraunces", Georgia, serif; font-weight: 500; letter-spacing: -0.01em; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 56px 24px 80px; }
+  .wordmark { font-family: "Fraunces", serif; font-weight: 600; font-size: 19px; letter-spacing: 0.06em; color: var(--ink); margin-bottom: 30px; }
+  .wordmark span { color: var(--green); }
+  .eyebrow { font-size: 12.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; }
+  h1 { font-size: clamp(28px, 5vw, 36px); line-height: 1.15; margin-bottom: 10px; }
+  .sub { color: var(--ink-soft); margin-bottom: 36px; max-width: 52ch; }
+
+  .kicker { font-size: 12.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin: 30px 0 12px; }
+  .hint { font-size: 13px; color: var(--ink-soft); }
+
+  .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .day-label { grid-column: 1 / -1; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-top: 12px; }
+  .day-label:first-child { margin-top: 0; }
+  .slot {
+    padding: 11px 8px; border: 1px solid var(--line); background: #fff; border-radius: 9px;
+    font-size: 13.5px; cursor: pointer; text-align: center; transition: border-color .12s ease, background .12s ease;
+  }
+  .slot:hover { border-color: var(--green); }
+  .slot.sel { background: var(--green); color: #fff; border-color: var(--green); }
+
+  form { margin-top: 8px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 16px 0 5px; color: var(--ink); }
+  label .opt { font-weight: 400; color: var(--ink-soft); text-transform: none; letter-spacing: 0; }
+  input, textarea {
+    width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px;
+    font-size: 15px; background: #fff; font-family: inherit; color: var(--ink);
+  }
+  input:focus, textarea:focus { outline: 2px solid var(--green); border-color: transparent; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 480px) { .row { grid-template-columns: 1fr; } }
+
+  .btn {
+    margin-top: 26px; width: 100%; padding: 14px; background: var(--green); color: #fff;
+    border: 0; border-radius: 999px; font-size: 15.5px; font-weight: 600; cursor: pointer;
+    font-family: inherit; transition: background .15s ease;
+  }
+  .btn:hover:not(:disabled) { background: var(--green-deep); }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  .msg { margin-top: 16px; padding: 13px 15px; border-radius: 9px; font-size: 14px; display: none; }
+  .msg.ok { display: block; background: rgba(13,107,66,.10); color: var(--green-deep); }
+  .msg.err { display: block; background: #fdecea; color: #a12622; }
+
+  .note { margin-top: 40px; font-size: 13px; color: var(--ink-soft); }
+  .note a { color: var(--green); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Grab 30 minutes</h1>
-  <p class="sub">Pick a time and tell me two numbers. I'll show you — with your own figures — roughly what missed leads are costing you per month, and whether it's worth fixing.</p>
+  <div class="wordmark">SANA<span>KU</span></div>
+  <div class="eyebrow">Discovery call</div>
+  <h1>Book a discovery call</h1>
+  <p class="sub">A short call to understand your caseload and where the hours are actually going — then, on the call, we'll show you exactly how the system works, with the internet physically disconnected.</p>
 
-  <h2>1 · Pick a time (Pacific)</h2>
+  <div class="kicker">1 · Pick a time (Pacific)</div>
   <div class="slots" id="slots"><span class="hint">Loading open times…</span></div>
 
-  <h2>2 · Your details</h2>
+  <div class="kicker">2 · Your details</div>
   <form id="f">
     <div class="row">
       <div><label>Your name</label><input name="name" required></div>
-      <div><label>Company</label><input name="company" required></div>
+      <div><label>Firm name</label><input name="company" required></div>
     </div>
     <div class="row">
       <div><label>Phone</label><input name="phone" type="tel" required></div>
       <div><label>Email</label><input name="email" type="email" required></div>
     </div>
-    <label>Roughly how many leads (calls + forms) come in per month?</label>
-    <input name="lead_volume" type="number" min="1" required>
-    <label>What's one closed client / job worth to you, on average? ($)</label>
-    <input name="lead_value" type="number" min="1" required>
-    <div class="loss" id="loss"></div>
-    <label>Biggest headache with inbound leads right now? (optional)</label>
-    <textarea name="pain" rows="2"></textarea>
-    <button type="submit" id="go" disabled>Pick a time above first</button>
+    <label>City, state</label>
+    <input name="city" placeholder="e.g. Azusa, CA">
+    <label>Anything about your current process worth knowing before the call? <span class="opt">(optional)</span></label>
+    <textarea name="notes" rows="3"></textarea>
+    <button type="submit" id="go" class="btn" disabled>Pick a time above first</button>
     <div class="msg" id="msg"></div>
   </form>
+
+  <p class="note">Prefer email? Write to <a href="mailto:sanakuuai@gmail.com">sanakuuai@gmail.com</a> instead.</p>
 </div>
 
 <script>
@@ -71,7 +116,6 @@ const $slots = document.getElementById("slots");
 const $go = document.getElementById("go");
 const $msg = document.getElementById("msg");
 const $f = document.getElementById("f");
-const $loss = document.getElementById("loss");
 
 fetch(N8N_BASE + "/sanaku-slots")
   .then(r => r.json())
@@ -105,16 +149,6 @@ fetch(N8N_BASE + "/sanaku-slots")
   })
   .catch(() => { $slots.innerHTML = "<span class='hint'>Couldn't load times. Refresh or email me.</span>"; });
 
-function updateLoss() {
-  const v = Number($f.lead_volume.value), val = Number($f.lead_value.value);
-  if (v > 0 && val > 0) {
-    const loss = Math.round(v * 0.25 * val);
-    $loss.innerHTML = "At a typical 25% miss rate, that's roughly <b>$" + loss.toLocaleString() + "/month</b> walking out the door.";
-  } else { $loss.textContent = ""; }
-}
-$f.lead_volume.addEventListener("input", updateLoss);
-$f.lead_value.addEventListener("input", updateLoss);
-
 $f.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!selected) return;
@@ -127,7 +161,7 @@ $f.addEventListener("submit", async (e) => {
     const j = await r.json();
     if (j.ok) {
       $msg.className = "msg ok";
-      $msg.textContent = "Booked. Calendar invite is on its way to your email — see you then.";
+      $msg.textContent = "Booked. A calendar invite is on its way to your email — see you then.";
       $go.textContent = "Booked ✓";
     } else { throw new Error(j.error || "failed"); }
   } catch (err) {

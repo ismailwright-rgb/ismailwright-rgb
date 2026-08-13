@@ -261,8 +261,13 @@
   // ---- config: set PHONE to a public number (e.g. "+16265551234") to surface call links ----
   const EMAIL = "sanakuuai@gmail.com";
   const PHONE = "(714) 584-4086";
+  // The live booking page (sanaku/booking/index.html) once it has a real
+  // Netlify URL - e.g. "https://sanaku-booking.netlify.app". Leave blank and
+  // every "Book a discovery call" button keeps today's mailto: fallback
+  // instead of linking to a page that doesn't exist yet.
+  const BOOKING_URL = "";
 
-  // ---- mailto wiring for every "Book a discovery call" button ----
+  // ---- CTA wiring: the booking calendar once it's live, mailto until then ----
   function mailHref() {
     const subject = encodeURIComponent("Discovery call request");
     let body = "Hi Ismail,%0D%0A%0D%0AI'd like to book a discovery call.%0D%0A%0D%0A" +
@@ -270,7 +275,7 @@
       "A little about our current process (optional): ___";
     return "mailto:" + EMAIL + "?subject=" + subject + "&body=" + body;
   }
-  document.querySelectorAll(".cta-mail").forEach((a) => { a.href = mailHref(); });
+  document.querySelectorAll(".cta-mail").forEach((a) => { a.href = BOOKING_URL || mailHref(); });
 
   // ---- optional phone link ----
   if (PHONE) {
