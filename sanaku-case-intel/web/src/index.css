@@ -1,23 +1,100 @@
 :root {
-  /* Overwritten at runtime from /theme's colors - these are just a
-     sane default so the page never renders unstyled before that fetch
-     resolves. */
+  /* Brand tokens - overwritten at runtime from /theme's colors (see
+     applyTheme() in App.jsx). These are just a sane default so the page
+     never renders unstyled before that fetch resolves. */
   --color-primary: #0b3d2e;
   --color-secondary: #c9a24b;
   --color-accent: #f4f1ea;
+
+  /* Derived neutrals - literal fallbacks for browsers without color-mix()
+     support (overridden below inside @supports). Values match the
+     defaults above so pre-color-mix() rendering is unaffected. */
   --ink: #1b1f1d;
   --ink-soft: #5c655f;
   --line: #dfe3df;
+  --line-strong: #c7cec8;
   --paper: #ffffff;
+  --canvas: #f4f1ea;
+  --primary-hover: #0a3527;
+  --primary-soft: #eef2ef;
+
+  /* Fixed semantic tokens - citation-attestation colors. Deliberately
+     independent of firm branding: the human_entered / date_confidence
+     badges must mean the same thing visually across every firm's theme,
+     never blend into or clash with whatever a firm's brand accent is. */
+  --badge-bg: rgba(201, 162, 75, 0.18);
+  --badge-fg: #8a6516;
+
+  /* Type. System stacks only - no font files, no CDN, this app may run on
+     a firm's air-gapped local network. The serif is used narrowly (firm
+     name, answer thesis, empty-state heading) - everything else stays on
+     the sans stack. */
+  --font-display: Georgia, 'Times New Roman', Times, serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-md: 1.125rem;
+  --text-lg: 1.375rem;
+  --text-xl: 1.75rem;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --transition-fast: 120ms ease;
+}
+
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  :root {
+    --ink: color-mix(in srgb, var(--color-primary) 40%, black 60%);
+    --ink-soft: color-mix(in srgb, var(--ink) 62%, white 38%);
+    --line: color-mix(in srgb, var(--color-primary) 15%, white 85%);
+    --line-strong: color-mix(in srgb, var(--color-primary) 30%, white 70%);
+    --paper: color-mix(in srgb, var(--color-primary) 2%, white 98%);
+    /* Canvas is a diluted wash of accent, not accent used raw - keeps the
+       page background in the "quiet" register even if a firm's accent is
+       bolder than the example config's pale cream. */
+    --canvas: color-mix(in srgb, var(--color-accent) 55%, white 45%);
+    --primary-hover: color-mix(in srgb, var(--color-primary) 88%, black 12%);
+    --primary-soft: color-mix(in srgb, var(--color-primary) 10%, white 90%);
+  }
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
   color: var(--ink);
-  background: var(--color-accent);
+  background: var(--canvas);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .app {
@@ -29,8 +106,8 @@ body {
 .app-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 18px 28px;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-7);
   background: var(--color-primary);
   color: #fff;
 }
@@ -41,8 +118,25 @@ body {
   object-fit: contain;
 }
 
+.logo-monogram {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-secondary);
+  color: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
 .firm-name {
-  font-size: 18px;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -52,55 +146,72 @@ body {
   max-width: 1080px;
   width: 100%;
   margin: 0 auto;
-  padding: 32px 24px 64px;
+  padding: var(--space-7) var(--space-6) var(--space-8);
 }
 
 .ask-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 18px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
 }
 
 .case-select {
-  padding: 9px 12px;
+  padding: 9px var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
   max-width: 260px;
   color: var(--ink);
+  background: var(--paper);
 }
 
 .question-row {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .question-input {
   flex: 1;
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
 }
 
-.question-input:focus, .case-select:focus {
+.question-input:focus-visible,
+.case-select:focus-visible {
   outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
   border-color: transparent;
 }
 
 .ask-button {
-  padding: 12px 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--color-primary);
   color: #fff;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.ask-button:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.ask-button:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
 }
 
 .ask-button:disabled {
@@ -108,20 +219,68 @@ body {
   cursor: default;
 }
 
+.ask-button.is-loading::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ask-button.is-loading::before {
+    animation: spin 0.6s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .error-banner {
-  margin-top: 18px;
-  padding: 12px 16px;
-  border-radius: 8px;
+  margin-top: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
   background: #fdecea;
   color: #a12622;
-  font-size: 14px;
+  font-size: var(--text-sm);
+}
+
+/* Empty state - shown before any question has been asked. Describes only
+   user-visible behavior (a sourced, cited answer) - no vendor name, no
+   "AI"/retrieval/embeddings language, per the white-label guardrail. */
+.empty-state {
+  margin-top: var(--space-7);
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+}
+
+.empty-state-heading {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.empty-state-body {
+  margin: 0 auto;
+  max-width: 46ch;
+  color: var(--ink-soft);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
 }
 
 .answer-layout {
   display: grid;
   grid-template-columns: 1fr 360px;
-  gap: 28px;
-  margin-top: 28px;
+  gap: var(--space-7);
+  margin-top: var(--space-7);
   align-items: start;
 }
 
@@ -132,47 +291,59 @@ body {
 .answer-panel {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 26px 28px;
-  font-size: 16px;
-  line-height: 1.65;
+  border-radius: var(--radius-lg);
+  padding: var(--space-6) var(--space-7);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+
+.answer-heading,
+.source-heading {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
 }
 
 .answer-panel p {
-  margin: 0 0 16px;
+  margin: 0 0 var(--space-4);
 }
 
 .answer-panel p:last-child {
   margin-bottom: 0;
 }
 
+/* The answer's thesis is always the first paragraph AnswerBody renders
+   (see its own doc comment) - giving it the display face and a larger
+   size reads as "this is the finding," not just another line of text. */
+.answer-panel > p:first-of-type {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
+  color: var(--ink);
+  margin-bottom: var(--space-5);
+}
+
 .answer-list {
-  margin: 0 0 16px;
-  padding-left: 20px;
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-5);
 }
 
 .answer-list li {
-  margin-bottom: 10px;
+  margin-bottom: var(--space-2);
 }
 
 .source-panel {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.source-heading {
-  margin: 0 0 12px;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
 }
 
 .no-sources {
   color: var(--ink-soft);
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 
 .source-list {
@@ -181,12 +352,12 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .source-card {
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -194,13 +365,18 @@ body {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--color-accent);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3);
+  background: var(--primary-soft);
   border: 0;
   cursor: pointer;
   text-align: left;
   font: inherit;
+}
+
+.source-toggle:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: -2px;
 }
 
 .source-num {
@@ -221,7 +397,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  font-size: 13.5px;
+  font-size: var(--text-sm);
   min-width: 0;
 }
 
@@ -234,7 +410,7 @@ body {
 
 .source-page {
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .source-chevron {
@@ -246,24 +422,70 @@ body {
 .source-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 12px 0;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) 0;
 }
 
 .badge {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(201, 162, 75, 0.18);
-  color: #8a6516;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--badge-bg);
+  color: var(--badge-fg);
 }
 
 .source-text {
   margin: 0;
-  padding: 10px 12px 12px;
-  font-size: 13.5px;
-  line-height: 1.5;
+  padding: var(--space-3) var(--space-3) var(--space-3);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   color: var(--ink-soft);
   border-top: 1px dashed var(--line);
+}
+
+/* Loading skeleton - mirrors the answer-layout grid exactly so nothing
+   reflows once the real answer replaces it. Base state is static filled
+   blocks; shimmer is strictly opt-in motion. */
+.skeleton {
+  background: var(--primary-soft);
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-line {
+  height: 14px;
+  margin-bottom: var(--space-3);
+}
+
+.skeleton-line--lead {
+  height: 22px;
+  width: 70%;
+}
+
+.skeleton-line--short {
+  width: 40%;
+  margin-bottom: 0;
+}
+
+.skeleton-chip {
+  height: 48px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-2);
+}
+
+.skeleton-chip:last-child {
+  margin-bottom: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    background: linear-gradient(90deg, var(--primary-soft) 25%, var(--line) 37%, var(--primary-soft) 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 100% 50%; }
+    100% { background-position: 0 50%; }
+  }
 }
