@@ -113,24 +113,41 @@ What it does, in order, from a single terminal:
    failure that cost real time this session, caught here before it can
    happen again instead of surfacing later as an inexplicable 500.
 4. Installs `web/node_modules` automatically on a first run if missing.
-5. Starts `uvicorn` with `--reload` (picks up code changes on its own —
+5. **Checks whether voice is actually set up, and only then starts it —
+   never a hard failure either way.** Voice is optional (see
+   `requirements-voice.txt`); every route that needs it already degrades
+   to a clean, specific error rather than a crash if it's unavailable. So
+   this script checks three things in order: is `piper-tts` installed, is
+   the configured voice model actually downloaded
+   (`~/.local/share/sanaku-case-intel/piper-voices/<voice>.onnx` by
+   default), and is port 5001 already taken by something (assumed to be
+   your own already-running voice service, so it's left alone rather than
+   started twice). Only if all three come back "yes, start it" does the
+   script launch `piper.http_server` itself. If voice isn't set up yet, it
+   prints the exact one-time setup command and moves on — the rest of the
+   app runs fully without it, just without "Ask by voice" / "Listen to
+   this answer."
+6. Starts `uvicorn` with `--reload` (picks up code changes on its own —
    no more forgetting to restart after a `git pull`) and `npm run dev`,
    both backgrounded from this one script, waits for the API to actually
    respond before declaring success (not just "the process started"),
-   then opens the browser automatically.
-6. **Ctrl+C in that one terminal stops both.** Real bug caught testing
-   this exact script, not assumed to work: `npm run dev` spawns its own
-   child process (vite's real dev server) that does not reliably die just
-   because npm's own PID receives a signal — a well-known npm/job-control
-   quirk. The fix is a backstop, not just a polite `kill`: after asking
-   both servers to stop, it explicitly frees ports 8001 and 5173
-   regardless of the exact shape the process tree turned out to be,
-   confirmed by checking `lsof` shows both ports genuinely empty
-   afterward, not just that the script printed "Stopped."
+   then opens the browser automatically. If voice was started, it waits
+   for that to respond too — but only *warns* (doesn't fail the whole
+   script) if voice doesn't come up in time, since the rest of the app
+   doesn't depend on it.
+7. **Ctrl+C in that one terminal stops all of it.** Real bug caught
+   testing this exact script, not assumed to work: `npm run dev` spawns
+   its own child process (vite's real dev server) that does not reliably
+   die just because npm's own PID receives a signal — a well-known
+   npm/job-control quirk. The fix is a backstop, not just a polite `kill`:
+   after asking every server to stop, it explicitly frees ports 8001,
+   5173, and 5001 regardless of the exact shape each process tree turned
+   out to be, confirmed by checking `lsof` shows every port genuinely
+   empty afterward, not just that the script printed "Stopped."
 
 **Verified directly in this sandbox**, not assumed: ran the full script
 end to end (all pre-flight checks pass, both servers start, the API
-responds, then a `TERM` signal triggers clean shutdown) and confirmed via
+responds, then an `INT` signal triggers clean shutdown) and confirmed via
 `lsof` that both ports were genuinely free afterward — catching the
 npm-child-process bug above in the process, before it could cost someone
 a real "why won't this port free up" debugging session of its own.
@@ -139,7 +156,13 @@ process on port 8001 first and confirmed the script refuses to start with
 a clear explanation instead of a confusing double-bind; ran it against a
 deliberately invalid `config/client.json` and confirmed it prints the
 real Pydantic validation errors and refuses to start, rather than
-starting anyway and failing later inside the browser.
+starting anyway and failing later inside the browser. The voice-skip path
+is also verified directly (this sandbox has no `piper-tts` installed, so
+it genuinely exercises the "not set up yet" branch, not a simulated one)
+— the script prints the skip message and both other servers still start
+cleanly. The voice-*start* path itself (real `piper.http_server` actually
+coming up) can only be confirmed on a machine that has it installed —
+same category of caveat as live Ollama generation below.
 
 ## The one thing untested here — and it's the actual acceptance test
 
@@ -309,12 +332,21 @@ start without it, regardless of whether voice is actually used.
 
 The whisper model downloads once from Hugging Face on first real
 `/transcribe` call (same one-time-pull shape as `ollama pull` for the
-gen/embed models). Piper needs its voice model pulled *and its own server
-started* before `/speak` will work — a third terminal, same shape as
-`ollama serve`:
+gen/embed models). Piper needs its voice model pulled once before
+`/speak` will work at all:
 
 ```bash
 python3 -m piper.download_voices en_US-lessac-medium --data-dir ~/.local/share/sanaku-case-intel/piper-voices
+```
+
+**After that one-time pull, `scripts/dev.sh` starts Piper's own server for
+you automatically** — see "One command, one terminal" above for exactly
+what it checks before doing so. No separate third terminal needed anymore.
+The manual command below is what it runs under the hood, useful for
+running Piper by hand (e.g. outside `scripts/dev.sh`, or to watch its own
+log directly) — same shape as `ollama serve`:
+
+```bash
 python3 -m piper.http_server --model en_US-lessac-medium \
   --data-dir ~/.local/share/sanaku-case-intel/piper-voices --host 127.0.0.1 --port 5001 \
   --sentence-silence 0.4
