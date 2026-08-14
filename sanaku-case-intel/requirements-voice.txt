@@ -22,4 +22,11 @@ faster-whisper==1.2.1
 # to any paying client - this comment states the boundary chosen, not a
 # legal conclusion. Verified against PyPI directly: piper-tts 1.6.1 ships
 # real macosx_11_0_arm64 and macosx_10_9_x86_64 wheels.
-piper-tts==1.6.1
+#
+# The [http] extra is required, not optional - piper.http_server (what
+# actually runs the voice service) imports flask, but the base piper-tts
+# package does not depend on it. Confirmed directly against PyPI's own
+# requires_dist for this version, after hitting the bare `piper-tts`
+# install missing it live: flask<4,>=3 is declared only under
+# `extra == "http"`.
+piper-tts[http]==1.6.1
