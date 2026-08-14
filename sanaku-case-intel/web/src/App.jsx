@@ -50,16 +50,47 @@ function StopIcon() {
   );
 }
 
+// Title abbreviations espeak-ng (Piper's phonemizer) doesn't reliably
+// expand on its own - confirmed live, "Ms." was read as the letters
+// "M S" instead of "Miss". Spelled out fully rather than left as an
+// abbreviation so this doesn't depend on the phonemizer's own guesswork.
+const TITLE_EXPANSIONS = { Ms: 'Miss', Mrs: 'Missus', Mr: 'Mister', Dr: 'Doctor' };
+
+function expandTitlesForSpeech(text) {
+  return text.replace(/\b(Ms|Mrs|Mr|Dr)\.?(?=\s)/g, (_match, title) => TITLE_EXPANSIONS[title]);
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+// Case documents' own dates (event_date, and dates quoted verbatim from
+// passage text the model reproduces in its answer) are ISO YYYY-MM-DD -
+// correct to write, but not a shape espeak-ng recognizes as a date, so it
+// read the literal digits and dashes instead of a spoken date. Converts
+// to "Month D, YYYY" and lets the TTS engine's own (reliable) handling of
+// that conventional written form read the day as an ordinal.
+function expandIsoDatesForSpeech(text) {
+  return text.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (match, year, month, day) => {
+    const monthIdx = parseInt(month, 10) - 1;
+    const dayNum = parseInt(day, 10);
+    if (monthIdx < 0 || monthIdx > 11 || dayNum < 1 || dayNum > 31) return match;
+    return `${MONTH_NAMES[monthIdx]} ${dayNum}, ${year}`;
+  });
+}
+
 /** Prepares answer text for /speak: strips citation brackets and bullet
  * markers (same reasons as before - a voice shouldn't read "bracket doc
- * pdf comma p dot 3 bracket" or "asterisk" aloud), but also splits the
- * text into the same blocks/points AnswerBody renders as separate
- * paragraphs or list items, and guarantees each one ends with terminal
- * punctuation before rejoining them. Without that, points that already
- * lack a trailing period (the answer contract doesn't require one) blur
- * together into what sounds like one run-on sentence once newlines stop
- * meaning anything to the TTS engine - a period is the one thing every
- * speech synthesizer reliably treats as a pause boundary. */
+ * pdf comma p dot 3 bracket" or "asterisk" aloud), expands title
+ * abbreviations and ISO dates into how they're actually meant to sound,
+ * and splits the text into the same blocks/points AnswerBody renders as
+ * separate paragraphs or list items, guaranteeing each one ends with
+ * terminal punctuation before rejoining them. Without that, points that
+ * already lack a trailing period (the answer contract doesn't require
+ * one) blur together into what sounds like one run-on sentence once
+ * newlines stop meaning anything to the TTS engine - a period is the one
+ * thing every speech synthesizer reliably treats as a pause boundary. */
 function stripCitationsForSpeech(text) {
   const blocks = text.trim().split(/\n\s*\n/);
   const sentences = [];
@@ -68,7 +99,8 @@ function stripCitationsForSpeech(text) {
     const isList = lines.length > 0 && lines.every((l) => /^[*-]\s+/.test(l));
     const points = isList ? lines.map((l) => l.replace(/^[*-]\s+/, '')) : [lines.join(' ')];
     for (const rawPoint of points) {
-      const point = rawPoint.replace(/\[[^\]]+\]/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+      let point = rawPoint.replace(/\[[^\]]+\]/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+      point = expandIsoDatesForSpeech(expandTitlesForSpeech(point));
       if (!point) continue;
       if (/[.!?]$/.test(point)) {
         sentences.push(point);
