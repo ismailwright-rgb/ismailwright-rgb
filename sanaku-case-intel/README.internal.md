@@ -536,6 +536,83 @@ to this answer" with no auto-activation and no synthesis request fired -
 proving the `viaVoice` gate actually gates, not just that the happy path
 works.
 
+### Ongoing conversation - follow-up questions with no wake phrase, no click
+
+Real feedback: "the conversation will stop" after one answer - lawyers
+research a case with more than one question, and having to repeat the
+full wake phrase ("Let's do a case review") before every single follow-up
+was exactly the friction that made it feel like a one-shot exchange
+instead of a real conversation. Now, once a voice-asked answer is fully
+read back (or reading it failed, or voice output was never set up - the
+question side doesn't depend on the answer side working), the mic
+reopens on its own and listens for a follow-up directly - no wake phrase,
+no click.
+
+**Scoped to hands-free being armed, checked at the moment playback
+actually ends - not to how the question that was just answered got
+asked.** `askQuestion`'s `'done'` handler passes `playAnswerAudio` an
+`onSettled` callback (fired once playback finishes, errors out, or never
+starts because synthesis failed) that checks a new `listeningModeRef`
+(mirrors `listeningMode` state the same way `recordingRef`/
+`transcribingRef` already do, for the same reason: this fires from deep
+inside an async chain and needs the *current* answer, not a stale
+closure) - if hands-free is armed right now, it resets the 10-minute
+inactivity window and calls `startRecording()` again directly. Checking
+hands-free's *current* state rather than "was this particular question
+wake-phrase-triggered" means a manual mic click taken while hands-free
+happens to be on also continues the conversation - the signal that
+matters is "is hands-free the active mode right now," not which exact
+path started this one question.
+
+**Waits for playback to actually finish before reopening the mic, not
+just for the answer to be ready** - starting to listen while the answer
+is still being spoken would risk the microphone picking up the answer's
+own voice and mistaking it for the next question.
+
+**A shorter, separate timeout for "is anyone going to say anything at
+all."** Reusing the full `AUTO_STOP_MAX_MS` (60s) here would mean up to a
+real minute of an uselessly open mic every time a lawyer's done with a
+line of questioning and doesn't have a follow-up. `createSilenceStopDetector`
+gained a `noSpeechTimeoutMs` option (defaults to `maxMs`, i.e. today's
+original single-cap behavior when not overridden - verified as an exact
+no-op for every existing caller) - `startRecording()` now accepts the
+same option and passes it through `armAutoStopOnSilence`, and the
+follow-up path sets it to `FOLLOW_UP_NO_SPEECH_TIMEOUT_MS` (8s).
+Deliberately a *separate* knob from `maxMs`, not a smaller `maxMs`
+outright: a follow-up that's slow to start ("um... actually...") still
+gets the full normal `AUTO_STOP_SILENCE_MS`/`AUTO_STOP_MAX_MS` treatment
+the instant real speech is detected - only the "has anyone said anything
+yet" waiting period is shortened.
+
+**Real, honest risk this doesn't fully close**, flagged rather than
+quietly accepted: if 8 seconds of near-silence still isn't clean enough
+to avoid triggering Whisper's own known tendency to occasionally
+hallucinate a phrase from silence or background noise, that hallucinated
+text would become a real submitted question the same way any transcribed
+text does. This isn't new to this feature - the exact same risk already
+exists for the normal wake-phrase chunk loop and the manual mic path -
+but this feature makes the mic reopen automatically and more often,
+which raises how often that risk gets a chance to matter. Only
+confirmable on a real Mac with a real microphone; nothing here can
+verify it from a sandbox.
+
+**Verified directly in this sandbox**: `createSilenceStopDetector`'s new
+option, via plain Node - default behavior (`noSpeechTimeoutMs` unset)
+stops at exactly the old 60s cap on total silence, and a speak-then-pause
+sequence still stops well before it, both byte-for-byte unchanged from
+before this option existed; with `noSpeechTimeoutMs: 8000`, total silence
+now stops at 8s instead of 60s, and a slow starter who begins talking at
+7s (just under the cap) is *not* cut off - the normal post-speech timing
+takes over once real speech is actually detected. Then genuinely
+end-to-end with Playwright against the stub-backed dev server: hands-free
+armed → manual mic question asked and answered → **without any click and
+without saying the wake phrase**, the mic reopens on its own → a second,
+real fake-audio "question" is spoken and stopped → confirmed a genuine
+second turn appears in the conversation thread. A separate negative run
+confirmed the mirror case: the exact same voice question asked with
+hands-free *off* does **not** auto-reopen the mic afterward - the gate
+actually gates in both directions, not just the happy path.
+
 Real feedback: having to click the mic button again to say "I'm done
 talking" was friction against the actual goal ("this is supposed to be
 an interactive system that has live conversation," in the words that

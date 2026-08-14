@@ -305,12 +305,28 @@ const AUTO_STOP_ENERGY_THRESHOLD = 0.02;
  * injected rather than read internally, so this is fully testable with
  * synthetic values); it tracks whether real speech has happened yet - a
  * recording that hasn't been spoken into at all shouldn't immediately
- * auto-stop just because it opened in silence - and returns true the
- * instant either AUTO_STOP_SILENCE_MS of continuous quiet follows real
- * speech, or AUTO_STOP_MAX_MS has elapsed regardless, as a safety cap. */
+ * auto-stop just because it opened in silence.
+ *
+ * Returns true the instant either AUTO_STOP_SILENCE_MS of continuous
+ * quiet follows real speech, AUTO_STOP_MAX_MS has elapsed regardless (an
+ * absolute safety cap), or - only if noSpeechTimeoutMs is set shorter
+ * than maxMs - no speech at all has happened within noSpeechTimeoutMs.
+ * That third condition exists for one specific caller: listening for a
+ * follow-up question after an answer (see "ongoing conversation" below),
+ * where there may be no follow-up at all and 60 real seconds of an
+ * uselessly open mic waiting for one would be its own kind of bad
+ * experience. Kept as a *separate* knob from maxMs, not a smaller maxMs
+ * outright, specifically so a follow-up that's slow to start (a few
+ * seconds of "um...") still gets the same full AUTO_STOP_SILENCE_MS/
+ * AUTO_STOP_MAX_MS treatment as any other question the instant real
+ * speech is actually detected - only the "is anyone going to say
+ * anything at all" waiting period is shortened, not the recording itself
+ * once someone's actually talking. Defaults noSpeechTimeoutMs to maxMs,
+ * i.e. today's original single-cap behavior, when not overridden. */
 function createSilenceStopDetector({
   silenceMs = AUTO_STOP_SILENCE_MS,
   maxMs = AUTO_STOP_MAX_MS,
+  noSpeechTimeoutMs = maxMs,
   threshold = AUTO_STOP_ENERGY_THRESHOLD,
 } = {}) {
   let hasSpoken = false;
@@ -324,6 +340,7 @@ function createSilenceStopDetector({
       lastLoudAt = now;
     }
     if (hasSpoken && now - lastLoudAt >= silenceMs) return true;
+    if (!hasSpoken && now - startedAt >= noSpeechTimeoutMs) return true;
     if (now - startedAt >= maxMs) return true;
     return false;
   };
@@ -334,8 +351,11 @@ function createSilenceStopDetector({
  * onSilenceDetected() the instant the detector says stop. Returns a
  * cleanup function - callers must invoke it once (whatever stopped the
  * recording, auto-detection or a manual click) so the polling interval
- * and AudioContext don't leak. */
-function armAutoStopOnSilence(stream, onSilenceDetected) {
+ * and AudioContext don't leak. detectorOptions passes through to
+ * createSilenceStopDetector unchanged (see its own doc comment) - lets a
+ * caller like the "listen for a follow-up" path use a shorter
+ * noSpeechTimeoutMs without duplicating any of this wiring. */
+function armAutoStopOnSilence(stream, onSilenceDetected, detectorOptions) {
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   audioCtx.resume().catch(() => {});
   const source = audioCtx.createMediaStreamSource(stream);
@@ -343,7 +363,7 @@ function armAutoStopOnSilence(stream, onSilenceDetected) {
   analyser.fftSize = 2048;
   source.connect(analyser);
   const sampleData = new Uint8Array(analyser.fftSize);
-  const shouldStop = createSilenceStopDetector();
+  const shouldStop = createSilenceStopDetector(detectorOptions);
 
   const intervalId = setInterval(() => {
     analyser.getByteTimeDomainData(sampleData);
@@ -356,6 +376,12 @@ function armAutoStopOnSilence(stream, onSilenceDetected) {
     audioCtx.close().catch(() => {});
   };
 }
+
+// How long to leave the mic open waiting for a follow-up question to
+// *start* before giving up - see createSilenceStopDetector's own comment
+// for why this is deliberately a separate, shorter knob from
+// AUTO_STOP_MAX_MS rather than a smaller max recording length outright.
+const FOLLOW_UP_NO_SPEECH_TIMEOUT_MS = 8000;
 
 /** Very small formatter for the answer text: blocks separated by a blank
  * line become paragraphs, or a bulleted list if every line in the block
@@ -489,6 +515,16 @@ export default function App() {
   // state from whenever the loop function was created.
   const recordingRef = useRef(false);
   const transcribingRef = useRef(false);
+  // Mirrors `listeningMode` for the same reason recordingRef/
+  // transcribingRef mirror their own state - the "listen for a follow-up
+  // question" callback (see askQuestion's 'done' handler, "ongoing
+  // conversation" below) fires from inside an async chain kicked off well
+  // before this render, and needs to know whether hands-free is armed
+  // *right now*, not whatever it was when that chain started.
+  const listeningModeRef = useRef(false);
+  useEffect(() => {
+    listeningModeRef.current = listeningMode;
+  }, [listeningMode]);
   // The persistent microphone stream + energy analyser used while
   // listeningMode is armed, and a "generation" counter that invalidates
   // any in-flight chunk-loop iterations the instant the toggle flips off
@@ -678,7 +714,26 @@ export default function App() {
           // event.answer (the final, complete text), not turn.data.answer
           // from React state - that state update above hasn't necessarily
           // committed yet by the time this line runs.
-          if (viaVoice) playAnswerAudio(turnId, event.answer);
+          if (viaVoice) {
+            playAnswerAudio(turnId, event.answer, {
+              // "Ongoing conversation": once this answer has been read
+              // (or reading it failed/wasn't set up - either way, the
+              // question side of this doesn't depend on voice output
+              // working), start listening for a follow-up directly - no
+              // wake phrase needed - as long as hands-free is still armed
+              // right now. Waiting for onSettled (fires only after
+              // playback actually finishes, or gives up) rather than
+              // starting to listen immediately matters here: starting the
+              // mic while the answer is still being spoken risks it
+              // picking up the answer's own voice as if it were the next
+              // question.
+              onSettled: () => {
+                if (!listeningModeRef.current) return;
+                resetListenInactivityTimer(listeningGenerationRef.current);
+                startRecording({ noSpeechTimeoutMs: FOLLOW_UP_NO_SPEECH_TIMEOUT_MS });
+              },
+            });
+          }
         } else if (event.type === 'error') {
           throw new Error(event.detail || 'Something went wrong.');
         }
@@ -798,7 +853,7 @@ export default function App() {
   // question being asked might not be the one you meant to ask. If that
   // happens, just ask the follow-up out loud to correct it, the same way
   // you'd clarify with a person.
-  async function startRecording() {
+  async function startRecording({ noSpeechTimeoutMs } = {}) {
     if (recordingRef.current || transcribingRef.current) return;
     recordingRef.current = true;
     setError(null);
@@ -859,9 +914,13 @@ export default function App() {
     // click to say "I'm done" - stops itself once you've gone quiet.
     // Clicking the mic button again (handleMicClick's existing toggle)
     // still works as a manual override in the meantime.
-    autoStopCleanupRef.current = armAutoStopOnSilence(stream, () => {
-      if (recorder.state !== 'inactive') recorder.stop();
-    });
+    autoStopCleanupRef.current = armAutoStopOnSilence(
+      stream,
+      () => {
+        if (recorder.state !== 'inactive') recorder.stop();
+      },
+      { noSpeechTimeoutMs },
+    );
   }
 
   async function handleMicClick() {
@@ -1024,7 +1083,16 @@ export default function App() {
   // a React state update to commit first - the same reason askQuestion
   // itself takes the question text as a parameter rather than reading
   // `question` state.
-  async function playAnswerAudio(turnId, text) {
+  //
+  // onSettled, if given, fires exactly once playback has genuinely
+  // finished one way or another - reached the end, errored out mid-
+  // playback, or never started at all because synthesis itself failed.
+  // askQuestion's 'done' handler uses this as the cue to start listening
+  // for a follow-up question (see "ongoing conversation" there) -
+  // deliberately gated on playback actually being *over*, not on the
+  // answer merely being ready, so the mic never opens while the answer
+  // is still being spoken and risks picking up its own voice.
+  async function playAnswerAudio(turnId, text, { onSettled } = {}) {
     audioRef.current?.pause();
     setSpeakingId(null);
     setSynthesizingId(turnId);
@@ -1046,10 +1114,12 @@ export default function App() {
       audio.onended = () => {
         setSpeakingId(null);
         URL.revokeObjectURL(url);
+        onSettled?.();
       };
       audio.onerror = () => {
         setSpeakingId(null);
         URL.revokeObjectURL(url);
+        onSettled?.();
       };
       setSynthesizingId(null);
       setSpeakingId(turnId);
@@ -1058,6 +1128,7 @@ export default function App() {
       setError(err.message);
       setSynthesizingId(null);
       setSpeakingId(null);
+      onSettled?.();
     }
   }
 

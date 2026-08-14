@@ -128,14 +128,25 @@ transcribes, asks the question, and reads the answer back — exactly like
 the microphone button above — the whole exchange, start to finish, never
 needs your hands.
 
+**It keeps the conversation going for follow-up questions, too.** Once
+the answer finishes being read back, it starts listening again right
+away — no need to repeat "Let's do a case review" for your next
+question. Just start talking. This is meant for exactly the way research
+actually works: rarely just one question, usually several in a row as
+you dig into a case. If you don't have a follow-up, just don't say
+anything — it stops listening for one on its own after a few seconds and
+goes back to waiting for the wake phrase.
+
 A few things worth knowing about this mode:
 
 - **It only listens for that phrase — it isn't recording your
-  conversations.** While hands-free is armed, short snippets of audio
-  are checked for that specific phrase and then discarded; they aren't
-  saved or used for anything else. Ordinary conversation in the room
-  doesn't get treated as a question — only the phrase itself starts a
-  recording.
+  conversations.** While hands-free is armed and waiting for the wake
+  phrase (that is, between questions — not while it's actively listening
+  for your question or a follow-up, when the recording indicator is
+  visibly on), short snippets of audio are checked for that specific
+  phrase and then discarded; they aren't saved or used for anything
+  else. Ordinary conversation in the room doesn't get treated as a
+  question — only the phrase itself starts a recording.
 - **It's off by default**, and you turn it on explicitly. The banner and
   the header button both stay visible the entire time it's on, so it's
   never ambiguous whether it's armed.
