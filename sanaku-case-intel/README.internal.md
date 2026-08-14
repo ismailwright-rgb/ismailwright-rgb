@@ -88,6 +88,59 @@ All tests pass fully offline in this repo's dev sandbox — none of them
 require Ollama to be running. See "The one thing untested here" below for
 exactly why, and what to check once Ollama's available.
 
+## One command, one terminal — scripts/dev.sh
+
+An entire debugging session's worth of real friction this project hit had
+nothing to do with a bug in the actual application code: two terminal
+windows to keep straight, `cd`-ing into the wrong directory (`web/` vs.
+the repo root, or a different checkout of this repo entirely), an
+unrelated program already holding the API's port with every symptom that
+produced looking exactly like an app bug, forgetting to restart a server
+after `git pull` landed new code. `scripts/dev.sh` exists to make every
+one of those specific failure modes impossible at once, not to replace
+understanding how the two servers work — see "Local dev setup" above for
+the manual two-terminal version.
+
+What it does, in order, from a single terminal:
+1. Resolves its own location and `cd`s to the project root itself — works
+   correctly no matter what directory you're in when you run it.
+2. Fails fast with a specific, actionable message (not a mysterious crash
+   three steps later) if `.venv-dev` doesn't exist yet, if
+   `config/client.json` is missing, or if it's present but invalid —
+   reusing `core.config.load_config()` directly, the same real validator
+   the server itself uses, not a separate looser check.
+3. Fails fast if port 8001 is already taken by something else — the exact
+   failure that cost real time this session, caught here before it can
+   happen again instead of surfacing later as an inexplicable 500.
+4. Installs `web/node_modules` automatically on a first run if missing.
+5. Starts `uvicorn` with `--reload` (picks up code changes on its own —
+   no more forgetting to restart after a `git pull`) and `npm run dev`,
+   both backgrounded from this one script, waits for the API to actually
+   respond before declaring success (not just "the process started"),
+   then opens the browser automatically.
+6. **Ctrl+C in that one terminal stops both.** Real bug caught testing
+   this exact script, not assumed to work: `npm run dev` spawns its own
+   child process (vite's real dev server) that does not reliably die just
+   because npm's own PID receives a signal — a well-known npm/job-control
+   quirk. The fix is a backstop, not just a polite `kill`: after asking
+   both servers to stop, it explicitly frees ports 8001 and 5173
+   regardless of the exact shape the process tree turned out to be,
+   confirmed by checking `lsof` shows both ports genuinely empty
+   afterward, not just that the script printed "Stopped."
+
+**Verified directly in this sandbox**, not assumed: ran the full script
+end to end (all pre-flight checks pass, both servers start, the API
+responds, then a `TERM` signal triggers clean shutdown) and confirmed via
+`lsof` that both ports were genuinely free afterward — catching the
+npm-child-process bug above in the process, before it could cost someone
+a real "why won't this port free up" debugging session of its own.
+Separately confirmed both fast-fail paths for real: started a dummy
+process on port 8001 first and confirmed the script refuses to start with
+a clear explanation instead of a confusing double-bind; ran it against a
+deliberately invalid `config/client.json` and confirmed it prints the
+real Pydantic validation errors and refuses to start, rather than
+starting anyway and failing later inside the browser.
+
 ## The one thing untested here — and it's the actual acceptance test
 
 This was built and tested inside a sandboxed cloud session with **no
@@ -165,7 +218,17 @@ color palette) and the exact same build reflected that firm with **zero
 code changes and zero rebuild** — confirming Phase 4's actual acceptance
 criterion, not just asserting it works.
 
-Real run, against real Ollama:
+**Recommended: one command, one terminal.** `scripts/dev.sh` — see "One
+command, one terminal" below for the full story on why this exists and
+exactly what it checks before starting anything:
+
+```bash
+bash scripts/dev.sh
+```
+
+**Manual alternative** (two terminals — what `scripts/dev.sh` does under
+the hood, useful if you need to see each server's own output directly,
+or if something about the script itself needs debugging):
 
 ```bash
 # terminal 1 - the API
@@ -181,8 +244,8 @@ npm run dev
 
 Open the printed `localhost:5173` URL, pick (or type) a case ID, ask a
 question. `vite.config.js` proxies `/theme`, `/cases`, `/ask`,
-`/transcribe`, and `/branding-assets` to port 8001 so the browser only
-ever talks same-origin.
+`/transcribe`, `/manual-entries`, and `/branding-assets` to port 8001 so
+the browser only ever talks same-origin.
 
 **Port 8001, not the more conventional 8000** — moved here after a real
 port collision on a real Mac: an unrelated program already listening on

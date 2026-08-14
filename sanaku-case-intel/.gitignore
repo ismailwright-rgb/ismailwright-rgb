@@ -10,6 +10,10 @@ data/
 # Dev-only virtualenv used to install requirements.txt + requirements-dev.txt.
 .venv-dev/
 
+# scripts/dev.sh's log files for the API/UI servers it starts.
+.dev-api.log
+.dev-ui.log
+
 __pycache__/
 *.pyc
 .pytest_cache/
