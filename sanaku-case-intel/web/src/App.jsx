@@ -218,6 +218,84 @@ function computeRms(byteData) {
   return Math.sqrt(sumSquares / byteData.length);
 }
 
+// --- Auto-stop a question recording once you've gone quiet -------------
+//
+// Originally both the manual mic button and hands-free mode required an
+// explicit click/second wake-phrase-style action to stop recording and
+// start transcribing - real friction against the "talk to it like Siri
+// or Alexa" experience this is supposed to be. This makes startRecording
+// itself listen for a pause and stop on its own, the same energy-sampling
+// approach LISTEN_ENERGY_THRESHOLD already uses for wake-phrase chunk
+// gating, just pointed at a live recording instead of a background
+// chunk. A manual click still works as an override (stop early, or if
+// the room is too noisy for energy-based detection to behave well) -
+// this doesn't remove that path, it just means most of the time you
+// won't need it.
+const AUTO_STOP_SILENCE_MS = 1300;
+const AUTO_STOP_MAX_MS = 60000; // safety cap - never leaves the mic open indefinitely
+const AUTO_STOP_POLL_MS = 150;
+const AUTO_STOP_ENERGY_THRESHOLD = 0.02;
+
+/** Pure decision logic for "has this recording gone quiet long enough to
+ * auto-stop" - deliberately decoupled from the Web Audio wiring below so
+ * it's unit-testable without a browser, the same reason matchesWakePhrase
+ * is a standalone function rather than inlined into its caller. Call
+ * shouldStop(rms, now) once per energy sample (now is a real timestamp,
+ * injected rather than read internally, so this is fully testable with
+ * synthetic values); it tracks whether real speech has happened yet - a
+ * recording that hasn't been spoken into at all shouldn't immediately
+ * auto-stop just because it opened in silence - and returns true the
+ * instant either AUTO_STOP_SILENCE_MS of continuous quiet follows real
+ * speech, or AUTO_STOP_MAX_MS has elapsed regardless, as a safety cap. */
+function createSilenceStopDetector({
+  silenceMs = AUTO_STOP_SILENCE_MS,
+  maxMs = AUTO_STOP_MAX_MS,
+  threshold = AUTO_STOP_ENERGY_THRESHOLD,
+} = {}) {
+  let hasSpoken = false;
+  let lastLoudAt = null;
+  let startedAt = null;
+  return function shouldStop(rms, now) {
+    if (startedAt === null) startedAt = now;
+    if (lastLoudAt === null) lastLoudAt = now;
+    if (rms >= threshold) {
+      hasSpoken = true;
+      lastLoudAt = now;
+    }
+    if (hasSpoken && now - lastLoudAt >= silenceMs) return true;
+    if (now - startedAt >= maxMs) return true;
+    return false;
+  };
+}
+
+/** Wires createSilenceStopDetector up to a live MediaStream via a Web
+ * Audio AnalyserNode, polling every AUTO_STOP_POLL_MS and calling
+ * onSilenceDetected() the instant the detector says stop. Returns a
+ * cleanup function - callers must invoke it once (whatever stopped the
+ * recording, auto-detection or a manual click) so the polling interval
+ * and AudioContext don't leak. */
+function armAutoStopOnSilence(stream, onSilenceDetected) {
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx.resume().catch(() => {});
+  const source = audioCtx.createMediaStreamSource(stream);
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  source.connect(analyser);
+  const sampleData = new Uint8Array(analyser.fftSize);
+  const shouldStop = createSilenceStopDetector();
+
+  const intervalId = setInterval(() => {
+    analyser.getByteTimeDomainData(sampleData);
+    const rms = computeRms(sampleData);
+    if (shouldStop(rms, Date.now())) onSilenceDetected();
+  }, AUTO_STOP_POLL_MS);
+
+  return () => {
+    clearInterval(intervalId);
+    audioCtx.close().catch(() => {});
+  };
+}
+
 /** Very small formatter for the answer text: blocks separated by a blank
  * line become paragraphs, or a bulleted list if every line in the block
  * starts with "* " or "- " - matches the shape the answer contract asks
@@ -346,6 +424,11 @@ export default function App() {
   const listeningAnalyserRef = useRef(null);
   const listeningGenerationRef = useRef(0);
   const listeningInactivityTimerRef = useRef(null);
+  // Cleanup for the current question recording's auto-stop-on-silence
+  // monitor (see armAutoStopOnSilence) - set at the start of every
+  // startRecording() call, invoked and cleared the instant that
+  // recording actually stops, whatever stopped it.
+  const autoStopCleanupRef = useRef(null);
 
   const micSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
@@ -579,6 +662,11 @@ export default function App() {
       if (e.data.size > 0) audioChunksRef.current.push(e.data);
     };
     recorder.onstop = async () => {
+      // Whatever stopped this recording - the silence monitor below, the
+      // AUTO_STOP_MAX_MS safety cap, or a manual click - tear the monitor
+      // down here, the one place every stop path actually converges.
+      autoStopCleanupRef.current?.();
+      autoStopCleanupRef.current = null;
       stream.getTracks().forEach((t) => t.stop());
       recordingRef.current = false;
       setRecording(false);
@@ -603,6 +691,13 @@ export default function App() {
     mediaRecorderRef.current = recorder;
     recorder.start();
     setRecording(true);
+    // Talk-then-pause, like Siri/Alexa, rather than requiring a second
+    // click to say "I'm done" - stops itself once you've gone quiet.
+    // Clicking the mic button again (handleMicClick's existing toggle)
+    // still works as a manual override in the meantime.
+    autoStopCleanupRef.current = armAutoStopOnSilence(stream, () => {
+      if (recorder.state !== 'inactive') recorder.stop();
+    });
   }
 
   async function handleMicClick() {
@@ -914,7 +1009,7 @@ export default function App() {
             <p className="voice-status" role="status">
               {recording ? (
                 <>
-                  <span className="mic-dot" aria-hidden="true" /> Listening…
+                  <span className="mic-dot" aria-hidden="true" /> Listening… stops automatically when you pause
                 </>
               ) : (
                 'Transcribing…'

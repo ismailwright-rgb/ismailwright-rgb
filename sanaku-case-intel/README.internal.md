@@ -29,7 +29,9 @@ of any client-facing surface.
   logo-monogram fallback, a persisted light/dark toggle — see "Light and
   dark mode" below), a print feature (now printing the whole
   conversation, not just one answer), voice input/output (local Whisper
-  + a separate local Piper process — see "Voice" below), hands-free
+  + a separate local Piper process — see "Voice" below) that now
+  auto-stops recording once you pause talking instead of requiring a
+  second click (see "Auto-stop recording on silence" below), hands-free
   wake-phrase listening ("Let's do a case review." — see "Hands-free
   listening mode" below), streaming answers (see "Streaming answers"
   below), and multi-turn conversation memory (see "Conversation memory"
@@ -257,6 +259,60 @@ prove: real transcription accuracy against a real spoken legal question,
 and real Piper voice naturalness/latency — both need confirming on your
 Mac, the same as semantic embedding quality and live cited-answer output
 were in Phase 2/3.
+
+## Auto-stop recording on silence
+
+Real feedback: having to click the mic button again to say "I'm done
+talking" was friction against the actual goal ("this is supposed to be
+an interactive system that has live conversation," in the words that
+prompted this) — an Alexa/Siri-style pause-to-finish is what a live
+conversational feel actually requires, not a second manual step.
+
+`web/src/App.jsx`'s `startRecording()` — the one recording path shared
+by the mic button, the `⌘⇧M` hotkey, and hands-free wake-phrase
+activation, all three get this automatically — now arms a silence
+monitor the instant recording starts (`armAutoStopOnSilence`), reusing
+the same Web Audio `AnalyserNode` RMS-sampling approach the hands-free
+loop already uses for chunk energy-gating, just pointed at a live
+recording instead of a background chunk. `createSilenceStopDetector` is
+the actual decision logic, deliberately factored out as a pure function
+(RMS + a timestamp in, a boolean out) rather than inlined into the Web
+Audio wiring — the same split `matchesWakePhrase` uses, and for the same
+reason: fully unit-testable without a browser.
+
+Behavior, by design: doesn't stop just because a recording session
+opened in silence — it waits for real speech to happen first, then stops
+`AUTO_STOP_SILENCE_MS` (1.3s) after the *last* moment of detected speech,
+so a brief mid-sentence pause doesn't cut someone off. `AUTO_STOP_MAX_MS`
+(60s) is a hard safety cap regardless, so a stuck-open mic (background
+noise that never quite reads as "silence," a room that's just loud)
+can't hold the microphone open indefinitely. A manual click still works
+as an override throughout — this doesn't remove that path, it just means
+most of the time you won't need it.
+
+**Verified two ways.** Pure logic (`createSilenceStopDetector`) via a
+standalone Node script with synthetic RMS/timestamp sequences — silence
+before any speech never stops, a sub-threshold pause doesn't stop, a
+past-threshold pause does (and promptly), continuous "speech" holds off
+until the 60s safety cap, a brief mid-sentence pause resets the clock
+rather than counting toward it. Then genuinely end-to-end, not just
+mocked: Chromium's fake capture device supports feeding it a **real WAV
+file** via `--use-file-for-fake-audio-capture` instead of its default
+synthetic tone — fed it a real 1.2s-tone-then-real-silence clip and
+confirmed, watching actual DOM state over actual wall-clock time, that a
+single mic click auto-stopped and transcribed with **no second click**,
+timed correctly against the silence threshold; then fed it a continuous
+tone and confirmed recording survives well past the silence threshold
+without a false-positive stop, with the manual click-to-stop override
+still working afterward. This is real proof the mechanism works, not an
+assumption that the wiring is probably fine because the pure logic is —
+same standard as every other voice claim in this project.
+
+**Only confirmable on your Mac**: real-room threshold tuning
+(`AUTO_STOP_ENERGY_THRESHOLD`, currently `0.02`, same starting value
+`LISTEN_ENERGY_THRESHOLD` uses) — a quiet home office and a firm's
+open-plan conference room have different noise floors, and this sandbox
+has no real microphone to tune against.
 
 ## Light and dark mode
 
