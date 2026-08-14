@@ -397,26 +397,52 @@ a garbled, cut-off fragment, not a clean pause - a materially different
 bug from the plain pacing gap even though both produced the same
 complaint ("it sounds like it's all part of the sentence"). Fixed by
 stripping the whole lead-in-phrase-plus-bracket clause together
-(`CITATION_LEAD_IN_PATTERN`), and separately, `stripCitationsForSpeech`
-now inserts a spoken-only "Here is why:" the first time a bulleted list
-of supporting points follows the thesis paragraph - narration structure,
-not a factual claim, so it needs no citation of its own, and it gives the
-thesis→points shift an audible marker the way the bulleted list already
-marks it visually.
+(`CITATION_LEAD_IN_PATTERN`).
+
+That round also added a spoken-only "Here is why:" transition between the
+thesis and the bulleted points - **removed again one round later**, on
+direct feedback that it was making things worse, not better: it (1) got
+read as its own meta-narration sentence, which is exactly the "mentioning
+bullet points" the next report explicitly didn't want, and (2) stacked
+with the model's own literal "Supporting points:" header line (also
+spoken, unmodified, at the time) to bloat the thesis→facts transition
+into what read as one long intro paragraph before any real fact was
+heard - the opposite of the "distinct facts, bullet-point rhythm" this
+whole feature is for. Both are now handled the same way instead: a short
+label block ending in a colon that's immediately followed by the actual
+bulleted list ("Supporting points:", "Here's why:", whatever exact
+phrasing shows up) is skipped entirely, not spoken - the bulleted facts
+right after it need no spoken announcement, they just need to keep
+reading as their own separate sentences, which they already do.
+
+Same report also named the asterisk-reading bug directly: the model
+sometimes wraps a term in markdown bold (`**Dr. Chen**`) for emphasis even
+though the answer contract never asks for markdown, and Piper's
+phonemizer has no concept of "emphasis" - it just reads the literal `*`
+characters aloud. Fixed by unwrapping `**bold**` markers (keeping the
+text inside, dropping the asterisks) on the whole answer before any other
+processing runs - deliberately asterisk-only, not underscore-emphasis,
+since underscores appear in real cited content (`doc_name.pdf` filenames)
+and blindly unwrapping `_..._` would risk eating real characters that
+were never markdown.
 
 **Verified directly**, not assumed: `stripCitationsForSpeech` is pure
 string logic with no DOM/browser dependency (same reason
 `matchesWakePhrase` was written that way), so it was extracted and run
-directly under plain Node against seven synthetic cases covering both
-fixes - a dangling "according to [...]", a dangling "as documented in
-[...]", the Rule-3-shaped "per [...]", a plain trailing bracket with no
-lead-in phrase (the pre-existing, still-working case), the thesis→list
-transition appearing exactly once, no transition on a single-paragraph
-answer, and the pre-existing title/date expansion still working
-alongside both new fixes. All seven passed. What that *can't* prove:
-whether `0.6` seconds of `--sentence-silence` (up from `0.4`) actually
-*sounds* like enough of a pause on real hardware, and whether "Here is
-why:" reads as a natural transition rather than an odd interjection -
+directly under plain Node against eight synthetic cases: a dangling
+"according to [...]", title/date expansion alongside a plain trailing
+bracket, markdown bold unwrapped both as a standalone term and mid-
+sentence, the exact reported shape (thesis → "Supporting points:" label →
+bulleted list) producing three clean distinct sentences with no label and
+no inserted narration, a colon-ending block that is *not* followed by a
+list correctly staying spoken (the skip only fires when a block is
+genuinely a lead-in to a list right after it, not for every sentence that
+happens to end in a colon), and a single-paragraph answer with no list at
+all left unaffected. All eight passed. What that *can't* prove: whether
+`0.6` seconds of `--sentence-silence` (up from `0.4`) actually *sounds*
+like enough of a pause on real hardware, and whether stripping the label
+line and leaning entirely on per-fact sentence pacing (rather than any
+spoken transition at all) reads the way it's meant to on a real voice -
 both need a real ear on your Mac.
 
 **What was actually verified in this sandbox** (no microphone, no audio

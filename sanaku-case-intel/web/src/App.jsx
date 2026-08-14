@@ -95,41 +95,62 @@ function expandIsoDatesForSpeech(text) {
 const CITATION_LEAD_IN_PATTERN =
   /,?\s*\b(?:according to|as (?:documented|noted|stated|shown|reflected) in|as per|per|citing|see)\s*\[[^\]]+\]/gi;
 
+/** True if every line in a block is a bulleted list item ("* " or "- "). */
+function isListBlock(block) {
+  const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+  return lines.length > 0 && lines.every((l) => /^[*-]\s+/.test(l));
+}
+
 /** Prepares answer text for /speak: strips citation brackets (and any
- * lead-in phrase introducing one, see CITATION_LEAD_IN_PATTERN above)
- * and bullet markers (a voice shouldn't read "bracket doc pdf comma p
- * dot 3 bracket" or "asterisk" aloud), expands title abbreviations and
- * ISO dates into how they're actually meant to sound, and splits the
- * text into the same blocks/points AnswerBody renders as separate
- * paragraphs or list items, guaranteeing each one ends with terminal
- * punctuation before rejoining them. Without that, points that already
- * lack a trailing period (the answer contract doesn't require one) blur
- * together into what sounds like one run-on sentence once newlines stop
- * meaning anything to the TTS engine - a period is the one thing every
- * speech synthesizer reliably treats as a pause boundary.
+ * lead-in phrase introducing one, see CITATION_LEAD_IN_PATTERN above),
+ * bullet markers, and markdown emphasis (`**bold**`) - a voice shouldn't
+ * read "bracket doc pdf comma p dot 3 bracket" or "asterisk" aloud, and
+ * real bug found live: the model sometimes bolds a term for emphasis even
+ * though the answer contract never asks for markdown, and Piper's
+ * phonemizer has no notion of "emphasis" - it just reads the literal `*`
+ * characters. Also expands title abbreviations and ISO dates into how
+ * they're actually meant to sound, and splits the text into the same
+ * blocks/points AnswerBody renders as separate paragraphs or list items,
+ * guaranteeing each one ends with terminal punctuation before rejoining
+ * them. Without that, points that already lack a trailing period (the
+ * answer contract doesn't require one) blur together into what sounds
+ * like one run-on sentence once newlines stop meaning anything to the TTS
+ * engine - a period is the one thing every speech synthesizer reliably
+ * treats as a pause boundary.
  *
- * Also inserts a short spoken-only transition ("Here is why:") the first
- * time a bulleted list of supporting points follows the thesis - a real
- * gap found live: read straight through with nothing marking the shift,
- * the thesis's last word and the first point's claim ran together with
- * no audible signal that these are two different things now, the same
- * "sounds like one sentence" confusion the lead-in-phrase fix above
- * addresses for a different reason. This transition is pure narration
- * structure, not a factual claim, so it isn't subject to (and doesn't
- * need) a citation of its own. */
+ * A short label block ending in a colon that's immediately followed by
+ * the actual bulleted list ("Supporting points:", "Here's why:", etc.) is
+ * skipped entirely rather than spoken - real bug found live: reading it
+ * aloud announced the answer's own structure instead of just its facts,
+ * and made the thesis and the list read as one blurred paragraph instead
+ * of a clean thesis-then-facts rhythm. The facts themselves need no
+ * spoken introduction; each bulleted point already becomes its own
+ * distinct spoken sentence below, which is what actually makes them read
+ * "in a bullet-point manner" out loud - a rhythm, not an announcement. */
 function stripCitationsForSpeech(text) {
-  const blocks = text.trim().split(/\n\s*\n/);
+  // Unwrapped before anything else, on the whole text rather than
+  // per-line, so list-detection and citation-stripping below never have
+  // to reason about markdown syntax on top of everything else - by the
+  // time the rest of this function runs, "**Dr. Chen**" is already just
+  // "Dr. Chen". Deliberately asterisk-only, not underscore-emphasis -
+  // underscores appear inside real content this app cites (doc_name.pdf
+  // filenames), so blindly unwrapping "_..._" risks eating real
+  // characters that were never markdown in the first place. Distinct from
+  // a leading list bullet ("* " - one asterisk, then whitespace), so this
+  // never touches real bullet markers.
+  const withoutMarkdownEmphasis = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+
+  const blocks = withoutMarkdownEmphasis.trim().split(/\n\s*\n/);
   const sentences = [];
-  let sawNonListBlock = false;
-  for (const block of blocks) {
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
     const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
-    const isList = lines.length > 0 && lines.every((l) => /^[*-]\s+/.test(l));
-    if (isList && sawNonListBlock) {
-      sentences.push('Here is why:');
-      sawNonListBlock = false; // only announce the transition once
-    } else if (!isList) {
-      sawNonListBlock = true;
+    const isList = isListBlock(block);
+
+    if (!isList && lines.length === 1 && /:$/.test(lines[0]) && i + 1 < blocks.length && isListBlock(blocks[i + 1])) {
+      continue; // a bare "Supporting points:"-style label right before the list - not a fact, not spoken
     }
+
     const points = isList ? lines.map((l) => l.replace(/^[*-]\s+/, '')) : [lines.join(' ')];
     for (const rawPoint of points) {
       let point = rawPoint
@@ -144,8 +165,9 @@ function stripCitationsForSpeech(text) {
       if (/[.!?]$/.test(point)) {
         sentences.push(point);
       } else if (point.endsWith(':')) {
-        // A trailing colon ("Supporting points:") reads oddly with a
-        // period appended after it - swap it for one instead.
+        // A trailing colon on an actual fact (not the label case skipped
+        // above) reads oddly with a period appended after it - swap it
+        // for one instead.
         sentences.push(`${point.slice(0, -1)}.`);
       } else {
         sentences.push(`${point}.`);
