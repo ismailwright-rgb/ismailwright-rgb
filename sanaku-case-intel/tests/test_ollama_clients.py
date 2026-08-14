@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from core.embed import OLLAMA_KEEP_ALIVE, OllamaEmbedder, OllamaUnavailableError
-from core.generate import generate_answer, stream_answer
+from core.generate import OLLAMA_NUM_CTX, generate_answer, stream_answer
 from core.retrieve import RetrievedChunk
 
 
@@ -97,6 +97,7 @@ def test_chat_parses_response_and_uses_stream_false():
         assert body["model"] == "llama3.1:8b"
         assert body["messages"][0]["role"] == "system"
         assert body["keep_alive"] == OLLAMA_KEEP_ALIVE
+        assert body["options"]["num_ctx"] == OLLAMA_NUM_CTX
         return httpx.Response(200, json={"message": {"content": "The answer is X [doc.pdf, p.3]."}})
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://localhost:11434")
@@ -126,6 +127,7 @@ def test_stream_answer_uses_stream_true_and_yields_deltas_in_order():
         body = json.loads(request.content)
         assert body["stream"] is True
         assert body["keep_alive"] == OLLAMA_KEEP_ALIVE
+        assert body["options"]["num_ctx"] == OLLAMA_NUM_CTX
         return httpx.Response(200, content=("\n".join(json.dumps(l) for l in ndjson_lines) + "\n").encode())
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://localhost:11434")

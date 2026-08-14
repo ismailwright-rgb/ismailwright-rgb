@@ -1154,6 +1154,72 @@ provable here is that the code paths are correct (the transcriber really
 is reused, `keep_alive` really is sent, history really is capped);
 whether that adds up to a demo that *feels* fast is the next real check.
 
+### Second pass — an explicit context window, and a free win
+
+Latency reconfirmed as the top priority for a second round, with an
+explicit constraint: fix latency, don't change functionality. Two more
+changes, both internal/infrastructure-only — neither alters what the app
+does, only how efficiently it does it.
+
+**The answer contract file was re-read from disk on every single
+`/api/chat` call.** Both `generate_answer` and `stream_answer` called
+`CONTRACT_PATH.read_text()` fresh every time, even though the file never
+changes at runtime. Free to fix: read once at import time into a new
+`ANSWER_CONTRACT` module constant, reused by both functions.
+`CONTRACT_PATH` itself stays exported (`tests/test_answer_contract.py`
+reads it directly, unaffected by this change).
+
+**No `num_ctx` was ever sent to Ollama — a real risk, not just a latency
+one.** Neither generation call told Ollama how large a context window to
+use, so Ollama's own default applied instead (genuinely uncertain what
+that default actually is without live confirmation — it varies by Ollama
+version). A too-small default doesn't just run slower, it **silently
+truncates the prompt** — and if that truncation eats the system message
+(this app's own citation contract) or early retrieved passages, the model
+could end up answering without the rules that keep citations honest, or
+without the passages it's supposed to be grounded in. That's a
+correctness risk sitting quietly behind what looked like a pure
+performance question.
+
+Sized deliberately, not guessed: worst case today is the contract
+(~700 tokens) + up to 8 retrieved passages at ~650 tokens each (the
+chunk-size target in `core/chunk.py`) plus per-passage headers (~5,600
+tokens) + up to `MAX_HISTORY_TURNS=8` prior turns, each a real question
+and a real multi-point cited answer (~2,600 tokens) + the current
+question + real headroom for the model's own reply, since `num_ctx` has
+to cover the completion too, not just the prompt (~600 tokens) — roughly
+9,500 tokens on paper. `OLLAMA_NUM_CTX` (`core/generate.py`,
+env-var-overridable, default `12288`) leaves comfortable margin above
+that estimate — chunking's own token count is itself an approximation
+(`len(text)//4`, not a real tokenizer) — without being wastefully large:
+a bigger context window than needed has its own real cost (more KV-cache
+memory, slower per-token generation), so this is sized to the actual
+computed ceiling, not padded past it "just in case." Sent via Ollama's
+`options.num_ctx` field on both `/api/chat` calls, same as `keep_alive`.
+
+**Verified directly**: `tests/test_ollama_clients.py`'s existing
+`MockTransport` tests for both `generate_answer` and `stream_answer`
+extended to assert `body["options"]["num_ctx"] == OLLAMA_NUM_CTX` is
+genuinely present, alongside the already-verified `keep_alive`. Full
+suite still 74/74 (same count — these extended existing tests rather than
+adding new ones). `scripts/dev.sh` smoke-tested end to end again with
+both changes live — API/UI both came up cleanly. **Only confirmable on
+your Mac**: whether Ollama's actual default `num_ctx` was really causing
+truncation (or slower-than-necessary inference from an oversized one) —
+this fix removes the ambiguity either way by taking control of the value
+explicitly, but which direction it was actually hurting before is a real
+question only live Ollama can answer.
+
+**Deliberately still not touched, same reasoning as before**: Piper's
+non-streaming, whole-answer-at-once synthesis remains the single biggest
+known *remaining* latency gap (real "dead air" between the answer text
+finishing and audio starting) — still the highest-effort, most
+behavior-adjacent item on the list (touches `core/speak.py` and a real
+slice of `App.jsx`'s audio playback state, no existing test scaffolding
+for anything but single-call synthesis), and still not attempted without
+it being explicitly asked for, given the standing "don't change
+functionality" constraint on this pass.
+
 ## Error-handling audit — catching the rest of a real pattern
 
 Three real bugs this session (Ollama timeouts, `WhisperTranscriber.

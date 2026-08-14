@@ -24,6 +24,12 @@ from core.embed import DEFAULT_OLLAMA_URL, OLLAMA_KEEP_ALIVE, OllamaError, Ollam
 from core.retrieve import ConversationTurn, RetrievedChunk
 
 CONTRACT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "answer_contract.txt"
+# Read once at import time, not on every call - real bug found in a
+# latency pass: generate_answer/stream_answer both re-read this file from
+# disk on every single request. File I/O is cheap next to a model call,
+# but it's redundant work with zero upside (the file never changes at
+# runtime) - free to remove.
+ANSWER_CONTRACT = CONTRACT_PATH.read_text()
 
 # Real, confirmed latency bug, not a guess: history was unbounded - every
 # prior turn's full question AND answer text got inlined into every
@@ -43,6 +49,34 @@ CONTRACT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "answer_con
 # give the model real conversational continuity across a longer session,
 # a different job with a different right answer.
 MAX_HISTORY_TURNS = 8
+
+# Real risk found while tightening latency, worse than a latency issue on
+# its own: neither generate_answer nor stream_answer ever told Ollama how
+# large a context window to use, so Ollama's own default applied instead
+# (historically 2048 tokens unless overridden, though this varies by
+# Ollama version - genuinely uncertain without live confirmation, not
+# guessed either way). A too-small context window doesn't just slow
+# things down, it SILENTLY TRUNCATES the prompt - and if that truncation
+# eats the system message (this app's own citation contract) or early
+# passages, the model can end up answering without the rules that keep
+# citations honest, or without passages it was supposed to ground the
+# answer in. That's a correctness risk, not just a performance one.
+#
+# Sized deliberately, not guessed: worst case today is the answer
+# contract (~700 tokens) + up to 8 retrieved passages at ~650 tokens each
+# (core/chunk.py's own chunk-size target) plus per-passage headers (~5,600
+# tokens) + up to MAX_HISTORY_TURNS=8 prior turns, each a real question
+# and a real multi-point cited answer (~2,600 tokens) + the current
+# question + real headroom for the model's own reply, since num_ctx has
+# to cover the completion too, not just the prompt (~600 tokens). That's
+# roughly 9,500 tokens on paper; 12,288 leaves comfortable margin above
+# that estimate (chunking's own token count is itself an approximation -
+# len(text)//4 - not an exact tokenizer count) without being wastefully
+# large the way an arbitrary "just make it huge" value would be - a
+# bigger context window than needed has its own real cost (more KV-cache
+# memory, slower per-token generation), so this is sized to the actual
+# computed ceiling, not padded past it for no reason.
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "12288"))
 
 
 @dataclass
@@ -121,7 +155,6 @@ def generate_answer(
     history: list[ConversationTurn] | None = None,
 ) -> AnswerResult:
     http = client or httpx.Client(base_url=base_url, timeout=timeout)
-    contract = CONTRACT_PATH.read_text()
     user_prompt = build_user_prompt(question, passages, history=history)
 
     try:
@@ -131,8 +164,9 @@ def generate_answer(
                 "model": model,
                 "stream": False,
                 "keep_alive": OLLAMA_KEEP_ALIVE,
+                "options": {"num_ctx": OLLAMA_NUM_CTX},
                 "messages": [
-                    {"role": "system", "content": contract},
+                    {"role": "system", "content": ANSWER_CONTRACT},
                     {"role": "user", "content": user_prompt},
                 ],
             },
@@ -186,7 +220,6 @@ def stream_answer(
     non-streaming case, not guessed from scratch.
     """
     http = client or httpx.Client(base_url=base_url, timeout=timeout)
-    contract = CONTRACT_PATH.read_text()
     user_prompt = build_user_prompt(question, passages, history=history)
 
     try:
@@ -197,8 +230,9 @@ def stream_answer(
                 "model": model,
                 "stream": True,
                 "keep_alive": OLLAMA_KEEP_ALIVE,
+                "options": {"num_ctx": OLLAMA_NUM_CTX},
                 "messages": [
-                    {"role": "system", "content": contract},
+                    {"role": "system", "content": ANSWER_CONTRACT},
                     {"role": "user", "content": user_prompt},
                 ],
             },
