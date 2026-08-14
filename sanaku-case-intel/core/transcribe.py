@@ -69,5 +69,22 @@ class WhisperTranscriber:
         import io
 
         model = self._ensure_loaded()
-        segments, _info = model.transcribe(io.BytesIO(audio_bytes), beam_size=5)
-        return " ".join(segment.text.strip() for segment in segments).strip()
+        # Real bug found live: this had no error handling at all. Whatever
+        # model.transcribe() raises - a truncated/empty clip (e.g. the mic
+        # was stopped before any audio was actually captured), a container
+        # or codec faster-whisper's own av/PyAV dependency can't decode,
+        # anything else - propagated straight up uncaught, past api/main.py's
+        # `except TranscriptionError` clause (a bare exception isn't one),
+        # into FastAPI's default 500 handler, which returns a plain-text
+        # body. web/src/App.jsx's fetch already defends against a non-JSON
+        # error body (same pattern as the earlier Ollama-timeout fix), but
+        # that only produces its generic "Could not transcribe that." -
+        # exactly what was seen live, with the real cause hidden. Wrapping
+        # this turns it into a real, specific TranscriptionError message
+        # instead - api/main.py's /transcribe route already maps that to a
+        # clean 503 with the actual detail, once it's actually raised as one.
+        try:
+            segments, _info = model.transcribe(io.BytesIO(audio_bytes), beam_size=5)
+            return " ".join(segment.text.strip() for segment in segments).strip()
+        except Exception as e:
+            raise TranscriptionError(f"Could not transcribe that clip: {e}") from e
