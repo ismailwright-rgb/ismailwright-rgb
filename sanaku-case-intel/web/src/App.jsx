@@ -453,6 +453,28 @@ function armAutoStopOnSilence(stream, onSilenceDetected, detectorOptions) {
 // AUTO_STOP_MAX_MS rather than a smaller max recording length outright.
 const FOLLOW_UP_NO_SPEECH_TIMEOUT_MS = 8000;
 
+// Real, confirmed latency bug, not a guess: every prior turn's full
+// question+answer text was sent as history on *every* /ask/stream call
+// with no limit - a session's request/prompt size (and generation
+// latency) grew every single turn, working directly against the
+// "ongoing conversation" hands-free feature above, which actively
+// encourages longer sessions. Matches core/generate.py's own
+// MAX_HISTORY_TURNS=8 constant - capped in both places deliberately
+// (client-side here keeps the request body itself small; server-side in
+// build_user_prompt is a backstop regardless of what any client sends),
+// not because one alone wasn't enough.
+const MAX_HISTORY_TURNS = 8;
+
+/** Keeps only the most recent `maxTurns` entries of `turns`, oldest
+ * dropped first - pure logic, no DOM/React dependency, deliberately
+ * extracted as its own function (rather than an inline .slice() at the
+ * call site) so it's unit-testable the same way matchesShortPhrase/
+ * createSilenceStopDetector are: a standalone Node script, no browser
+ * needed. */
+function capHistory(turns, maxTurns) {
+  return turns.slice(-maxTurns);
+}
+
 /** Very small formatter for the answer text: blocks separated by a blank
  * line become paragraphs, or a bulleted list if every line in the block
  * starts with "* " or "- " - matches the shape the answer contract asks
@@ -725,7 +747,12 @@ export default function App() {
     if (!caseId.trim() || !askedQuestion || loading || streamingTurnId) return;
     audioRef.current?.pause();
     setSpeakingId(null);
-    const historyPayload = turns.map((t) => ({ question: t.question, answer: t.data.answer }));
+    // Capped to the most recent MAX_HISTORY_TURNS - see that constant's
+    // own comment for the real latency bug this fixes.
+    const historyPayload = capHistory(turns, MAX_HISTORY_TURNS).map((t) => ({
+      question: t.question,
+      answer: t.data.answer,
+    }));
     setLoading(true);
     setPendingQuestion(askedQuestion);
     setError(null);

@@ -74,6 +74,23 @@ def _parse_ndjson(text: str) -> list[dict]:
     return [json.loads(line) for line in text.strip().split("\n") if line]
 
 
+def test_get_transcriber_is_a_cached_singleton():
+    """Real bug found live: get_transcriber() constructed a brand-new
+    WhisperTranscriber on every single /transcribe request - FastAPI's
+    Depends() calls the dependency fresh each time by default, so the
+    whisper model was effectively being reloaded from disk on every voice
+    question, every hands-free follow-up. @lru_cache turns this into a
+    lazy singleton: the same instance is returned on every call after the
+    first, so the model (loaded lazily inside WhisperTranscriber itself,
+    on first real transcribe() call) only ever loads once per process.
+    Bypasses TestClient entirely and calls the dependency function
+    directly, since the bug is in how the dependency itself is
+    constructed, not in routing."""
+    first = get_transcriber()
+    second = get_transcriber()
+    assert first is second
+
+
 def test_get_config_wraps_invalid_config_content_as_clean_500(monkeypatch):
     # Real bug found live: a config/client.json that exists but has
     # invalid content (malformed JSON, or a schema mismatch) raises a

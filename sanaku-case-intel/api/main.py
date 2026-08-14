@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import asdict
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -98,10 +99,30 @@ def get_stream_generator():
     return stream_answer
 
 
+@lru_cache(maxsize=1)
 def get_transcriber() -> Transcriber:
     """Returns the real local Whisper-backed transcriber by default. Tests
     override this dependency with tests/stub_transcriber.py's fake via
-    app.dependency_overrides, same pattern as get_embedder/get_generator."""
+    app.dependency_overrides, same pattern as get_embedder/get_generator.
+
+    @lru_cache (a no-arg call, so effectively a lazy singleton) - real bug
+    found live: without this, FastAPI's Depends() called this function
+    fresh on every single /transcribe request, constructing a brand-new
+    WhisperTranscriber each time. WhisperTranscriber._ensure_loaded()
+    already caches the loaded model correctly *within one instance's
+    lifetime* (core/transcribe.py), but a fresh instance every request
+    meant that cache never survived past a single request - the whisper
+    model was being reloaded from disk on every voice question, every
+    hands-free follow-up. With the hands-free "ongoing conversation"
+    feature now doing several recordings per session, this fired
+    repeatedly. Caching the dependency itself (not just the model inside
+    it) means the model loads once, lazily, on the first real request,
+    and every request after reuses it - the same lazy-singleton shape
+    WhisperTranscriber already uses internally, just extended to survive
+    across requests at the app level. Trade-off worth naming: the loaded
+    model now stays resident in memory for the life of this process
+    instead of being freed between requests - a small, permanent memory
+    floor increase, not a correctness concern."""
     return WhisperTranscriber()
 
 

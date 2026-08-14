@@ -4,7 +4,7 @@ model carries a citation-ready [doc_name, p.<page>] header and that
 human_entered/approximate/undated flags actually reach the prompt text,
 since prompts/answer_contract.txt's rule #3 depends on the model being able
 to see those flags to honor them."""
-from core.generate import build_user_prompt
+from core.generate import MAX_HISTORY_TURNS, build_user_prompt
 from core.retrieve import ConversationTurn, RetrievedChunk
 
 
@@ -84,6 +84,54 @@ def test_build_user_prompt_omitting_history_is_byte_identical_to_before():
     )
     assert build_user_prompt("question", [passage]) == build_user_prompt("question", [passage], history=None)
     assert build_user_prompt("question", [passage]) == build_user_prompt("question", [passage], history=[])
+
+
+def test_build_user_prompt_caps_history_to_most_recent_turns():
+    """Real bug found live: history was unbounded, so a session's prompt
+    (and generation latency) grew every single turn - directly working
+    against the "ongoing conversation" hands-free feature that actively
+    encourages longer sessions. The oldest turns must drop off first,
+    keeping only the most recent MAX_HISTORY_TURNS."""
+    passage = RetrievedChunk(
+        doc_id="doc", doc_name="a.pdf", page=1, chunk_index=0, source_type="digital",
+        event_date=None, date_confidence="undated", human_entered=False, text="text", distance=0.1,
+    )
+    history = [
+        ConversationTurn(question=f"question number {i}", answer=f"answer number {i}")
+        for i in range(MAX_HISTORY_TURNS + 3)
+    ]
+    prompt = build_user_prompt("current question", [passage], history=history)
+    # Exact-line matching (not a bare substring check) - "question number
+    # 1" is itself a substring of "question number 10"/"11"/etc., which
+    # would make a naive `in` check pass even if capping were broken.
+    lines = prompt.splitlines()
+    # The oldest turns (dropped) must not appear at all.
+    assert "Q: question number 0" not in lines
+    assert "Q: question number 1" not in lines
+    assert "Q: question number 2" not in lines
+    # The most recent MAX_HISTORY_TURNS turns must all still be present.
+    for i in range(3, MAX_HISTORY_TURNS + 3):
+        assert f"Q: question number {i}" in lines
+        assert f"A: answer number {i}" in lines
+
+
+def test_build_user_prompt_history_under_the_cap_is_unaffected():
+    """Regression guard: capping must only ever change output once a
+    session actually exceeds MAX_HISTORY_TURNS - every existing small-
+    history test (and any real session shorter than the cap) must be
+    completely unaffected by this."""
+    passage = RetrievedChunk(
+        doc_id="doc", doc_name="a.pdf", page=1, chunk_index=0, source_type="digital",
+        event_date=None, date_confidence="undated", human_entered=False, text="text", distance=0.1,
+    )
+    history = [
+        ConversationTurn(question=f"question number {i}", answer=f"answer number {i}")
+        for i in range(MAX_HISTORY_TURNS)
+    ]
+    prompt = build_user_prompt("current question", [passage], history=history)
+    lines = prompt.splitlines()
+    for i in range(MAX_HISTORY_TURNS):
+        assert f"Q: question number {i}" in lines
 
 
 def test_build_user_prompt_labels_history_as_context_only_not_a_source():

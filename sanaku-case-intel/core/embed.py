@@ -20,6 +20,17 @@ import os
 
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
+# Same reasoning as DEFAULT_OLLAMA_URL above: infrastructure, not a
+# per-firm config value. Ollama's own default keep_alive is 5 minutes -
+# any gap longer than that between requests (very plausible: reviewing an
+# answer, talking through a case, switching to a different one) triggers a
+# full model reload before the next request can even start. Real,
+# confirmed latency contributor, not a guess - neither this module nor
+# core/generate.py sent any keep_alive value before this. "30m" comfortably
+# outlasts a normal working gap without pinning the model in memory
+# forever the way "-1" (never unload) would.
+OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
+
 
 class OllamaError(RuntimeError):
     """Base class for anything that goes wrong talking to Ollama."""
@@ -54,7 +65,10 @@ class OllamaEmbedder:
         if not texts:
             return []
         try:
-            resp = self._client.post("/api/embed", json={"model": self._model, "input": list(texts)})
+            resp = self._client.post(
+                "/api/embed",
+                json={"model": self._model, "input": list(texts), "keep_alive": OLLAMA_KEEP_ALIVE},
+            )
             resp.raise_for_status()
         except httpx.ConnectError as e:
             raise OllamaUnavailableError(

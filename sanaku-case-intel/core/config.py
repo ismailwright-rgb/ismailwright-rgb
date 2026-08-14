@@ -30,6 +30,14 @@ class ClientConfig(BaseModel):
     firm_name: str
     logo_path: str
     colors: Colors
+    # tier and license_path are schema fields only - present so
+    # config/client.json validates, but nothing in this codebase reads,
+    # branches on, or enforces either one today (confirmed by an
+    # exhaustive grep of core/, api/, and cli.py - zero matches beyond
+    # this declaration and test fixtures). No feature gating, no expiry
+    # check, no tier-based behavior difference exists. Real license/tier
+    # enforcement would be a genuinely new feature, not implemented here -
+    # don't mistake either field for an active gate.
     tier: str
     data_root: str
     gen_model: str

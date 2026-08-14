@@ -20,10 +20,29 @@ from pathlib import Path
 
 import httpx
 
-from core.embed import DEFAULT_OLLAMA_URL, OllamaError, OllamaUnavailableError
+from core.embed import DEFAULT_OLLAMA_URL, OLLAMA_KEEP_ALIVE, OllamaError, OllamaUnavailableError
 from core.retrieve import ConversationTurn, RetrievedChunk
 
 CONTRACT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "answer_contract.txt"
+
+# Real, confirmed latency bug, not a guess: history was unbounded - every
+# prior turn's full question AND answer text got inlined into every
+# prompt with no limit, so a session's prompt (and generation time) grew
+# every single turn, working directly against the "ongoing conversation"
+# hands-free feature (web/src/App.jsx) that actively encourages longer
+# sessions. Capped here, server-side, as a backstop regardless of what any
+# caller sends - web/src/App.jsx caps the same way client-side (its own
+# MAX_HISTORY_TURNS) before the request is even built, so this is
+# defense-in-depth, not the only place it's enforced. This is a real
+# product trade-off, not a pure performance tweak: a question that
+# depends on something asked more than 8 turns back loses that context -
+# picked after weighing that trade-off directly, not assumed. Deliberately
+# a different value from core/retrieve.py's build_retrieval_query
+# max_prior_turns=2 - that cap only needs enough to disambiguate a short
+# follow-up ("what about her prior injuries?"), while this one is meant to
+# give the model real conversational continuity across a longer session,
+# a different job with a different right answer.
+MAX_HISTORY_TURNS = 8
 
 
 @dataclass
@@ -49,12 +68,19 @@ def build_user_prompt(
         # prompts/answer_contract.txt's rule 5 right where the history
         # actually appears - the same belt-and-suspenders shape already
         # used below for "Passage N is a locator, not a citation".
+        #
+        # Capped to the most recent MAX_HISTORY_TURNS - see that
+        # constant's own comment for the real latency bug this fixes and
+        # the trade-off it accepts. Oldest turns drop off first; this only
+        # changes anything once a session actually exceeds the cap, so
+        # every existing small-history test stays byte-identical.
+        capped_history = history[-MAX_HISTORY_TURNS:]
         lines.append(
             "CONVERSATION HISTORY (earlier turns in this session - context "
             "only, per Rule 5. Not a source: every claim below must still "
             "be cited to a PASSAGE, never to this history):"
         )
-        for turn in history:
+        for turn in capped_history:
             lines.append(f"Q: {turn.question}")
             lines.append(f"A: {turn.answer}")
         lines.append("")
@@ -104,6 +130,7 @@ def generate_answer(
             json={
                 "model": model,
                 "stream": False,
+                "keep_alive": OLLAMA_KEEP_ALIVE,
                 "messages": [
                     {"role": "system", "content": contract},
                     {"role": "user", "content": user_prompt},
@@ -169,6 +196,7 @@ def stream_answer(
             json={
                 "model": model,
                 "stream": True,
+                "keep_alive": OLLAMA_KEEP_ALIVE,
                 "messages": [
                     {"role": "system", "content": contract},
                     {"role": "user", "content": user_prompt},

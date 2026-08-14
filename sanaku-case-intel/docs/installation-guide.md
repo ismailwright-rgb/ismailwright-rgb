@@ -76,6 +76,12 @@ expose it directly to the open internet.
      models.
    - Leave `data_root` as `data` unless there's a specific reason to
      store case files somewhere else on this machine.
+   - Leave `tier` and `license_path` alone. They're required fields in
+     the config schema but nothing in the app currently reads or enforces
+     either one — no feature gating, no expiry check, no tier-based
+     behavior difference exists today. `scripts/new-client.sh` never
+     touches them either; every install just carries the example
+     template's values forward unchanged.
 
    Re-run `bash scripts/setup.sh` after editing — it validates the file
    and tells you plainly if something's wrong with it (a typo'd field

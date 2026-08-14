@@ -1046,6 +1046,114 @@ the whole prior thread into retrieval and prompt history forever.
 `cli.py` stays single-turn — it's a one-shot process invocation with
 nowhere for conversation state to live between runs.
 
+## Latency — what's hardware, what's fixable
+
+Asked directly ahead of a demo recording: is the latency you're seeing
+your Mac's own hardware, or something to expect on every install? A code
+investigation (not a guess) found the honest answer is **both**. Local
+model inference — an 8B generation model, an embedding model, a CPU
+Whisper model — has a real hardware-bound floor no code change removes.
+But the investigation also found concrete, confirmed software
+inefficiencies sitting on top of that floor, unrelated to hardware, that
+made every install slower than it needed to be. Three fixed here; one
+found and deliberately left for later.
+
+**The whisper transcriber was reloaded from disk on every single
+`/transcribe` request.** `api/main.py`'s `get_transcriber()` did
+`return WhisperTranscriber()` — a fresh instance every time, via
+FastAPI's `Depends()`. `WhisperTranscriber._ensure_loaded()`
+(`core/transcribe.py`) already caches the loaded model correctly *within
+one instance's lifetime* — but a new instance every request meant that
+cache never survived past a single request. With the hands-free "ongoing
+conversation" feature now doing several voice recordings per session,
+this fired repeatedly, every time — very likely the single biggest
+software-caused latency contributor for anything voice-related. Fixed by
+wrapping `get_transcriber()` in `@lru_cache(maxsize=1)` — a lazy
+singleton, the same shape `WhisperTranscriber` already uses internally
+for its own model cache, just extended to survive across requests at the
+app level. Trade-off worth naming: the loaded model now stays resident in
+memory for the process's whole life instead of being freed between
+requests — a small, permanent memory floor increase, not a correctness
+concern.
+
+**No `keep_alive` was ever sent to Ollama.** Neither `core/generate.py`'s
+`/api/chat` calls nor `core/embed.py`'s `/api/embed` call included an
+`options`/`keep_alive` field at all. Ollama's own default is a 5-minute
+idle-unload — any gap longer than that between questions (very plausible
+mid-demo: reviewing an answer, talking to an audience, switching cases)
+triggered a full model reload before the next answer could even start
+generating. Fixed by adding `OLLAMA_KEEP_ALIVE` (`core/embed.py`, an
+env-var-overridable module constant, default `"30m"` — infrastructure,
+not a per-firm config value, same category as `DEFAULT_OLLAMA_URL`) to
+every `/api/chat` and `/api/embed` request body. Purely additive; doesn't
+touch response parsing or the streaming/non-streaming logic.
+
+**Conversation history sent to the generator had no cap, and grew every
+turn.** `core/generate.py`'s `build_user_prompt()` inlined every prior
+turn's full question *and* answer text with no limit, and
+`web/src/App.jsx`'s `askQuestion()` sent the app's *entire* `turns` array
+as that history on every single `/ask`/`/ask/stream` call.
+`core/retrieve.py`'s own `max_prior_turns=2` cap only ever bounded the
+cheap *retrieval* query string — it never touched what actually got sent
+to the model. Practical effect: the longer a conversation ran, the bigger
+every subsequent prompt got, and the slower every subsequent answer got —
+directly working against the "ongoing conversation" feature above, which
+actively encourages longer sessions. **Asked directly what a sensible cap
+looked like; picked the last 6-8 turns**, implemented as `8` (the more
+generous end of that range, since that's the side that was picked over
+the tighter 4-turn default). Real trade-off, not a free change — a
+question late in a long session that depends on something asked more
+than 8 turns back loses that context. Capped in **both** places
+deliberately, not just one: `MAX_HISTORY_TURNS = 8` in
+`web/src/App.jsx` (keeps the request body itself small — a new
+`capHistory(turns, maxTurns)` pure helper, extracted specifically so it's
+testable the same way `matchesShortPhrase`/`createSilenceStopDetector`
+already are, via a standalone Node script, no browser needed) and
+`MAX_HISTORY_TURNS = 8` again in `core/generate.py`'s `build_user_prompt`
+(a server-side backstop regardless of what any caller sends — protects
+the CLI or any future caller, not just today's frontend). Deliberately a
+different value from `core/retrieve.py`'s own `max_prior_turns=2` — that
+cap only needs enough to disambiguate a short follow-up ("what about her
+prior injuries?"), while this one is meant to give the model real
+conversational continuity across a longer session, a different job with
+a different right answer.
+
+**Piper synthesizes the whole answer as one blocking call — found, not
+fixed.** The answer *text* already streams progressively, but voice
+playback (the "ongoing conversation" auto-play) can't start until the
+*entire* final answer is synthesized as one WAV — a long multi-point
+answer has real "dead air" after the text finishes streaming, before any
+audio plays. Deliberately left alone this round: it's the highest-effort
+item found (touches `core/speak.py` and a real slice of `App.jsx`'s audio
+state machine, with no existing test scaffolding shaped for anything but
+single-call synthesis), and there's no confirmed evidence Piper's own
+server even supports incremental synthesis in the first place. Flagged
+here as a real, known gap and a candidate for its own follow-up plan —
+not attempted now, so the three higher-value/lower-risk fixes above
+weren't put at risk chasing a bigger one.
+
+**Verified directly in this sandbox** (no live Ollama/Whisper/Piper here
+— same constraint as every other model-dependent claim this project has
+made): `tests/test_api.py::test_get_transcriber_is_a_cached_singleton`
+calls `get_transcriber()` twice and asserts identity, proving the
+singleton without needing a real model; `tests/test_ollama_clients.py`
+extends its existing `httpx.MockTransport` tests to assert `keep_alive`
+is genuinely present in the JSON body sent to every `/api/chat` and
+`/api/embed` call; `tests/test_generate_prompt.py` gets a new test
+building an 11-turn history and asserting the prompt contains only the
+most recent 8 (exact-line matching, not a bare substring check — "turn 1"
+is itself a substring of "turn 10"/"11", which would let a naive check
+pass even if capping were broken) plus a regression test confirming
+under-the-cap history is completely unaffected; `capHistory` itself was
+run under plain Node against four cases (over the cap, under the cap,
+empty, exact count). Full suite: 74/74. What's **only confirmable on your
+Mac**: the actual wall-clock latency improvement — model load time, cold-
+start avoidance, and shorter-prompt generation time are all real
+hardware/inference-bound quantities no sandbox can measure. What's
+provable here is that the code paths are correct (the transcriber really
+is reused, `keep_alive` really is sent, history really is capped);
+whether that adds up to a demo that *feels* fast is the next real check.
+
 ## Error-handling audit — catching the rest of a real pattern
 
 Three real bugs this session (Ollama timeouts, `WhisperTranscriber.

@@ -7,7 +7,7 @@ import json
 import httpx
 import pytest
 
-from core.embed import OllamaEmbedder, OllamaUnavailableError
+from core.embed import OLLAMA_KEEP_ALIVE, OllamaEmbedder, OllamaUnavailableError
 from core.generate import generate_answer, stream_answer
 from core.retrieve import RetrievedChunk
 
@@ -45,6 +45,23 @@ def test_embedder_parses_response_shape():
     assert result == [[0.1, 0.2], [0.3, 0.4]]
 
 
+def test_embed_sends_keep_alive():
+    """Real bug found live: with no keep_alive sent, Ollama's own default
+    (5-minute idle-unload) applies, so any gap longer than that between
+    requests triggers a full model reload before the next request can
+    even start. Confirms the fix actually sends the value, not just that
+    it exists as a constant somewhere."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["keep_alive"] == OLLAMA_KEEP_ALIVE
+        return httpx.Response(200, json={"embeddings": [[0.1, 0.2]]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://localhost:11434")
+    embedder = OllamaEmbedder(model="nomic-embed-text", client=client)
+    embedder.embed_texts(["a"])
+
+
 def test_embed_query_returns_single_vector():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"embeddings": [[0.5, 0.6]]})
@@ -79,6 +96,7 @@ def test_chat_parses_response_and_uses_stream_false():
         assert body["stream"] is False
         assert body["model"] == "llama3.1:8b"
         assert body["messages"][0]["role"] == "system"
+        assert body["keep_alive"] == OLLAMA_KEEP_ALIVE
         return httpx.Response(200, json={"message": {"content": "The answer is X [doc.pdf, p.3]."}})
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://localhost:11434")
@@ -107,6 +125,7 @@ def test_stream_answer_uses_stream_true_and_yields_deltas_in_order():
         assert request.url.path == "/api/chat"
         body = json.loads(request.content)
         assert body["stream"] is True
+        assert body["keep_alive"] == OLLAMA_KEEP_ALIVE
         return httpx.Response(200, content=("\n".join(json.dumps(l) for l in ndjson_lines) + "\n").encode())
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://localhost:11434")
