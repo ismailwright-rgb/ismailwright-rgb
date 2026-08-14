@@ -279,8 +279,25 @@ function SourceCard({ source, index, forceOpen }) {
   );
 }
 
+// Temporary comparison scaffolding, not a shipped feature: two real
+// visual-direction mockups to compare side by side on real content before
+// picking one (per the design plan - "build both directions for real...
+// so the choice gets made from an actual side-by-side, not a text
+// description"). Once a direction is chosen, this switcher and whichever
+// [data-look] branch loses go away - see web/src/index.css's own
+// "Direction B" / "Direction C" comments for what each one changes.
+const LOOKS = [
+  { value: 'classic', label: 'Classic (current)' },
+  { value: 'b', label: 'Direction B — Sci-fi HUD' },
+  { value: 'c', label: 'Direction C — Modern dark' },
+];
+
 export default function App() {
   const [theme, setTheme] = useState(null);
+  const [look, setLook] = useState(() => {
+    if (typeof localStorage === 'undefined') return 'classic';
+    return localStorage.getItem('sanaku-look-preview') || 'classic';
+  });
   const [logoFailed, setLogoFailed] = useState(false);
   const [cases, setCases] = useState([]);
   const [caseId, setCaseId] = useState('');
@@ -326,6 +343,20 @@ export default function App() {
   const listeningInactivityTimerRef = useRef(null);
 
   const micSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+
+  useEffect(() => {
+    if (look === 'classic') {
+      delete document.documentElement.dataset.look;
+    } else {
+      document.documentElement.dataset.look = look;
+    }
+    try {
+      localStorage.setItem('sanaku-look-preview', look);
+    } catch {
+      // Private-browsing/storage-disabled contexts - the preview just
+      // won't persist across a reload, not worth surfacing as an error.
+    }
+  }, [look]);
 
   // Printing needs every source card expanded first (so the printed page
   // has the full passage text, not just collapsed toggles) - flip every
@@ -702,6 +733,17 @@ export default function App() {
           )
         )}
         <span className="firm-name">{theme?.firm_name || 'Case Intelligence'}</span>
+        <select
+          className="look-preview-switcher"
+          value={look}
+          onChange={(e) => setLook(e.target.value)}
+          aria-label="Preview visual direction (comparison only, not shipped)"
+          title="Preview visual direction - comparison only, not shipped"
+        >
+          {LOOKS.map((l) => (
+            <option key={l.value} value={l.value}>{l.label}</option>
+          ))}
+        </select>
         {micSupported && (
           <button
             type="button"

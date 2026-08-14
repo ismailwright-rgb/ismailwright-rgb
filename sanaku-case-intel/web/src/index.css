@@ -74,6 +74,45 @@
     --primary-hover: color-mix(in srgb, var(--color-primary) 88%, black 12%);
     --primary-soft: color-mix(in srgb, var(--color-primary) 10%, white 90%);
   }
+
+  /* --- Visual-direction comparison (temporary - see App.jsx's LOOKS) ---
+     Two "advanced/futuristic" directions, both still deriving every
+     neutral from the firm's own 3 configured colors via color-mix() -
+     never a fixed hardcoded palette that would override a firm's actual
+     branding, the same rule the light palette above already follows.
+     Shared groundwork: the --paper/--canvas/--ink relationship inverts
+     (light surface -> dark surface, dark text -> light text). */
+  [data-look='b'],
+  [data-look='c'] {
+    --ink: color-mix(in srgb, var(--color-accent) 92%, white 8%);
+    --ink-soft: color-mix(in srgb, var(--ink) 60%, black 40%);
+    --paper: color-mix(in srgb, var(--color-primary) 24%, black 76%);
+    --canvas: color-mix(in srgb, var(--color-primary) 15%, black 85%);
+    --line: color-mix(in srgb, var(--color-accent) 14%, var(--paper) 86%);
+    --line-strong: color-mix(in srgb, var(--color-accent) 28%, var(--paper) 72%);
+    --primary-hover: color-mix(in srgb, var(--color-primary) 70%, white 30%);
+    --primary-soft: color-mix(in srgb, var(--color-primary) 22%, var(--paper) 78%);
+  }
+
+  /* Direction B - Sci-fi HUD: hairlines carry real brand-hue saturation
+     (a "readout" line, not a neutral gray one) plus a soft ambient glow
+     on cards. Named risk, kept in check on purpose: dark + neon glow is
+     close to the generic "AI product" look when overdone, so glow stays
+     low-opacity and confined to card edges/focus/the listening
+     indicator - never applied to body text or every element. */
+  [data-look='b'] {
+    --line: color-mix(in srgb, var(--color-secondary) 38%, var(--paper) 62%);
+    --line-strong: color-mix(in srgb, var(--color-secondary) 58%, var(--paper) 42%);
+    --glow: color-mix(in srgb, var(--color-secondary) 55%, transparent);
+  }
+
+  /* Direction C - Modern dark professional (Linear/Vercel/Stripe
+     register): same dark-first inversion, no glow - crisp low-contrast
+     hairlines, flat cards. Advanced-feeling through precision, not
+     ornament. */
+  [data-look='c'] {
+    --line-strong: color-mix(in srgb, var(--color-accent) 20%, var(--paper) 80%);
+  }
 }
 
 * { box-sizing: border-box; }
@@ -139,6 +178,20 @@ body {
   font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+/* Comparison-only scaffolding (see App.jsx's LOOKS comment) - styled
+   quietly so it doesn't read as a real product control. Removed along
+   with whichever [data-look] direction loses once one is chosen. */
+.look-preview-switcher {
+  flex-shrink: 0;
+  padding: 4px var(--space-2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: var(--text-xs);
+  max-width: 160px;
 }
 
 /* Header toggle - one of two required visual registers for hands-free
@@ -272,6 +325,12 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   font-size: var(--text-base);
+  /* Explicit, not left to the browser's native input styling - matters
+     once --paper stops being near-white (see Direction B/C's dark-first
+     tokens above), where an unset background would stay opaque white
+     against a dark form. */
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .question-input:focus-visible,
@@ -757,6 +816,88 @@ body {
   }
 }
 
+/* --- Direction B / Direction C component overrides (temporary - see
+   App.jsx's LOOKS comment) --------------------------------------------- */
+
+/* Direction B - soft ambient glow layered on top of the existing 1px
+   border (border stays; this adds a low-opacity brand-color halo behind
+   it), and citation metadata shifts to a monospace "data readout"
+   treatment while prose stays on the regular sans - the HUD aesthetic
+   applied selectively, not to everything. */
+[data-look='b'] .ask-form,
+[data-look='b'] .answer-panel,
+[data-look='b'] .source-panel,
+[data-look='b'] .empty-state,
+[data-look='b'] .source-card {
+  box-shadow: 0 0 28px -10px var(--glow);
+}
+
+[data-look='b'] .source-doc,
+[data-look='b'] .source-page,
+[data-look='b'] .print-case {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+}
+
+[data-look='b'] .question-input:focus-visible,
+[data-look='b'] .ask-button:focus-visible {
+  box-shadow: 0 0 0 4px var(--glow);
+}
+
+/* Direction B's listening indicator: a pulsing ring/glow around the dot,
+   echoing a HUD "presence" cue rather than a plain blink. */
+[data-look='b'] .listening-dot {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-look='b'] .listening-dot {
+    animation: ring-pulse 1.8s ease-out infinite;
+  }
+}
+
+@keyframes ring-pulse {
+  0% { box-shadow: 0 0 0 0 var(--glow); }
+  70% { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Direction C - no glow, ever; advanced-feeling through precision, not
+   ornament. A single confident sans throughout: the serif survives only
+   as a small distinguishing mark on the firm name (.firm-name keeps
+   --font-display untouched), everything else that currently uses the
+   display face drops to the body sans. */
+[data-look='c'] .answer-panel > p:first-of-type,
+[data-look='c'] .empty-state-heading,
+[data-look='c'] .turn-question {
+  font-family: var(--font-body);
+}
+
+/* Subtle, functional motion - a soft rise-and-fade when a new turn
+   appears in the thread, not decorative. */
+[data-look='c'] .turn {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-look='c'] .turn {
+    animation: turn-in 260ms ease-out;
+  }
+}
+
+@keyframes turn-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+[data-look='c'] .ask-button:hover:not(:disabled),
+[data-look='c'] .print-button:hover,
+[data-look='c'] .voice-button:hover:not(:disabled),
+[data-look='c'] .new-conversation-button:hover,
+[data-look='c'] .source-toggle:hover {
+  filter: brightness(1.12);
+}
+
 /* Print stylesheet - a sober, black-on-white court-ready document: the
    ask-form, print button, and any chrome that's meaningless on paper
    disappear; the printed page gets its own case/question header (see
@@ -778,7 +919,8 @@ body {
   .logo,
   .logo-monogram,
   .handsfree-toggle,
-  .handsfree-banner {
+  .handsfree-banner,
+  .look-preview-switcher {
     display: none;
   }
 
@@ -818,6 +960,10 @@ body {
     border: none;
     padding: 0;
     background: none;
+    /* Overrides Direction B's glow (see box-shadow rules above) - a
+       printed page is black-on-white regardless of which look was active
+       on screen. */
+    box-shadow: none;
   }
 
   .answer-panel > p:first-of-type {
