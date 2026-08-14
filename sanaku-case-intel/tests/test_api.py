@@ -74,6 +74,30 @@ def _parse_ndjson(text: str) -> list[dict]:
     return [json.loads(line) for line in text.strip().split("\n") if line]
 
 
+def test_get_config_wraps_invalid_config_content_as_clean_500(monkeypatch):
+    # Real bug found live: a config/client.json that exists but has
+    # invalid content (malformed JSON, or a schema mismatch) raises a
+    # ValueError subclass, not FileNotFoundError - get_config() used to
+    # only catch the latter, letting the former propagate as an
+    # unhandled exception. This bypasses TestClient/HTTP entirely and
+    # calls get_config() directly, since the bug is in that function's
+    # own exception handling, not in routing.
+    import api.main as main_module
+
+    def fake_load_config():
+        raise ValueError("2 validation errors for ClientConfig")
+
+    monkeypatch.setattr(main_module, "load_config", fake_load_config)
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        main_module.get_config()
+    assert exc_info.value.status_code == 500
+    assert "isn't valid" in exc_info.value.detail
+    assert "validation errors" in exc_info.value.detail
+
+
 def test_health_reports_ollama_unreachable_without_throwing(client):
     r = client.get("/health")
     assert r.status_code == 200

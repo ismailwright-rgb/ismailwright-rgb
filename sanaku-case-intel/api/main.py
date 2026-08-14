@@ -61,6 +61,19 @@ def get_config() -> ClientConfig:
         return load_config()
     except FileNotFoundError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+    except ValueError as e:
+        # Real gap found live: config/client.json existing was never the
+        # whole story - malformed JSON (json.JSONDecodeError) or content
+        # that doesn't match ClientConfig's schema (pydantic's
+        # ValidationError) are both subclasses of ValueError, and neither
+        # is a FileNotFoundError, so both fell through uncaught here into
+        # an unhandled 500 with a plain-text body - every route that
+        # depends on get_config() (which is nearly all of them, including
+        # /theme and /cases) broke the same way, with no indication why.
+        raise HTTPException(
+            status_code=500,
+            detail=f"config/client.json exists but isn't valid: {e}",
+        ) from e
 
 
 def get_embedder(config: ClientConfig = Depends(get_config)) -> EmbeddingFunction:
