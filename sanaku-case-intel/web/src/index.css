@@ -141,6 +141,98 @@ body {
   letter-spacing: 0.01em;
 }
 
+/* Header toggle - one of two required visual registers for hands-free
+   listening (see .handsfree-banner below for the other). Pushed to the
+   header's far edge via margin-left: auto so it reads as a mode switch,
+   not another piece of branding. */
+.handsfree-toggle {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.handsfree-toggle:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.handsfree-toggle:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.handsfree-toggle.is-active {
+  background: var(--color-secondary);
+  border-color: var(--color-secondary);
+  color: var(--color-primary);
+}
+
+/* Sticky, full-width, always visible while armed - a second, distinct
+   register from the toggle button above and from .mic-dot's "actively
+   recording your question" red, on purpose: this app sits in rooms with
+   privileged attorney-client conversations, so whether the microphone is
+   live can never be ambiguous or easy to miss. --color-secondary (not
+   red) keeps "hands-free is armed" visually distinct from "recording a
+   question right now." */
+.handsfree-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-7);
+  background: var(--color-secondary);
+  color: var(--color-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.listening-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .listening-dot {
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+}
+
+.handsfree-off-button {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-primary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.handsfree-off-button:hover {
+  background: var(--color-primary);
+  color: var(--color-secondary);
+}
+
+.handsfree-off-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .app-main {
   flex: 1;
   max-width: 1080px;
@@ -684,7 +776,9 @@ body {
   .answer-toolbar,
   .source-chevron,
   .logo,
-  .logo-monogram {
+  .logo-monogram,
+  .handsfree-toggle,
+  .handsfree-banner {
     display: none;
   }
 

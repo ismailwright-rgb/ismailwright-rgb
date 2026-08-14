@@ -28,9 +28,11 @@ of any client-facing surface.
   (derived neutrals via `color-mix()`, empty/loading states, a header
   logo-monogram fallback), a print feature (now printing the whole
   conversation, not just one answer), voice input/output (local Whisper
-  + a separate local Piper process — see "Voice" below), and multi-turn
-  conversation memory (see "Conversation memory" below) — all still
-  Phase 4 surface, no new config schema.
+  + a separate local Piper process — see "Voice" below), hands-free
+  wake-phrase listening ("Let's do a case review." — see "Hands-free
+  listening mode" below), and multi-turn conversation memory (see
+  "Conversation memory" below) — all still Phase 4 surface, no new
+  config schema.
 
 **Stopped after Phase 4's core build**, per the master prompt's own build
 order — Phases 5, 6, 8, 9 (paralegal manual-entry, hardware licensing/
@@ -253,6 +255,68 @@ prove: real transcription accuracy against a real spoken legal question,
 and real Piper voice naturalness/latency — both need confirming on your
 Mac, the same as semantic embedding quality and live cited-answer output
 were in Phase 2/3.
+
+## Hands-free listening mode — "Let's do a case review."
+
+An explicit toggle (the header's "Hands-free" button, or the sticky
+banner's "Turn off"), **not always-on by default** — this app sits in
+rooms with privileged attorney-client conversations, so when the
+microphone is live can never be ambiguous. Armed, saying **"Let's do a
+case review"** starts a real question recording with no click needed —
+the same `startRecording()` the mic button and `⌘⇧M` already call, so
+there's exactly one recording path, not two. It only ever fills the
+question box; the human still reviews and clicks Ask, same as manual
+voice input — this feature doesn't auto-submit.
+
+**Architecture: reuses the existing local Whisper pipeline via short
+rolling audio chunks, not a dedicated wake-word engine.** `openwakeword`
+was checked directly against PyPI before deciding against it: it ships
+pretrained detectors for single wake *words* only — a custom 5-word
+phrase needs training a model, which pulls in a `[full]` extra
+(`torch`/`speechbrain`/`audiomentations`, a full training pipeline) far
+bigger than anything else optional in this project. Reusing
+`/transcribe` (already built, already tested) needs **zero new
+dependencies and zero backend changes** — everything lives in
+`web/src/App.jsx`: a persistent microphone stream + a Web Audio
+`AnalyserNode` records ~4-second chunks, gates them by peak RMS energy
+before ever calling `/transcribe` (a silent room costs nothing), and
+checks the transcribed text against the wake phrase via a sliding-window
+normalized Levenshtein distance (tolerates "let's" vs "lets," one
+misheard word, etc. without needing an exact match — see
+`matchesWakePhrase`'s doc comment for the real tolerance trade-off this
+implies).
+
+Honest costs, not glossed over:
+- **Latency is real, not instant** — expect roughly 2-6 seconds between
+  finishing the phrase and the app starting to record (remainder of the
+  current 4s chunk + a local transcription + a localhost round trip). A
+  dedicated streaming wake-word detector would react faster; this
+  deliberately isn't that, for the dependency-footprint reasons above.
+- **Real false-positive rate is untestable here.** `tests/
+  stub_transcriber.py`'s fixed-text pattern proves the mechanics (a
+  matching chunk starts real recording with no click; a non-matching one
+  leaves it armed; a manual click/hotkey always wins immediately and the
+  loop resumes after) via Playwright with Chromium's fake-media-device
+  flags — verified this way before shipping. What it *cannot* prove:
+  whether ordinary room conversation on your Mac ever accidentally scores
+  within the match threshold (`LISTEN_MATCH_MAX_RATIO` in `App.jsx`,
+  starting at `0.25`) and starts an unwanted recording. That has to be
+  watched for on real hardware, the same category of gap as real
+  transcription accuracy and Piper voice naturalness above.
+- Mutual exclusion with manual use, and the 10-minute inactivity timeout
+  (reset only on an actual phrase match, never on ambient chunk audio —
+  deliberately, so an unrelated long meeting can't keep this armed
+  indefinitely) are both real-Mac-tunable starting points, documented
+  inline in `App.jsx` next to the relevant constants
+  (`LISTEN_CHUNK_MS`, `LISTEN_ENERGY_THRESHOLD`, `LISTEN_INACTIVITY_MS`).
+
+Two distinct visual registers while armed, both required: the header
+toggle reads "Hands-free is on," and a separate sticky banner (using
+`--color-secondary`, deliberately *not* the red already used for
+"recording your question right now," so the two states never look
+alike) stays visible under the header with its own always-reachable
+"Turn off" button — a second kill switch beyond the header toggle,
+warranted given the privacy stakes.
 
 ## Conversation memory — follow-up questions in the same session
 

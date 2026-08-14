@@ -116,6 +116,108 @@ function stripCitationsForSpeech(text) {
   return sentences.join(' ');
 }
 
+// --- Hands-free wake-phrase listening mode -------------------------------
+//
+// Reuses the same local /transcribe pipeline the mic button already uses
+// (core/transcribe.py's Whisper model) via short rolling audio chunks,
+// rather than a dedicated wake-word engine - the real one considered
+// (openwakeword) only ships pretrained single-*word* detectors; a custom
+// 5-word phrase needs training a model, which pulls in a much bigger
+// dependency footprint (torch/speechbrain/audiomentations) than anything
+// else optional in this project. This needs zero new dependencies and
+// zero backend changes - phrase matching is pure client-side string logic
+// over text /transcribe already returns.
+const WAKE_PHRASE = "let's do a case review";
+const WAKE_PHRASE_WORD_COUNT = WAKE_PHRASE.split(' ').length;
+const LISTEN_CHUNK_MS = 4000;
+const LISTEN_PAUSE_RETRY_MS = 500;
+// 10 minutes, reset only when a chunk actually matches the wake phrase -
+// deliberately not reset by ordinary background speech. Resetting on any
+// detected speech would let an unrelated client-meeting conversation keep
+// hands-free armed indefinitely, exactly what this toggle-plus-expiry
+// design exists to prevent.
+const LISTEN_INACTIVITY_MS = 10 * 60 * 1000;
+// RMS threshold (0-1 scale) a chunk's peak amplitude must clear before
+// it's ever sent to /transcribe - keeps a quiet room from costing a
+// Whisper call every LISTEN_CHUNK_MS regardless of activity. Deliberately
+// conservative (low): missing real speech here just means repeating the
+// phrase, the same recoverable failure the manual mic button already has,
+// whereas a threshold set too high risks never activating at all. This is
+// a starting point, not a tuned value - real rooms/microphones vary, and
+// tuning it needs a real Mac (see README.internal.md's Voice section).
+const LISTEN_ENERGY_THRESHOLD = 0.02;
+// Normalized Levenshtein ratio (edit distance / longer string's length)
+// a candidate window must be at or under to count as the wake phrase -
+// tolerates "let's" vs "lets", one misheard word, etc. without requiring
+// an exact match. Known tradeoff, not fully closed: at this ratio a
+// single wrong word inside the 5-word phrase can still pass (e.g. "let's
+// do a quick review" scores ~0.22, under threshold) - tightening the
+// ratio would close that gap but risks missing genuine mishears of the
+// real phrase instead. Which side of that tradeoff is actually right is
+// exactly the real false-positive-rate question flagged as real-Mac-only
+// in README.internal.md's Voice section - this is a starting point.
+const LISTEN_MATCH_MAX_RATIO = 0.25;
+
+function normalizeForMatch(text) {
+  return text.toLowerCase().replace(/[^a-z0-9'\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function levenshteinDistance(a, b) {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = new Array(n + 1);
+  let curr = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+
+/** True if some contiguous word-window of `transcript` is close enough to
+ * WAKE_PHRASE to count as a match. A sliding window over word count
+ * rather than comparing the whole transcript, since a 4-second chunk can
+ * contain speech before or after the phrase itself ("okay, let's do a
+ * case review" or "let's do a case review, please"). Window sizes span
+ * the phrase's own word count plus/minus one, tolerating a dropped or
+ * extra word without needing an exact length match. */
+function matchesWakePhrase(transcript) {
+  const normalizedPhrase = normalizeForMatch(WAKE_PHRASE);
+  const words = normalizeForMatch(transcript).split(' ').filter(Boolean);
+  if (words.length === 0) return false;
+  const minSize = Math.max(1, WAKE_PHRASE_WORD_COUNT - 1);
+  const maxSize = WAKE_PHRASE_WORD_COUNT + 1;
+  for (let size = minSize; size <= maxSize; size++) {
+    for (let start = 0; start + size <= words.length; start++) {
+      const window = words.slice(start, start + size).join(' ');
+      const distance = levenshteinDistance(window, normalizedPhrase);
+      const ratio = distance / Math.max(window.length, normalizedPhrase.length, 1);
+      if (ratio <= LISTEN_MATCH_MAX_RATIO) return true;
+    }
+  }
+  return false;
+}
+
+/** Root-mean-square of a Web Audio AnalyserNode's time-domain byte data
+ * (centered on 128, the analyser's silence baseline) - a cheap proxy for
+ * "how loud was this instant," used to gate chunks before they're ever
+ * transcribed. */
+function computeRms(byteData) {
+  let sumSquares = 0;
+  for (let i = 0; i < byteData.length; i++) {
+    const centered = (byteData[i] - 128) / 128;
+    sumSquares += centered * centered;
+  }
+  return Math.sqrt(sumSquares / byteData.length);
+}
+
 /** Very small formatter for the answer text: blocks separated by a blank
  * line become paragraphs, or a bulleted list if every line in the block
  * starts with "* " or "- " - matches the shape the answer contract asks
@@ -198,9 +300,30 @@ export default function App() {
   const [transcribing, setTranscribing] = useState(false);
   const [speakingId, setSpeakingId] = useState(null);
   const [synthesizingId, setSynthesizingId] = useState(null);
+  // The toggle's source of truth for hands-free wake-phrase listening -
+  // off by default (an explicit choice, not always-on), see the
+  // WAKE_PHRASE block above for the full design reasoning.
+  const [listeningMode, setListeningMode] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioRef = useRef(null);
+  // recordingRef/transcribingRef mirror the `recording`/`transcribing`
+  // state but update synchronously (not on React's next render) - the
+  // hands-free loop is a plain async function outside React's render
+  // cycle and needs an up-to-the-instant answer to "is a manual
+  // recording in progress right now," not a possibly-stale closure over
+  // state from whenever the loop function was created.
+  const recordingRef = useRef(false);
+  const transcribingRef = useRef(false);
+  // The persistent microphone stream + energy analyser used while
+  // listeningMode is armed, and a "generation" counter that invalidates
+  // any in-flight chunk-loop iterations the instant the toggle flips off
+  // (or back on) - simpler than threading an AbortController through a
+  // recursive setTimeout chain.
+  const listeningStreamRef = useRef(null);
+  const listeningAnalyserRef = useRef(null);
+  const listeningGenerationRef = useRef(0);
+  const listeningInactivityTimerRef = useRef(null);
 
   const micSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
@@ -309,24 +432,26 @@ export default function App() {
     setError(null);
   }
 
-  // Click to start recording, click again to stop - transcription runs
-  // entirely on this project's own /transcribe endpoint (a local model,
-  // see core/transcribe.py), never the browser's built-in speech
-  // recognition, which on Chrome typically sends audio to Google's
-  // servers. The transcribed text fills the question box; it does not
-  // submit on its own - a misheard word silently becoming the actual
-  // question is the wrong failure mode for legal software.
-  async function handleMicClick() {
-    if (transcribing) return;
-    if (recording) {
-      mediaRecorderRef.current?.stop();
-      return;
-    }
+  // Starts a real question-recording session - click-to-start, click-
+  // again-to-stop, transcribed entirely via this project's own
+  // /transcribe endpoint (a local model, see core/transcribe.py), never
+  // the browser's built-in speech recognition, which on Chrome typically
+  // sends audio to Google's servers. Extracted out of handleMicClick so
+  // the hands-free wake-phrase loop below can call the exact same
+  // function the mic button does - one recording path, not two. The
+  // transcribed text fills the question box; it does not submit on its
+  // own - a misheard word silently becoming the actual question is the
+  // wrong failure mode for legal software, and that stays true whether
+  // the recording was started by hand or by voice.
+  async function startRecording() {
+    if (recordingRef.current || transcribingRef.current) return;
+    recordingRef.current = true;
     setError(null);
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
+      recordingRef.current = false;
       setError('Microphone access was blocked or unavailable.');
       return;
     }
@@ -338,7 +463,9 @@ export default function App() {
     };
     recorder.onstop = async () => {
       stream.getTracks().forEach((t) => t.stop());
+      recordingRef.current = false;
       setRecording(false);
+      transcribingRef.current = true;
       setTranscribing(true);
       try {
         const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
@@ -351,6 +478,7 @@ export default function App() {
       } catch (err) {
         setError(err.message);
       } finally {
+        transcribingRef.current = false;
         setTranscribing(false);
       }
     };
@@ -359,6 +487,155 @@ export default function App() {
     recorder.start();
     setRecording(true);
   }
+
+  async function handleMicClick() {
+    if (transcribingRef.current) return;
+    if (recordingRef.current) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    await startRecording();
+  }
+
+  // Restarts (or, on first arm, starts) the 10-minute hands-free
+  // inactivity window. `generation` is captured at call time so a timer
+  // from a since-superseded arming can never turn off a *later* one.
+  function resetListenInactivityTimer(generation) {
+    if (listeningInactivityTimerRef.current) clearTimeout(listeningInactivityTimerRef.current);
+    listeningInactivityTimerRef.current = setTimeout(() => {
+      if (listeningGenerationRef.current === generation) setListeningMode(false);
+    }, LISTEN_INACTIVITY_MS);
+  }
+
+  // One iteration of the hands-free chunk-scheduling loop: record a
+  // LISTEN_CHUNK_MS clip on the persistent listening stream, energy-gate
+  // it, transcribe survivors, check for a wake-phrase match, then
+  // reschedule itself - a recursive loop, not setInterval, so the next
+  // chunk never starts until this one's whole round trip (record +
+  // energy-check + maybe-transcribe) has actually finished. Self-pauses
+  // whenever a manual recording is in progress (checked via recordingRef,
+  // not the `recording` state, so this sees a same-tick answer) and
+  // resumes once it ends. `generation` guards every checkpoint against a
+  // stale iteration from a listening session that's since been toggled
+  // off (or restarted).
+  async function runListenChunk(generation) {
+    if (listeningGenerationRef.current !== generation) return;
+
+    if (recordingRef.current || transcribingRef.current) {
+      setTimeout(() => runListenChunk(generation), LISTEN_PAUSE_RETRY_MS);
+      return;
+    }
+
+    const stream = listeningStreamRef.current;
+    const analyser = listeningAnalyserRef.current;
+    if (!stream || !analyser) return;
+
+    const recorder = new MediaRecorder(stream);
+    const chunkParts = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunkParts.push(e.data);
+    };
+
+    let peakRms = 0;
+    const sampleData = new Uint8Array(analyser.fftSize);
+    const sampleIntervalId = setInterval(() => {
+      analyser.getByteTimeDomainData(sampleData);
+      peakRms = Math.max(peakRms, computeRms(sampleData));
+    }, 200);
+
+    recorder.start();
+    await new Promise((resolve) => setTimeout(resolve, LISTEN_CHUNK_MS));
+    clearInterval(sampleIntervalId);
+
+    if (listeningGenerationRef.current !== generation) return;
+    const stopped = new Promise((resolve) => {
+      recorder.onstop = resolve;
+    });
+    recorder.stop();
+    await stopped;
+
+    if (listeningGenerationRef.current !== generation) return;
+
+    // Silent (or near-silent) chunk, or a manual recording started mid-
+    // chunk - discard without ever calling /transcribe, and try again
+    // right away.
+    if (peakRms < LISTEN_ENERGY_THRESHOLD || recordingRef.current) {
+      setTimeout(() => runListenChunk(generation), 0);
+      return;
+    }
+
+    try {
+      const blob = new Blob(chunkParts, { type: recorder.mimeType || 'audio/webm' });
+      const form = new FormData();
+      form.append('audio', blob, 'clip.webm');
+      const r = await fetch('/transcribe', { method: 'POST', body: form });
+      const data = await r.json().catch(() => ({}));
+      const text = r.ok ? data.text || '' : '';
+      if (listeningGenerationRef.current === generation && !recordingRef.current && matchesWakePhrase(text)) {
+        resetListenInactivityTimer(generation);
+        startRecording();
+      }
+    } catch {
+      // A transcription hiccup on a background chunk isn't worth
+      // surfacing as an error banner - the loop just tries the next one.
+    }
+
+    if (listeningGenerationRef.current === generation) {
+      setTimeout(() => runListenChunk(generation), 0);
+    }
+  }
+
+  // Arms/disarms hands-free listening: on, it claims a persistent
+  // microphone stream and a Web Audio analyser for energy-gating, starts
+  // the 10-minute inactivity window, and kicks off the chunk loop; off
+  // (via the toggle, the banner's "Turn off," inactivity expiry, or this
+  // component unmounting), it tears all of that down. Runs once per
+  // listeningMode flip, not per render.
+  useEffect(() => {
+    if (!listeningMode) return undefined;
+    listeningGenerationRef.current += 1;
+    const generation = listeningGenerationRef.current;
+    let stopped = false;
+    let audioCtx = null;
+
+    (async () => {
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch {
+        setError('Microphone access was blocked or unavailable.');
+        setListeningMode(false);
+        return;
+      }
+      if (stopped || listeningGenerationRef.current !== generation) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      listeningStreamRef.current = stream;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume().catch(() => {});
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      listeningAnalyserRef.current = analyser;
+      resetListenInactivityTimer(generation);
+      runListenChunk(generation);
+    })();
+
+    return () => {
+      stopped = true;
+      listeningGenerationRef.current += 1;
+      if (listeningInactivityTimerRef.current) {
+        clearTimeout(listeningInactivityTimerRef.current);
+        listeningInactivityTimerRef.current = null;
+      }
+      listeningStreamRef.current?.getTracks().forEach((t) => t.stop());
+      listeningStreamRef.current = null;
+      listeningAnalyserRef.current = null;
+      audioCtx?.close().catch(() => {});
+    };
+  }, [listeningMode]);
 
   // Reads a turn's answer aloud via /speak - a separate local Piper
   // process (core/speak.py), never a cloud voice API and never the
@@ -425,7 +702,33 @@ export default function App() {
           )
         )}
         <span className="firm-name">{theme?.firm_name || 'Case Intelligence'}</span>
+        {micSupported && (
+          <button
+            type="button"
+            className={`handsfree-toggle${listeningMode ? ' is-active' : ''}`}
+            onClick={() => setListeningMode((v) => !v)}
+            aria-pressed={listeningMode}
+            aria-label={
+              listeningMode
+                ? `Hands-free is on. Say "${WAKE_PHRASE}" to start a question. Click to turn off.`
+                : `Turn on hands-free. Once on, say "${WAKE_PHRASE}" to start a question.`
+            }
+            title={listeningMode ? 'Hands-free is on' : 'Hands-free'}
+          >
+            {listeningMode ? 'Hands-free is on' : 'Hands-free'}
+          </button>
+        )}
       </header>
+
+      {listeningMode && (
+        <div className="handsfree-banner" role="status">
+          <span className="listening-dot" aria-hidden="true" />
+          <span>Hands-free is on. Say &ldquo;{WAKE_PHRASE}&rdquo; to start a question.</span>
+          <button type="button" className="handsfree-off-button" onClick={() => setListeningMode(false)}>
+            Turn off
+          </button>
+        </div>
+      )}
 
       <main className="app-main">
         <form className="ask-form" onSubmit={handleAsk}>

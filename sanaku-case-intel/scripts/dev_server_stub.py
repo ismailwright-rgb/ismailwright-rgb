@@ -11,6 +11,7 @@ Usage: PYTHONPATH=. python3 scripts/dev_server_stub.py
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -39,7 +40,15 @@ def fake_generate(question, passages, model, **kwargs):
 
 app.dependency_overrides[get_embedder] = lambda: StubEmbedder()
 app.dependency_overrides[get_generator] = lambda: fake_generate
-app.dependency_overrides[get_transcriber] = lambda: StubTranscriber()
+# WHISPER_STUB_TEXT: dev/Playwright-only override so a manual verification
+# run can control what every /transcribe call returns (e.g. the wake
+# phrase itself, to prove a matching hands-free chunk starts real
+# recording) without editing this file - never read anywhere outside this
+# throwaway dev server.
+_stub_text = os.environ.get("WHISPER_STUB_TEXT")
+app.dependency_overrides[get_transcriber] = (
+    lambda: StubTranscriber(fixed_text=_stub_text) if _stub_text else StubTranscriber()
+)
 app.dependency_overrides[get_synthesizer] = lambda: StubSynthesizer()
 
 if __name__ == "__main__":
