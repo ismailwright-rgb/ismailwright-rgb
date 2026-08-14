@@ -75,15 +75,17 @@
     --primary-soft: color-mix(in srgb, var(--color-primary) 10%, white 90%);
   }
 
-  /* --- Visual-direction comparison (temporary - see App.jsx's LOOKS) ---
-     Two "advanced/futuristic" directions, both still deriving every
-     neutral from the firm's own 3 configured colors via color-mix() -
-     never a fixed hardcoded palette that would override a firm's actual
-     branding, the same rule the light palette above already follows.
-     Shared groundwork: the --paper/--canvas/--ink relationship inverts
-     (light surface -> dark surface, dark text -> light text). */
-  [data-look='b'],
-  [data-look='c'] {
+  /* --- Dark mode (opt-in via the header's "Dark mode" toggle, see
+     App.jsx) - the modern dark-professional direction that came out of
+     comparing two real mockups against actual case content: no glow, no
+     neon - crisp low-contrast hairlines, flat cards, advanced-feeling
+     through precision rather than ornament. Still derives every neutral
+     from the firm's own 3 configured colors via color-mix(), same as the
+     light palette above - never a fixed hardcoded palette that would
+     override a firm's actual branding. The --paper/--canvas/--ink
+     relationship inverts (light surface -> dark surface, dark text ->
+     light text). */
+  [data-look='dark'] {
     --ink: color-mix(in srgb, var(--color-accent) 92%, white 8%);
     --ink-soft: color-mix(in srgb, var(--ink) 60%, black 40%);
     --paper: color-mix(in srgb, var(--color-primary) 24%, black 76%);
@@ -92,30 +94,33 @@
     --line-strong: color-mix(in srgb, var(--color-accent) 28%, var(--paper) 72%);
     --primary-hover: color-mix(in srgb, var(--color-primary) 70%, white 30%);
     --primary-soft: color-mix(in srgb, var(--color-primary) 22%, var(--paper) 78%);
-  }
-
-  /* Direction B - Sci-fi HUD: hairlines carry real brand-hue saturation
-     (a "readout" line, not a neutral gray one) plus a soft ambient glow
-     on cards. Named risk, kept in check on purpose: dark + neon glow is
-     close to the generic "AI product" look when overdone, so glow stays
-     low-opacity and confined to card edges/focus/the listening
-     indicator - never applied to body text or every element. */
-  [data-look='b'] {
-    --line: color-mix(in srgb, var(--color-secondary) 38%, var(--paper) 62%);
-    --line-strong: color-mix(in srgb, var(--color-secondary) 58%, var(--paper) 42%);
-    --glow: color-mix(in srgb, var(--color-secondary) 55%, transparent);
-  }
-
-  /* Direction C - Modern dark professional (Linear/Vercel/Stripe
-     register): same dark-first inversion, no glow - crisp low-contrast
-     hairlines, flat cards. Advanced-feeling through precision, not
-     ornament. */
-  [data-look='c'] {
-    --line-strong: color-mix(in srgb, var(--color-accent) 20%, var(--paper) 80%);
+    /* The citation-attestation badges are deliberately fixed regardless
+       of firm branding (see the light palette's own comment on
+       --badge-bg/--badge-fg above) - but "independent of branding" isn't
+       "independent of light vs. dark," and the light palette's fixed
+       amber-on-cream badge is real low-contrast dark-on-dark once --paper
+       goes dark (the same class of bug as .source-toggle below, just via
+       a fixed token instead of a missing one). Lightened for dark mode
+       only - still the same amber hue, still fixed across every firm's
+       branding, still means the same thing. */
+    --badge-bg: rgba(240, 200, 120, 0.16);
+    --badge-fg: #f0c975;
   }
 }
 
 * { box-sizing: border-box; }
+
+/* Form controls don't reliably inherit an ancestor's `color` from the
+   browser's own UA stylesheet the way plain text elements do - real bug
+   caught from a live dark-mode screenshot: .source-toggle (a <button>)
+   never set its own `color`, so it rendered in the browser's default
+   near-black button text regardless of --ink, unreadable once --paper
+   went dark. Fixed at the root here (not just on .source-toggle) so no
+   future control can quietly reintroduce the same bug. */
+button, select, input, textarea {
+  color: inherit;
+  font-family: inherit;
+}
 
 body {
   margin: 0;
@@ -180,18 +185,35 @@ body {
   letter-spacing: 0.01em;
 }
 
-/* Comparison-only scaffolding (see App.jsx's LOOKS comment) - styled
-   quietly so it doesn't read as a real product control. Removed along
-   with whichever [data-look] direction loses once one is chosen. */
-.look-preview-switcher {
+/* Light/dark toggle - same pill styling as .handsfree-toggle below (a
+   deliberately identical shape: both are header-level mode switches),
+   kept as its own class since the two toggle independently. */
+.theme-toggle {
   flex-shrink: 0;
-  padding: 4px var(--space-2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.08);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radius-pill);
+  background: transparent;
   color: #fff;
-  font-size: var(--text-xs);
-  max-width: 160px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.theme-toggle:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.theme-toggle.is-active {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: #fff;
 }
 
 /* Header toggle - one of two required visual registers for hands-free
@@ -326,7 +348,7 @@ body {
   border-radius: var(--radius-md);
   font-size: var(--text-base);
   /* Explicit, not left to the browser's native input styling - matters
-     once --paper stops being near-white (see Direction B/C's dark-first
+     once --paper stops being near-white (see dark mode's dark-first
      tokens above), where an unset background would stay opaque white
      against a dark form. */
   background: var(--paper);
@@ -817,70 +839,27 @@ body {
 }
 
 /* --- Direction B / Direction C component overrides (temporary - see
-   App.jsx's LOOKS comment) --------------------------------------------- */
+   App.jsx's "Dark mode" toggle) -------------------------------------- */
 
-/* Direction B - soft ambient glow layered on top of the existing 1px
-   border (border stays; this adds a low-opacity brand-color halo behind
-   it), and citation metadata shifts to a monospace "data readout"
-   treatment while prose stays on the regular sans - the HUD aesthetic
-   applied selectively, not to everything. */
-[data-look='b'] .ask-form,
-[data-look='b'] .answer-panel,
-[data-look='b'] .source-panel,
-[data-look='b'] .empty-state,
-[data-look='b'] .source-card {
-  box-shadow: 0 0 28px -10px var(--glow);
-}
-
-[data-look='b'] .source-doc,
-[data-look='b'] .source-page,
-[data-look='b'] .print-case {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0;
-}
-
-[data-look='b'] .question-input:focus-visible,
-[data-look='b'] .ask-button:focus-visible {
-  box-shadow: 0 0 0 4px var(--glow);
-}
-
-/* Direction B's listening indicator: a pulsing ring/glow around the dot,
-   echoing a HUD "presence" cue rather than a plain blink. */
-[data-look='b'] .listening-dot {
-  animation: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  [data-look='b'] .listening-dot {
-    animation: ring-pulse 1.8s ease-out infinite;
-  }
-}
-
-@keyframes ring-pulse {
-  0% { box-shadow: 0 0 0 0 var(--glow); }
-  70% { box-shadow: 0 0 0 10px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
-}
-
-/* Direction C - no glow, ever; advanced-feeling through precision, not
-   ornament. A single confident sans throughout: the serif survives only
-   as a small distinguishing mark on the firm name (.firm-name keeps
-   --font-display untouched), everything else that currently uses the
-   display face drops to the body sans. */
-[data-look='c'] .answer-panel > p:first-of-type,
-[data-look='c'] .empty-state-heading,
-[data-look='c'] .turn-question {
+/* No glow, no neon - advanced-feeling through precision, not ornament.
+   A single confident sans throughout: the serif survives only as a small
+   distinguishing mark on the firm name (.firm-name keeps --font-display
+   untouched), everything else that currently uses the display face drops
+   to the body sans. */
+[data-look='dark'] .answer-panel > p:first-of-type,
+[data-look='dark'] .empty-state-heading,
+[data-look='dark'] .turn-question {
   font-family: var(--font-body);
 }
 
 /* Subtle, functional motion - a soft rise-and-fade when a new turn
    appears in the thread, not decorative. */
-[data-look='c'] .turn {
+[data-look='dark'] .turn {
   animation: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  [data-look='c'] .turn {
+  [data-look='dark'] .turn {
     animation: turn-in 260ms ease-out;
   }
 }
@@ -890,11 +869,11 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-[data-look='c'] .ask-button:hover:not(:disabled),
-[data-look='c'] .print-button:hover,
-[data-look='c'] .voice-button:hover:not(:disabled),
-[data-look='c'] .new-conversation-button:hover,
-[data-look='c'] .source-toggle:hover {
+[data-look='dark'] .ask-button:hover:not(:disabled),
+[data-look='dark'] .print-button:hover,
+[data-look='dark'] .voice-button:hover:not(:disabled),
+[data-look='dark'] .new-conversation-button:hover,
+[data-look='dark'] .source-toggle:hover {
   filter: brightness(1.12);
 }
 
@@ -920,7 +899,7 @@ body {
   .logo-monogram,
   .handsfree-toggle,
   .handsfree-banner,
-  .look-preview-switcher {
+  .theme-toggle {
     display: none;
   }
 
@@ -960,9 +939,6 @@ body {
     border: none;
     padding: 0;
     background: none;
-    /* Overrides Direction B's glow (see box-shadow rules above) - a
-       printed page is black-on-white regardless of which look was active
-       on screen. */
     box-shadow: none;
   }
 

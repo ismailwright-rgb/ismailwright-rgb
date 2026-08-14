@@ -279,24 +279,17 @@ function SourceCard({ source, index, forceOpen }) {
   );
 }
 
-// Temporary comparison scaffolding, not a shipped feature: two real
-// visual-direction mockups to compare side by side on real content before
-// picking one (per the design plan - "build both directions for real...
-// so the choice gets made from an actual side-by-side, not a text
-// description"). Once a direction is chosen, this switcher and whichever
-// [data-look] branch loses go away - see web/src/index.css's own
-// "Direction B" / "Direction C" comments for what each one changes.
-const LOOKS = [
-  { value: 'classic', label: 'Classic (current)' },
-  { value: 'b', label: 'Direction B — Sci-fi HUD' },
-  { value: 'c', label: 'Direction C — Modern dark' },
-];
-
 export default function App() {
   const [theme, setTheme] = useState(null);
-  const [look, setLook] = useState(() => {
-    if (typeof localStorage === 'undefined') return 'classic';
-    return localStorage.getItem('sanaku-look-preview') || 'classic';
+  // Light (default) or dark - a real, persisted preference, not the
+  // earlier three-way comparison scaffolding. Dark mode is the "modern
+  // dark professional" direction that came out of comparing two real
+  // mockups against actual case content (see web/src/index.css's
+  // [data-look='dark'] block) - restrained on purpose (no glow/neon),
+  // chosen as the safer register for something attorneys need to trust.
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem('sanaku-dark-mode') === 'true';
   });
   const [logoFailed, setLogoFailed] = useState(false);
   const [cases, setCases] = useState([]);
@@ -345,18 +338,18 @@ export default function App() {
   const micSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
   useEffect(() => {
-    if (look === 'classic') {
-      delete document.documentElement.dataset.look;
+    if (darkMode) {
+      document.documentElement.dataset.look = 'dark';
     } else {
-      document.documentElement.dataset.look = look;
+      delete document.documentElement.dataset.look;
     }
     try {
-      localStorage.setItem('sanaku-look-preview', look);
+      localStorage.setItem('sanaku-dark-mode', String(darkMode));
     } catch {
-      // Private-browsing/storage-disabled contexts - the preview just
+      // Private-browsing/storage-disabled contexts - the preference just
       // won't persist across a reload, not worth surfacing as an error.
     }
-  }, [look]);
+  }, [darkMode]);
 
   // Printing needs every source card expanded first (so the printed page
   // has the full passage text, not just collapsed toggles) - flip every
@@ -733,17 +726,16 @@ export default function App() {
           )
         )}
         <span className="firm-name">{theme?.firm_name || 'Case Intelligence'}</span>
-        <select
-          className="look-preview-switcher"
-          value={look}
-          onChange={(e) => setLook(e.target.value)}
-          aria-label="Preview visual direction (comparison only, not shipped)"
-          title="Preview visual direction - comparison only, not shipped"
+        <button
+          type="button"
+          className={`theme-toggle${darkMode ? ' is-active' : ''}`}
+          onClick={() => setDarkMode((v) => !v)}
+          aria-pressed={darkMode}
+          aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={darkMode ? 'Dark mode is on' : 'Dark mode'}
         >
-          {LOOKS.map((l) => (
-            <option key={l.value} value={l.value}>{l.label}</option>
-          ))}
-        </select>
+          {darkMode ? 'Dark mode is on' : 'Dark mode'}
+        </button>
         {micSupported && (
           <button
             type="button"

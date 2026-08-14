@@ -26,7 +26,8 @@ of any client-facing surface.
   verification below for how that was actually proven, not just claimed.
   Since extended past the initial build with a design-token/visual pass
   (derived neutrals via `color-mix()`, empty/loading states, a header
-  logo-monogram fallback), a print feature (now printing the whole
+  logo-monogram fallback, a persisted light/dark toggle — see "Light and
+  dark mode" below), a print feature (now printing the whole
   conversation, not just one answer), voice input/output (local Whisper
   + a separate local Piper process — see "Voice" below), hands-free
   wake-phrase listening ("Let's do a case review." — see "Hands-free
@@ -255,6 +256,49 @@ prove: real transcription accuracy against a real spoken legal question,
 and real Piper voice naturalness/latency — both need confirming on your
 Mac, the same as semantic embedding quality and live cited-answer output
 were in Phase 2/3.
+
+## Light and dark mode
+
+The header's "Dark mode" toggle (persisted per-browser via
+`localStorage`, defaulting to light) switches `web/src/index.css`'s
+`[data-look='dark']` token block — the "modern dark professional"
+direction that came out of comparing two real mockups (a sci-fi-HUD
+glow direction and this flatter, no-glow one) against the actual
+Maria Delgado case content. Chose the restrained one on purpose: no
+glow/neon, since that register reads as generic "AI product" when
+overdone and legal software needs to read as credible first. The
+other direction's code was removed once this one was chosen, not kept
+behind a flag.
+
+Same derivation rule as the light palette: every dark neutral is still
+computed from the firm's own 3 configured colors via `color-mix()`,
+never a fixed hardcoded palette — a firm's actual branding still comes
+through in dark mode exactly like it does in light.
+
+**Real bug this caught and fixed at the root**: `.source-toggle` (a
+`<button>`) never set its own `color`, so it silently rendered in the
+browser's default near-black button text instead of inheriting `--ink`
+— invisible in light mode by coincidence (default black text on a pale
+background looked fine), genuinely unreadable once `--paper` went dark.
+Caught from an actual rendered screenshot, not by inspecting the CSS.
+Fixed structurally, not just on that one selector: `button, select,
+input, textarea { color: inherit; font-family: inherit; }` near the top
+of `index.css`, so no future control can quietly reintroduce the same
+class of bug. The citation-attestation badges (`--badge-bg`/
+`--badge-fg`) had the same underlying problem via a *different* path —
+fixed regardless of firm branding (by design, so "Undated"/"Approximate
+date" mean the same thing across every firm's theme), but "independent
+of branding" isn't "independent of light vs. dark," and the light
+palette's fixed amber-on-cream badge is real low-contrast dark-on-dark
+once the background goes dark. Given its own dark-mode-only override
+inside `[data-look='dark']`, still the same amber hue, still
+brand-independent, just lightened enough to read.
+
+Printing is unaffected either way — `@media print` already forces
+`body { background:#fff; color:#000; }` and re-asserts `#000` on every
+text element it prints, regardless of which look was active on screen;
+verified directly (not assumed) by rendering print-media output with
+dark mode on and checking every computed color came back black-on-white.
 
 ## Hands-free listening mode — "Let's do a case review."
 
