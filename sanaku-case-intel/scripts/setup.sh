@@ -6,24 +6,29 @@
 # no Ollama at all) should still get a clean Python environment out of
 # this, not a wall of errors.
 #
-# Steps 3 (config validation), 5 (tesseract), and 6 (port 8001) exist
-# specifically because of real failures hit live on a real Mac, not
-# hypothetical ones: an invalid-but-present config/client.json crashed
-# every route that depends on it with an opaque 500 and no indication why
-# (core/config.py's load_config() now raises a clear message, and this
-# script surfaces the same check before the server is even started);
-# tesseract-ocr is a real system dependency for scanned-document ingestion
-# that's easy to forget to install since nothing in requirements.txt pulls
-# it in; and a stray unrelated process already listening on 8001 would
-# produce exactly the "nothing works, no clear reason" experience that an
-# earlier port collision on 8000 caused an entire debugging session over.
+# Steps 3 (config validation), 5 (tesseract), 6 (port 8001), and 7 (port
+# 5001) exist specifically because of real failures hit live on a real
+# Mac, not hypothetical ones: an invalid-but-present config/client.json
+# crashed every route that depends on it with an opaque 500 and no
+# indication why (core/config.py's load_config() now raises a clear
+# message, and this script surfaces the same check before the server is
+# even started); tesseract-ocr is a real system dependency for scanned-
+# document ingestion that's easy to forget to install since nothing in
+# requirements.txt pulls it in; a stray unrelated process already
+# listening on 8001 would produce exactly the "nothing works, no clear
+# reason" experience that an earlier port collision on 8000 caused an
+# entire debugging session over; and port 5000 (Piper's own default, if
+# voice is set up) is where macOS's built-in AirPlay Receiver listens by
+# default, silently returning 403 for anything that isn't a real AirPlay
+# request - which is exactly why core/speak.py's own default moved to
+# 5001 instead of fighting over 5000.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "==> [1/6] Installing Python dependencies..."
+echo "==> [1/7] Installing Python dependencies..."
 python3 -m pip install -r requirements.txt
 
-echo "==> [2/6] Checking for Ollama binary..."
+echo "==> [2/7] Checking for Ollama binary..."
 if ! command -v ollama >/dev/null 2>&1; then
   echo "    WARNING: 'ollama' not found on PATH. Install from https://ollama.com, then re-run this script."
   OLLAMA_PRESENT=0
@@ -31,7 +36,7 @@ else
   OLLAMA_PRESENT=1
 fi
 
-echo "==> [3/6] Validating config/client.json..."
+echo "==> [3/7] Validating config/client.json..."
 GEN_MODEL=""
 EMBED_MODEL=""
 if [ -f config/client.json ]; then
@@ -61,7 +66,7 @@ else
   echo "    NOTE: config/client.json not found yet — copy config/client.example.json and fill it in."
 fi
 
-echo "==> [4/6] Pulling configured models (skipped if Ollama or config is unavailable)..."
+echo "==> [4/7] Pulling configured models (skipped if Ollama or config is unavailable)..."
 if [ "$OLLAMA_PRESENT" = "1" ] && [ -n "$GEN_MODEL" ]; then
   ollama pull "$GEN_MODEL" || echo "    WARNING: could not pull $GEN_MODEL"
   ollama pull "$EMBED_MODEL" || echo "    WARNING: could not pull $EMBED_MODEL"
@@ -69,7 +74,7 @@ else
   echo "    skipped (no ollama binary and/or no valid config/client.json yet)"
 fi
 
-echo "==> [5/6] Checking for tesseract-ocr (needed to ingest scanned/image-only pages)..."
+echo "==> [5/7] Checking for tesseract-ocr (needed to ingest scanned/image-only pages)..."
 if ! command -v tesseract >/dev/null 2>&1; then
   echo "    WARNING: 'tesseract' not found on PATH. Scanned-document ingestion will fail until it's installed"
   echo "    (macOS: brew install tesseract). Digital/text-layer PDFs are unaffected."
@@ -77,12 +82,20 @@ else
   echo "    tesseract found."
 fi
 
-echo "==> [6/6] Checking port 8001 is free (this app's dev API server port)..."
+echo "==> [6/7] Checking port 8001 is free (this app's dev API server port)..."
 if command -v lsof >/dev/null 2>&1 && lsof -i :8001 >/dev/null 2>&1; then
   echo "    WARNING: something is already listening on port 8001 - this app's own server won't be able to"
   echo "    bind there. Run 'lsof -i :8001' to see what it is before starting uvicorn."
 else
   echo "    port 8001 is free."
+fi
+
+echo "==> [7/7] Checking port 5001 is free (Piper's port, if voice is set up)..."
+if command -v lsof >/dev/null 2>&1 && lsof -i :5001 >/dev/null 2>&1; then
+  echo "    WARNING: something is already listening on port 5001 - if that's meant to be your own already-"
+  echo "    running Piper process, this is fine; otherwise run 'lsof -i :5001' to see what it actually is."
+else
+  echo "    port 5001 is free."
 fi
 
 echo ""

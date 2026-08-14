@@ -316,9 +316,24 @@ started* before `/speak` will work — a third terminal, same shape as
 ```bash
 python3 -m piper.download_voices en_US-lessac-medium --data-dir ~/.local/share/sanaku-case-intel/piper-voices
 python3 -m piper.http_server --model en_US-lessac-medium \
-  --data-dir ~/.local/share/sanaku-case-intel/piper-voices --host 127.0.0.1 --port 5000 \
+  --data-dir ~/.local/share/sanaku-case-intel/piper-voices --host 127.0.0.1 --port 5001 \
   --sentence-silence 0.4
 ```
+
+**Port 5001, not Piper's own default of 5000** — real bug hit live:
+macOS's built-in AirPlay Receiver listens on port 5000 by default and
+silently intercepts anything sent there that isn't a real AirPlay
+request, answering with a plain `403 Forbidden` — not a connection
+failure, so it looks exactly like Piper is running and simply refusing
+the request, not like a different program answering instead. Same
+category of fix as this project's API server moving from port 8000 to
+8001 after the real `sydney-server` collision — rather than asking every
+Mac user to go disable a macOS system feature (or hope they don't have it
+on), this project just avoids the commonly-conflicting port entirely.
+`core/speak.py`'s `DEFAULT_PIPER_URL` already defaults to `5001`; only
+override `--port` here if you have your own reason to use a different
+one, and keep both in sync if you do (`PIPER_URL` env var on this app's
+side, `--port` on Piper's).
 
 `--sentence-silence` defaults to `0.0` in Piper's own server — literally
 zero silence between sentences unless set explicitly, which reads as one

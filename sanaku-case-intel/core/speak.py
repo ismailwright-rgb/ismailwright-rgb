@@ -17,7 +17,20 @@ Start the local voice service (its own terminal, same shape as
 `ollama serve`):
     python3 -m piper.download_voices en_US-lessac-medium --data-dir <dir>
     python3 -m piper.http_server --model en_US-lessac-medium \
-        --data-dir <dir> --host 127.0.0.1 --port 5000 --sentence-silence 0.4
+        --data-dir <dir> --host 127.0.0.1 --port 5001 --sentence-silence 0.4
+
+Port 5001, not Piper's own default of 5000 - real bug hit live: macOS's
+built-in AirPlay Receiver listens on port 5000 by default and intercepts
+anything sent there that isn't an actual AirPlay request, returning a
+plain 403 Forbidden - not a connection failure, so PiperSynthesizer's own
+ConnectError handling below never catches it; it looks exactly like
+Piper is running and simply refusing the request. Same category of fix as
+this project's API server moving from port 8000 to 8001 after a real
+port collision - rather than asking every Mac user to go disable a macOS
+system feature, or hoping their Mac doesn't have it enabled, this project
+just doesn't use the commonly-conflicting port at all. If 5001 collides
+on some other machine too, change both this default and every place that
+starts `piper.http_server` together.
 
 --sentence-silence defaults to 0.0 in Piper's own server - literally no
 pause between sentences unless set explicitly, which is what made an
@@ -41,10 +54,11 @@ import httpx
 
 # Not a client config field, same reasoning as DEFAULT_OLLAMA_URL in
 # core/embed.py: this is a machine/infrastructure choice, not a per-firm
-# branding value. Default port matches Piper's own http_server default so
-# a firm running the documented one-time-setup command doesn't need to
-# pass --port to line up with this.
-DEFAULT_PIPER_URL = os.environ.get("PIPER_URL", "http://127.0.0.1:5000")
+# branding value. Port 5001, not Piper's own http_server default of 5000
+# - see this module's own docstring for why (macOS AirPlay Receiver
+# silently intercepts port 5000, returning 403 for anything that isn't a
+# real AirPlay request - a real bug hit live, not a hypothetical one).
+DEFAULT_PIPER_URL = os.environ.get("PIPER_URL", "http://127.0.0.1:5001")
 
 
 class SynthesisError(RuntimeError):
@@ -80,9 +94,24 @@ class PiperSynthesizer:
             raise PiperUnavailableError(
                 f"Cannot reach the local voice service at {self._client.base_url}. "
                 f"Is it running? Try: python3 -m piper.http_server --model "
-                f"en_US-lessac-medium --data-dir <dir> --host 127.0.0.1 --port 5000 "
+                f"en_US-lessac-medium --data-dir <dir> --host 127.0.0.1 --port 5001 "
                 f"--sentence-silence 0.4"
             ) from e
         except httpx.HTTPStatusError as e:
-            raise SynthesisError(f"The local voice service returned an error: {e}") from e
+            # A 403 here on a Mac almost always means something other than
+            # Piper answered the request - most commonly macOS's own
+            # AirPlay Receiver, if it's running on the port this client is
+            # configured to use (see this module's docstring). Named
+            # explicitly rather than left as a bare status-code message,
+            # since "the server said no" reads as a Piper-side problem
+            # when it's actually a different program entirely answering.
+            hint = ""
+            if e.response.status_code == 403:
+                hint = (
+                    " A 403 here usually means something other than Piper is "
+                    "answering on this port - on a Mac, macOS's own AirPlay "
+                    "Receiver is the most common culprit if it's using this "
+                    "port. Try: lsof -i :<port> to see what's actually there."
+                )
+            raise SynthesisError(f"The local voice service returned an error: {e}.{hint}") from e
         return resp.content
