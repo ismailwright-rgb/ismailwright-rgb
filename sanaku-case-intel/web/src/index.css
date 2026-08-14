@@ -248,6 +248,51 @@ body {
   font-size: var(--text-sm);
 }
 
+/* Screen-only heading shown at the top of a printed answer - the question
+   itself otherwise only exists inside a hidden input's value, and would
+   be lost from the printed page entirely without this. */
+.print-only {
+  display: none;
+}
+
+.print-case,
+.print-question {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.answer-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-7);
+}
+
+.answer-toolbar + .answer-layout {
+  margin-top: var(--space-3);
+}
+
+.print-button {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.print-button:hover {
+  border-color: var(--color-primary);
+  background: var(--primary-soft);
+}
+
+.print-button:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
 /* Empty state - shown before any question has been asked. Describes only
    user-visible behavior (a sourced, cited answer) - no vendor name, no
    "AI"/retrieval/embeddings language, per the white-label guardrail. */
@@ -487,5 +532,89 @@ body {
   @keyframes shimmer {
     0% { background-position: 100% 50%; }
     100% { background-position: 0 50%; }
+  }
+}
+
+/* Print stylesheet - a sober, black-on-white court-ready document: the
+   ask-form, print button, and any chrome that's meaningless on paper
+   disappear; the printed page gets its own case/question header (see
+   .print-only above) since that context otherwise lives only in a
+   hidden input's value. Every source card prints fully expanded (driven
+   by App.jsx's printExpand state), not just whatever was open on screen. */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .ask-form,
+  .empty-state,
+  .error-banner,
+  .answer-toolbar,
+  .source-chevron,
+  .logo,
+  .logo-monogram {
+    display: none;
+  }
+
+  /* Keep the doc name/page/badges visible (they're the citation itself) -
+     only strip the button's interactive styling, since it's inert on
+     paper. */
+  .source-toggle {
+    background: none;
+    cursor: default;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .app-header {
+    background: none;
+    color: #000;
+    border-bottom: 2px solid #000;
+    padding: 0 0 var(--space-3);
+    margin-bottom: var(--space-5);
+  }
+
+  .print-only {
+    display: block;
+    margin-bottom: var(--space-5);
+  }
+
+  .answer-layout {
+    grid-template-columns: 1fr;
+    gap: var(--space-5);
+  }
+
+  .answer-panel,
+  .source-panel {
+    border: none;
+    padding: 0;
+    background: none;
+  }
+
+  .answer-panel > p:first-of-type {
+    color: #000;
+  }
+
+  .source-card {
+    border: 1px solid #999;
+    border-radius: 0;
+    break-inside: avoid;
+    margin-bottom: var(--space-3);
+  }
+
+  .source-num {
+    background: #000;
+  }
+
+  .source-meta,
+  .source-page,
+  .source-text {
+    color: #000;
+  }
+
+  .badge {
+    border: 1px solid #999;
+    background: none;
+    color: #000;
   }
 }

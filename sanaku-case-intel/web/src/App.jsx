@@ -56,8 +56,12 @@ function AnswerBody({ text }) {
   );
 }
 
-function SourceCard({ source, index }) {
+function SourceCard({ source, index, forceOpen }) {
   const [open, setOpen] = useState(false);
+  // forceOpen drives the print view: every source's full text needs to be
+  // on the page when printed, regardless of which cards the user happened
+  // to have expanded on screen.
+  const isOpen = open || forceOpen;
   const badges = [];
   if (source.human_entered) badges.push('Human-entered note');
   if (source.date_confidence === 'approximate') badges.push('Approximate date');
@@ -65,13 +69,13 @@ function SourceCard({ source, index }) {
 
   return (
     <li className="source-card">
-      <button className="source-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+      <button className="source-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={isOpen}>
         <span className="source-num">{index + 1}</span>
         <span className="source-meta">
           <span className="source-doc">{source.doc_name}</span>
           <span className="source-page">p.{source.page}</span>
         </span>
-        <span className="source-chevron">{open ? '−' : '+'}</span>
+        <span className="source-chevron">{isOpen ? '−' : '+'}</span>
       </button>
       {badges.length > 0 && (
         <div className="source-badges">
@@ -80,7 +84,7 @@ function SourceCard({ source, index }) {
           ))}
         </div>
       )}
-      {open && <p className="source-text">{source.text}</p>}
+      {isOpen && <p className="source-text">{source.text}</p>}
     </li>
   );
 }
@@ -94,6 +98,23 @@ export default function App() {
   const [answer, setAnswer] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [printExpand, setPrintExpand] = useState(false);
+
+  // Printing needs every source card expanded first (so the printed page
+  // has the full passage text, not just collapsed toggles) - flip every
+  // card open via printExpand, wait for that re-render, then invoke the
+  // browser's print dialog. 'afterprint' fires whether the user printed or
+  // cancelled, so it's the right place to collapse everything back.
+  useEffect(() => {
+    if (!printExpand) return undefined;
+    const raf = requestAnimationFrame(() => window.print());
+    const collapse = () => setPrintExpand(false);
+    window.addEventListener('afterprint', collapse);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('afterprint', collapse);
+    };
+  }, [printExpand]);
 
   useEffect(() => {
     fetch('/theme')
@@ -225,24 +246,40 @@ export default function App() {
         )}
 
         {!loading && answer && (
-          <div className="answer-layout">
-            <section className="answer-panel" aria-label="Answer">
-              <h2 className="answer-heading">Answer</h2>
-              <AnswerBody text={answer.answer} />
-            </section>
-            <aside className="source-panel" aria-label="Sources">
-              <h2 className="source-heading">Sources</h2>
-              {answer.sources.length === 0 ? (
-                <p className="no-sources">No matching passages found in this case.</p>
-              ) : (
-                <ul className="source-list">
-                  {answer.sources.map((s, i) => (
-                    <SourceCard key={`${s.doc_id}-${s.page}-${s.chunk_index}`} source={s} index={i} />
-                  ))}
-                </ul>
-              )}
-            </aside>
-          </div>
+          <>
+            <div className="print-only">
+              <p className="print-case">Case: {caseId}</p>
+              <p className="print-question">Question: {question}</p>
+            </div>
+            <div className="answer-toolbar">
+              <button type="button" className="print-button" onClick={() => setPrintExpand(true)}>
+                Print this answer
+              </button>
+            </div>
+            <div className="answer-layout">
+              <section className="answer-panel" aria-label="Answer">
+                <h2 className="answer-heading">Answer</h2>
+                <AnswerBody text={answer.answer} />
+              </section>
+              <aside className="source-panel" aria-label="Sources">
+                <h2 className="source-heading">Sources</h2>
+                {answer.sources.length === 0 ? (
+                  <p className="no-sources">No matching passages found in this case.</p>
+                ) : (
+                  <ul className="source-list">
+                    {answer.sources.map((s, i) => (
+                      <SourceCard
+                        key={`${s.doc_id}-${s.page}-${s.chunk_index}`}
+                        source={s}
+                        index={i}
+                        forceOpen={printExpand}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </aside>
+            </div>
+          </>
         )}
 
         {!loading && !answer && !error && (
