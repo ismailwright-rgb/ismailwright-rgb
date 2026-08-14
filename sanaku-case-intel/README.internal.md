@@ -26,10 +26,11 @@ of any client-facing surface.
   verification below for how that was actually proven, not just claimed.
   Since extended past the initial build with a design-token/visual pass
   (derived neutrals via `color-mix()`, empty/loading states, a header
-  logo-monogram fallback), a print feature (a formatted, court-ready
-  answer + citations document via the browser's print dialog), and voice
-  input/output (see "Voice" below) — all still Phase 4 surface, no new
-  config schema.
+  logo-monogram fallback), a print feature (now printing the whole
+  conversation, not just one answer), voice input/output (local Whisper
+  + a separate local Piper process — see "Voice" below), and multi-turn
+  conversation memory (see "Conversation memory" below) — all still
+  Phase 4 surface, no new config schema.
 
 **Stopped after Phase 4's core build**, per the master prompt's own build
 order — Phases 5, 6, 8, 9 (paralegal manual-entry, hardware licensing/
@@ -188,40 +189,101 @@ Two independent, deliberately different-shaped pieces, not one feature:
   built-in `SpeechRecognition` — on Chrome that typically round-trips
   audio through Google's servers, which would violate guardrail #1 the
   same way `tiktoken`'s network fetch would have.
-- **Speaking (text → voice)** is client-side only, via
-  `window.speechSynthesis`, filtered to `voice.localService === true`
-  before picking one — guarantees an on-device voice, no server round
-  trip, and needed zero new dependency.
+- **Speaking (text → voice)** runs via `core/speak.py`'s
+  `PiperSynthesizer`, exposed as `POST /speak`. Piper is genuinely local
+  (real neural TTS, a different tier than the default OS voice this
+  replaced — the browser's `speechSynthesis` sounded "choppy," per direct
+  feedback), but it's licensed GPL-3.0-or-later and this codebase is
+  proprietary. Rather than importing it in-process (the way
+  `faster-whisper` is imported into `WhisperTranscriber`), **Piper runs as
+  its own separate local process, called only over HTTP** — the exact
+  relationship this app already has with Ollama. That boundary was chosen
+  deliberately over the simpler in-process route after weighing the
+  licensing trade-off explicitly; it still needs real legal review before
+  this ships to any paying client, not something this codebase asserts on
+  its own authority.
 
-**Optional dependency, not installed by default:**
+**Optional dependencies, not installed by default:**
 
 ```bash
-pip install -r requirements-voice.txt   # faster-whisper
+pip install -r requirements-voice.txt   # faster-whisper + piper-tts
 ```
 
-Requires **macOS 14 (Sonoma) or newer** — `onnxruntime` (a faster-whisper
-dependency) only ships wheels for `macosx_14_0_arm64` as of this writing;
-confirmed directly against PyPI, not assumed. `python-multipart` (needed
-for `/transcribe`'s multipart upload) is in the *base* `requirements.txt`
-instead — FastAPI inspects `UploadFile` parameters at route-registration
-time, not just per-request, so the app won't even start without it,
-regardless of whether voice is actually used.
+`faster-whisper` requires **macOS 14 (Sonoma) or newer** — `onnxruntime`
+(its own dependency) only ships wheels for `macosx_14_0_arm64` as of this
+writing; confirmed directly against PyPI, not assumed. `python-multipart`
+(needed for `/transcribe`'s multipart upload) is in the *base*
+`requirements.txt` instead — FastAPI inspects `UploadFile` parameters at
+route-registration time, not just per-request, so the app won't even
+start without it, regardless of whether voice is actually used.
 
-The whisper model itself downloads once from Hugging Face on first real
+The whisper model downloads once from Hugging Face on first real
 `/transcribe` call (same one-time-pull shape as `ollama pull` for the
-gen/embed models) — needs internet access on setup, not at every use.
+gen/embed models). Piper needs its voice model pulled *and its own server
+started* before `/speak` will work — a third terminal, same shape as
+`ollama serve`:
+
+```bash
+python3 -m piper.download_voices en_US-lessac-medium --data-dir ~/.local/share/sanaku-case-intel/piper-voices
+python3 -m piper.http_server --model en_US-lessac-medium \
+  --data-dir ~/.local/share/sanaku-case-intel/piper-voices --host 127.0.0.1 --port 5000
+```
 
 **What was actually verified in this sandbox** (no microphone, no audio
 hardware here, same constraint that applied to live Ollama generation):
-`scripts/dev_server_stub.py` also overrides `get_transcriber` with
-`tests/stub_transcriber.py`, so the whole request/response contract and
-the UI's mic → upload → fill-question-box flow were proven end-to-end
-with Playwright, using Chromium's fake-media-device flags to simulate a
-microphone. What that *cannot* prove: real transcription accuracy against
-a real spoken legal question, and that the on-device voice is actually
-audible and actually local on your Mac — both need to be confirmed for
-real, the same as semantic embedding quality and live cited-answer output
+`scripts/dev_server_stub.py` overrides `get_transcriber`/`get_synthesizer`
+with `tests/stub_transcriber.py`/`tests/stub_synthesizer.py` (the latter
+returning a genuinely valid, playable silent WAV — not just WAV-shaped
+bytes), so the whole request/response contract and the UI's mic → upload
+→ fill-question-box and Listen → fetch → `<audio>` play/stop/auto-end
+flows were proven end-to-end with Playwright, using Chromium's
+fake-media-device flags to simulate a microphone. What that *cannot*
+prove: real transcription accuracy against a real spoken legal question,
+and real Piper voice naturalness/latency — both need confirming on your
+Mac, the same as semantic embedding quality and live cited-answer output
 were in Phase 2/3.
+
+## Conversation memory — follow-up questions in the same session
+
+`POST /ask` accepts an optional `history: [{question, answer}, ...]`
+array. The web UI keeps this client-side (`web/src/App.jsx`'s `turns`
+state) and sends the whole prior thread with each new question — no new
+backend session store. This API has no session/identity concept anywhere
+else (single browser tab, single attorney, same machine), and a new
+server-side store would raise a real question a tab-scoped design avoids
+by construction: what expires attorney-client-privileged history sitting
+in a database. Closing the tab is the retention policy.
+
+Two places this had to stay honest about the citation contract, not just
+convenient:
+- `core/retrieve.py`'s `build_retrieval_query` folds recent prior
+  *questions* (never answers) into the retrieval query text, so a bare
+  follow-up like "what about her prior injuries?" has a real chance of
+  surfacing the right passages — a cheap heuristic, not an LLM rewrite
+  call, to avoid a third local-model round trip per question. Isolated in
+  its own function specifically so it's swappable later if real follow-up
+  questions on your Mac show it missing too often (a live-embeddings
+  question no offline test can answer).
+- `prompts/answer_contract.txt`'s new **Rule 5** states, at the same
+  "must never be violated" permanence as rules 1-4, that conversation
+  history is context for understanding the question only — never a
+  citable source. `core/generate.py`'s `build_user_prompt` restates this
+  inline right where the history block appears, the same
+  belt-and-suspenders pattern already used for "Passage N is a locator,
+  not a citation." Whether the model actually obeys this in practice is a
+  live-model question — the same category the citation-format bug turned
+  out to be real, not something the prompt text alone proves.
+
+The web UI's answer panel is now a growing thread (`.conversation-thread`
+in `web/src/App.jsx`), not a single replaced answer — each turn gets its
+own Listen button; Print became "Print this conversation," printing the
+whole thread (a printed follow-up without the question that gave "her"
+its meaning would reproduce, on paper, the exact ambiguity this feature
+exists to resolve on screen). "Start a new conversation" clears the
+thread on purpose — without it, every later question would keep dragging
+the whole prior thread into retrieval and prompt history forever.
+`cli.py` stays single-turn — it's a one-shot process invocation with
+nowhere for conversation state to live between runs.
 
 ## Repo layout note
 

@@ -316,32 +316,61 @@ body {
   font-size: var(--text-sm);
 }
 
-/* Screen-only heading shown at the top of a printed answer - the question
-   itself otherwise only exists inside a hidden input's value, and would
-   be lost from the printed page entirely without this. */
+/* Screen-only heading shown at the top of a printed conversation - the
+   case id itself otherwise only exists inside the (hidden-in-print)
+   case-select control. Each turn's own question is *not* print-only -
+   see .turn-question below - since a printed follow-up without the
+   question that gave "her"/"that" its meaning reproduces on paper the
+   exact ambiguity this feature exists to resolve on screen. */
 .print-only {
   display: none;
 }
 
-.print-case,
-.print-question {
+.print-case {
   margin: 0 0 var(--space-1);
   font-size: var(--text-sm);
+}
+
+.thread-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-7);
+}
+
+.conversation-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-top: var(--space-7);
+}
+
+.thread-toolbar + .conversation-thread {
+  margin-top: var(--space-5);
+}
+
+.turn-question {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--ink);
 }
 
 .answer-toolbar {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
-  margin-top: var(--space-7);
-}
-
-.answer-toolbar + .answer-layout {
-  margin-top: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 .print-button,
-.voice-button {
+.voice-button,
+.new-conversation-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
@@ -354,13 +383,15 @@ body {
 }
 
 .print-button:hover,
-.voice-button:hover {
+.voice-button:hover:not(:disabled),
+.new-conversation-button:hover {
   border-color: var(--color-primary);
   background: var(--primary-soft);
 }
 
 .print-button:focus-visible,
-.voice-button:focus-visible {
+.voice-button:focus-visible,
+.new-conversation-button:focus-visible {
   outline: 2px solid var(--color-secondary);
   outline-offset: 2px;
 }
@@ -369,6 +400,27 @@ body {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: #fff;
+}
+
+.voice-button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.voice-button.is-synthesizing::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--color-primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .voice-button.is-synthesizing::before {
+    animation: spin 0.6s linear infinite;
+  }
 }
 
 /* Empty state - shown before any question has been asked. Describes only
@@ -628,11 +680,16 @@ body {
   .ask-form,
   .empty-state,
   .error-banner,
+  .thread-toolbar,
   .answer-toolbar,
   .source-chevron,
   .logo,
   .logo-monogram {
     display: none;
+  }
+
+  .turn-question {
+    color: #000;
   }
 
   /* Keep the doc name/page/badges visible (they're the citation itself) -

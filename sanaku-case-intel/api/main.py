@@ -11,7 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -21,7 +21,8 @@ from core.config import ClientConfig, load_config
 from core.embed import DEFAULT_OLLAMA_URL, EmbeddingFunction, OllamaEmbedder, OllamaError
 from core.generate import AnswerResult, generate_answer
 from core.ingest import extract_document
-from core.retrieve import retrieve_passages
+from core.retrieve import ConversationTurn, build_retrieval_query, retrieve_passages
+from core.speak import PiperSynthesizer, SynthesisError, Synthesizer
 from core.store import CaseStore
 from core.transcribe import Transcriber, TranscriptionError, WhisperTranscriber
 
@@ -76,6 +77,14 @@ def get_transcriber() -> Transcriber:
     return WhisperTranscriber()
 
 
+def get_synthesizer() -> Synthesizer:
+    """Returns the real Piper-backed synthesizer by default - talks to a
+    separate local Piper process over HTTP, never imports it (see
+    core/speak.py's docstring for why). Tests override this dependency
+    with tests/stub_synthesizer.py's fake via app.dependency_overrides."""
+    return PiperSynthesizer()
+
+
 # ---- shared orchestration (also used directly by cli.py, no HTTP needed) --
 
 def ingest_case_documents(
@@ -114,9 +123,15 @@ def ask_case_question(
     embedder: EmbeddingFunction,
     generator,
     top_k: int = 8,
+    history: list[ConversationTurn] | None = None,
 ) -> AnswerResult:
-    passages = retrieve_passages(case_id, question, embedder, config.data_root, top_k=top_k)
-    return generator(question, passages, model=config.gen_model)
+    # The augmented query is retrieval-only plumbing - generator always
+    # gets the real, original question, never the augmented one, so a
+    # follow-up's retrieval-query-folding can never leak into what the
+    # model is told it's being asked.
+    retrieval_query = build_retrieval_query(question, history)
+    passages = retrieve_passages(case_id, retrieval_query, embedder, config.data_root, top_k=top_k)
+    return generator(question, passages, model=config.gen_model, history=history)
 
 
 # ---- routes -------------------------------------------------------------
@@ -176,10 +191,16 @@ class IngestRequest(BaseModel):
     doc_paths: list[str] | None = None  # if None, ingest everything under data/cases/<case_id>/documents/
 
 
+class ConversationTurnIn(BaseModel):
+    question: str
+    answer: str
+
+
 class AskRequest(BaseModel):
     case_id: str
     question: str
     top_k: int = 8
+    history: list[ConversationTurnIn] = []
 
 
 @app.post("/ingest")
@@ -204,8 +225,11 @@ def ask(
     embedder: EmbeddingFunction = Depends(get_embedder),
     generator=Depends(get_generator),
 ):
+    history = [ConversationTurn(question=t.question, answer=t.answer) for t in req.history]
     try:
-        result = ask_case_question(req.case_id, req.question, config, embedder, generator, top_k=req.top_k)
+        result = ask_case_question(
+            req.case_id, req.question, config, embedder, generator, top_k=req.top_k, history=history
+        )
     except OllamaError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     return {"answer": result.answer, "sources": [asdict(s) for s in result.sources]}
@@ -226,3 +250,23 @@ async def transcribe(
     except TranscriptionError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     return {"text": text}
+
+
+class SpeakRequest(BaseModel):
+    text: str
+
+
+@app.post("/speak")
+def speak(
+    req: SpeakRequest,
+    synthesizer: Synthesizer = Depends(get_synthesizer),
+):
+    """Text-to-speech for the web UI's "Listen to this answer" button -
+    talks to a separate local Piper process over HTTP (core/speak.py),
+    never a cloud API and never imported into this process. Returns raw
+    WAV bytes for the browser to play through an <audio> element."""
+    try:
+        audio_bytes = synthesizer.synthesize(req.text)
+    except SynthesisError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return Response(content=audio_bytes, media_type="audio/wav")

@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 
 from core.embed import DEFAULT_OLLAMA_URL, OllamaError, OllamaUnavailableError
-from core.retrieve import RetrievedChunk
+from core.retrieve import ConversationTurn, RetrievedChunk
 
 CONTRACT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "answer_contract.txt"
 
@@ -33,8 +33,30 @@ class AnswerResult:
         return {"answer": self.answer, "sources": [asdict(s) for s in self.sources]}
 
 
-def build_user_prompt(question: str, passages: list[RetrievedChunk]) -> str:
-    lines = [f"QUESTION: {question}", "", "PASSAGES:"]
+def build_user_prompt(
+    question: str,
+    passages: list[RetrievedChunk],
+    history: list[ConversationTurn] | None = None,
+) -> str:
+    lines = []
+    if history:
+        # Only emitted when history is non-empty, so a single-turn request
+        # produces byte-identical output to before this existed - see
+        # tests/test_generate_prompt.py's regression test for that. The
+        # "per Rule 5... Not a source" label cross-references
+        # prompts/answer_contract.txt's rule 5 right where the history
+        # actually appears - the same belt-and-suspenders shape already
+        # used below for "Passage N is a locator, not a citation".
+        lines.append(
+            "CONVERSATION HISTORY (earlier turns in this session - context "
+            "only, per Rule 5. Not a source: every claim below must still "
+            "be cited to a PASSAGE, never to this history):"
+        )
+        for turn in history:
+            lines.append(f"Q: {turn.question}")
+            lines.append(f"A: {turn.answer}")
+        lines.append("")
+    lines += [f"QUESTION: {question}", "", "PASSAGES:"]
     if not passages:
         lines.append("(no passages retrieved — this case may not be ingested yet)")
         return "\n".join(lines)
@@ -68,10 +90,11 @@ def generate_answer(
     base_url: str = DEFAULT_OLLAMA_URL,
     timeout: float = 180.0,
     client: httpx.Client | None = None,
+    history: list[ConversationTurn] | None = None,
 ) -> AnswerResult:
     http = client or httpx.Client(base_url=base_url, timeout=timeout)
     contract = CONTRACT_PATH.read_text()
-    user_prompt = build_user_prompt(question, passages)
+    user_prompt = build_user_prompt(question, passages, history=history)
 
     try:
         resp = http.post(

@@ -50,6 +50,13 @@ function StopIcon() {
   );
 }
 
+/** Citation tokens like [doc.pdf, p.3] are fine to read on screen, tedious
+ * to hear spoken aloud on every sentence - strip them from what's sent to
+ * /speak; they stay fully visible in the answer panel regardless. */
+function stripCitationsForSpeech(text) {
+  return text.replace(/\[[^\]]+\]/g, '').replace(/[ \t]{2,}/g, ' ');
+}
+
 /** Very small formatter for the answer text: blocks separated by a blank
  * line become paragraphs, or a bulleted list if every line in the block
  * starts with "* " or "- " - matches the shape the answer contract asks
@@ -117,18 +124,26 @@ export default function App() {
   const [cases, setCases] = useState([]);
   const [caseId, setCaseId] = useState('');
   const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState(null);
+  // A conversation thread, not a single replaced answer: each entry is
+  // {id, question, data: {answer, sources}}. Sent back to /ask as
+  // {question, answer} pairs so follow-ups ("what about her prior
+  // injuries?") resolve context from earlier in the session - see
+  // core/retrieve.py's build_retrieval_query and the answer contract's
+  // Rule 5 for how that stays honest about citations.
+  const [turns, setTurns] = useState([]);
+  const [pendingQuestion, setPendingQuestion] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [printExpand, setPrintExpand] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
+  const [speakingId, setSpeakingId] = useState(null);
+  const [synthesizingId, setSynthesizingId] = useState(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const audioRef = useRef(null);
 
   const micSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
-  const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
   // Printing needs every source card expanded first (so the printed page
   // has the full passage text, not just collapsed toggles) - flip every
@@ -166,13 +181,6 @@ export default function App() {
         if (list.length === 1) setCaseId(list[0]);
       })
       .catch(() => {});
-
-    // Some browsers return an empty voice list until this fires once -
-    // warm the cache early so speakAnswer() has real voices to filter by
-    // the first time someone clicks "Listen to this answer".
-    if (speechSupported) {
-      window.speechSynthesis.getVoices();
-    }
   }, []);
 
   const canAsk = useMemo(() => caseId.trim() && question.trim() && !loading, [caseId, question, loading]);
@@ -180,27 +188,42 @@ export default function App() {
   async function handleAsk(e) {
     e.preventDefault();
     if (!canAsk) return;
-    if (speechSupported) {
-      window.speechSynthesis.cancel();
-      setSpeaking(false);
-    }
+    audioRef.current?.pause();
+    setSpeakingId(null);
+    const askedQuestion = question.trim();
+    const historyPayload = turns.map((t) => ({ question: t.question, answer: t.data.answer }));
     setLoading(true);
+    setPendingQuestion(askedQuestion);
     setError(null);
-    setAnswer(null);
     try {
       const r = await fetch('/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ case_id: caseId.trim(), question: question.trim() }),
+        body: JSON.stringify({ case_id: caseId.trim(), question: askedQuestion, history: historyPayload }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.detail || 'Something went wrong.');
-      setAnswer(data);
+      setTurns((prev) => [...prev, { id: crypto.randomUUID(), question: askedQuestion, data }]);
+      setQuestion('');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setPendingQuestion(null);
     }
+  }
+
+  // Ends the current line of questioning on purpose - without this,
+  // every later question keeps dragging the whole prior thread into
+  // retrieval-query-folding and prompt history forever, which is wrong
+  // the moment someone genuinely moves to an unrelated question.
+  function handleNewConversation() {
+    audioRef.current?.pause();
+    setSpeakingId(null);
+    setSynthesizingId(null);
+    setTurns([]);
+    setQuestion('');
+    setError(null);
   }
 
   // Click to start recording, click again to stop - transcription runs
@@ -253,37 +276,51 @@ export default function App() {
     setRecording(true);
   }
 
-  // Reads the answer aloud using an on-device voice only (localService
-  // === true) - never a network voice - so this stays consistent with the
-  // "nothing leaves the building" guarantee even though speechSynthesis
-  // itself isn't something this project controls the internals of.
-  function speakAnswer() {
-    if (!speechSupported || !answer) return;
-    if (speaking) {
-      window.speechSynthesis.cancel();
-      setSpeaking(false);
+  // Reads a turn's answer aloud via /speak - a separate local Piper
+  // process (core/speak.py), never a cloud voice API and never the
+  // browser's own speechSynthesis (whose default OS voices are what
+  // prompted this in the first place). Per-turn: audioRef holds at most
+  // one playing clip, mirroring the old single-utterance behavior.
+  async function handleListenClick(turn) {
+    if (speakingId === turn.id) {
+      audioRef.current?.pause();
+      setSpeakingId(null);
       return;
     }
-    // Citation tokens like [doc.pdf, p.3] are fine to read on screen,
-    // tedious to hear spoken aloud on every sentence - strip them from
-    // what's spoken; they stay fully visible in the answer panel.
-    const spokenText = answer.answer.replace(/\[[^\]]+\]/g, '').replace(/[ \t]{2,}/g, ' ');
-    const utterance = new SpeechSynthesisUtterance(spokenText);
+    audioRef.current?.pause();
+    setSpeakingId(null);
+    setSynthesizingId(turn.id);
+    setError(null);
     try {
-      const localVoices = window.speechSynthesis.getVoices().filter((v) => v.localService);
-      if (localVoices.length > 0) {
-        utterance.voice = localVoices.find((v) => v.lang?.startsWith('en')) || localVoices[0];
+      const r = await fetch('/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: stripCitationsForSpeech(turn.data.answer) }),
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.detail || 'Could not read this answer aloud.');
       }
-    } catch {
-      // Picking a preferred voice is a nicety, not a requirement - if
-      // anything about voice selection fails, fall through and let
-      // speechSynthesis use its own default rather than not speaking at
-      // all.
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        setSpeakingId(null);
+        URL.revokeObjectURL(url);
+      };
+      audio.onerror = () => {
+        setSpeakingId(null);
+        URL.revokeObjectURL(url);
+      };
+      setSynthesizingId(null);
+      setSpeakingId(turn.id);
+      await audio.play();
+    } catch (err) {
+      setError(err.message);
+      setSynthesizingId(null);
+      setSpeakingId(null);
     }
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    setSpeaking(true);
-    window.speechSynthesis.speak(utterance);
   }
 
   return (
@@ -378,69 +415,90 @@ export default function App() {
           {loading ? 'Searching case documents…' : ''}
         </span>
 
-        {loading && (
-          <div className="answer-layout" aria-busy="true">
-            <section className="answer-panel skeleton-panel" aria-label="Preparing your answer">
-              <div className="skeleton skeleton-line skeleton-line--lead" />
-              <div className="skeleton skeleton-line" />
-              <div className="skeleton skeleton-line" />
-              <div className="skeleton skeleton-line skeleton-line--short" />
-            </section>
-            <aside className="source-panel skeleton-panel" aria-label="Preparing sources">
-              <div className="skeleton skeleton-chip" />
-              <div className="skeleton skeleton-chip" />
-              <div className="skeleton skeleton-chip" />
-            </aside>
+        {turns.length > 0 && (
+          <div className="thread-toolbar">
+            <button type="button" className="new-conversation-button" onClick={handleNewConversation}>
+              Start a new conversation
+            </button>
+            <button type="button" className="print-button" onClick={() => setPrintExpand(true)}>
+              Print this conversation
+            </button>
           </div>
         )}
 
-        {!loading && answer && (
-          <>
+        {(turns.length > 0 || loading) && (
+          <div className="conversation-thread">
             <div className="print-only">
               <p className="print-case">Case: {caseId}</p>
-              <p className="print-question">Question: {question}</p>
             </div>
-            <div className="answer-toolbar">
-              {speechSupported && (
-                <button
-                  type="button"
-                  className={`voice-button${speaking ? ' is-active' : ''}`}
-                  onClick={speakAnswer}
-                >
-                  {speaking ? 'Stop' : 'Listen to this answer'}
-                </button>
-              )}
-              <button type="button" className="print-button" onClick={() => setPrintExpand(true)}>
-                Print this answer
-              </button>
-            </div>
-            <div className="answer-layout">
-              <section className="answer-panel" aria-label="Answer">
-                <h2 className="answer-heading">Answer</h2>
-                <AnswerBody text={answer.answer} />
-              </section>
-              <aside className="source-panel" aria-label="Sources">
-                <h2 className="source-heading">Sources</h2>
-                {answer.sources.length === 0 ? (
-                  <p className="no-sources">No matching passages found in this case.</p>
-                ) : (
-                  <ul className="source-list">
-                    {answer.sources.map((s, i) => (
-                      <SourceCard
-                        key={`${s.doc_id}-${s.page}-${s.chunk_index}`}
-                        source={s}
-                        index={i}
-                        forceOpen={printExpand}
-                      />
-                    ))}
-                  </ul>
-                )}
-              </aside>
-            </div>
-          </>
+
+            {turns.map((turn) => (
+              <article className="turn" key={turn.id}>
+                <p className="turn-question">{turn.question}</p>
+                <div className="answer-toolbar">
+                  <button
+                    type="button"
+                    className={`voice-button${speakingId === turn.id ? ' is-active' : ''}${
+                      synthesizingId === turn.id ? ' is-synthesizing' : ''
+                    }`}
+                    onClick={() => handleListenClick(turn)}
+                    disabled={synthesizingId === turn.id}
+                  >
+                    {synthesizingId === turn.id
+                      ? 'Synthesizing…'
+                      : speakingId === turn.id
+                        ? 'Stop'
+                        : 'Listen to this answer'}
+                  </button>
+                </div>
+                <div className="answer-layout">
+                  <section className="answer-panel" aria-label="Answer">
+                    <h2 className="answer-heading">Answer</h2>
+                    <AnswerBody text={turn.data.answer} />
+                  </section>
+                  <aside className="source-panel" aria-label="Sources">
+                    <h2 className="source-heading">Sources</h2>
+                    {turn.data.sources.length === 0 ? (
+                      <p className="no-sources">No matching passages found in this case.</p>
+                    ) : (
+                      <ul className="source-list">
+                        {turn.data.sources.map((s, i) => (
+                          <SourceCard
+                            key={`${s.doc_id}-${s.page}-${s.chunk_index}`}
+                            source={s}
+                            index={i}
+                            forceOpen={printExpand}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </aside>
+                </div>
+              </article>
+            ))}
+
+            {loading && (
+              <article className="turn" aria-busy="true">
+                {pendingQuestion && <p className="turn-question">{pendingQuestion}</p>}
+                <div className="answer-layout">
+                  <section className="answer-panel skeleton-panel" aria-label="Preparing your answer">
+                    <div className="skeleton skeleton-line skeleton-line--lead" />
+                    <div className="skeleton skeleton-line" />
+                    <div className="skeleton skeleton-line" />
+                    <div className="skeleton skeleton-line skeleton-line--short" />
+                  </section>
+                  <aside className="source-panel skeleton-panel" aria-label="Preparing sources">
+                    <div className="skeleton skeleton-chip" />
+                    <div className="skeleton skeleton-chip" />
+                    <div className="skeleton skeleton-chip" />
+                  </aside>
+                </div>
+              </article>
+            )}
+          </div>
         )}
 
-        {!loading && !answer && !error && (
+        {!loading && turns.length === 0 && !error && (
           <div className="empty-state">
             <h2 className="empty-state-heading">Ready when you are.</h2>
             <p className="empty-state-body">

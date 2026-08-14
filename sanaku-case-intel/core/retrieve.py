@@ -25,6 +25,47 @@ class RetrievedChunk:
     distance: float
 
 
+@dataclass
+class ConversationTurn:
+    """One prior question/answer pair from the same browser-tab session.
+    Defined here (not core/generate.py, which is where it's mostly used)
+    specifically so core/generate.py can import it from here the same way
+    it already imports RetrievedChunk - core.generate depends on
+    core.retrieve, never the reverse, and this keeps that direction
+    intact instead of introducing a circular import."""
+
+    question: str
+    answer: str
+
+
+def build_retrieval_query(
+    question: str,
+    history: list[ConversationTurn] | None = None,
+    max_prior_turns: int = 2,
+) -> str:
+    """Folds recent prior *questions* (never answers - those are already
+    citation-laden and would skew the embedding toward whatever was
+    already retrieved last turn, not toward what's actually being asked
+    now) into the retrieval query text, so a short elliptical follow-up
+    like "what about her prior injuries?" has a real chance of surfacing
+    the right passages on its own.
+
+    Deliberately a cheap heuristic (string concatenation), not an LLM
+    query-rewrite call - this app already pays embed + generate latency
+    on local CPU/GPU with no cloud elasticity to absorb a third local-
+    model round trip per question. Isolated in its own function
+    specifically so it can be swapped for an LLM-condensation
+    implementation later without touching retrieve_passages' or
+    ask_case_question's signatures, if real follow-up questions turn out
+    to need it - that's a live-embeddings question no offline test can
+    settle, see README.internal.md.
+    """
+    if not history:
+        return question
+    prior_questions = " ".join(t.question for t in history[-max_prior_turns:])
+    return f"{prior_questions} {question}"
+
+
 def retrieve_passages(
     case_id: str,
     question: str,

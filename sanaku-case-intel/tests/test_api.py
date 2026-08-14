@@ -3,10 +3,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from api.main import app, get_config, get_embedder, get_generator, get_transcriber
+from api.main import app, get_config, get_embedder, get_generator, get_synthesizer, get_transcriber
 from core.config import ClientConfig, Colors
 from core.generate import AnswerResult
 from tests.stub_embedder import StubEmbedder
+from tests.stub_synthesizer import StubSynthesizer
 from tests.stub_transcriber import StubTranscriber
 
 
@@ -38,6 +39,7 @@ def client(tmp_data_root):
     app.dependency_overrides[get_embedder] = lambda: StubEmbedder()
     app.dependency_overrides[get_generator] = lambda: _fake_generate
     app.dependency_overrides[get_transcriber] = lambda: StubTranscriber()
+    app.dependency_overrides[get_synthesizer] = lambda: StubSynthesizer()
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -97,3 +99,36 @@ def test_transcribe_returns_text_from_uploaded_audio(client):
     assert r.status_code == 200
     body = r.json()
     assert body["text"] == "What did the treating physician say about causation?"
+
+
+def test_speak_returns_audio_bytes(client):
+    r = client.post("/speak", json={"text": "Dr. Chen's opinion on causation."})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("audio/")
+    assert r.content == StubSynthesizer().fixed_audio
+
+
+def test_ask_accepts_conversation_history(client, sample_case_fixtures):
+    client.post(
+        "/ingest",
+        json={
+            "case_id": "maria_delgado",
+            "doc_paths": [str(sample_case_fixtures["medical_record"])],
+        },
+    )
+    r = client.post(
+        "/ask",
+        json={
+            "case_id": "maria_delgado",
+            "question": "What about her prior injuries?",
+            "history": [
+                {
+                    "question": "What did the treating physician say about causation?",
+                    "answer": "Dr. Chen concluded causation. [medical_record_dr_chen.pdf, p.3]",
+                }
+            ],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "answer" in body and "sources" in body

@@ -1,9 +1,25 @@
-# Optional voice-input dependencies — not installed by scripts/setup.sh by
+# Optional voice dependencies — not installed by scripts/setup.sh by
 # default, since not every install needs voice. Install with:
 #   pip install -r requirements-voice.txt
+#
+# faster-whisper (speech -> text, listening):
 # Requires macOS 14 (Sonoma) or newer — onnxruntime (a faster-whisper
 # dependency) only ships wheels for macosx_14_0_arm64 as of this writing.
 # Verified against PyPI directly before pinning, not guessed: ctranslate2
 # 4.8.1 (faster-whisper's own dependency) ships real macosx_11_0_arm64
 # wheels through cp314; onnxruntime is the one with the higher macOS floor.
 faster-whisper==1.2.1
+
+# piper-tts (text -> speech, speaking):
+# Licensed GPL-3.0-or-later. This codebase is proprietary - deliberately
+# NOT imported anywhere in core/ or api/ (see core/speak.py's docstring).
+# It runs as its own separate local process (`python3 -m
+# piper.http_server`), talked to only over localhost HTTP, the same
+# relationship this app already has with Ollama. That boundary is the
+# reason this dependency is safe to install on a dev machine to *run* the
+# voice server, without it ever becoming part of the proprietary Python
+# process this app ships. Still needs real legal review before this goes
+# to any paying client - this comment states the boundary chosen, not a
+# legal conclusion. Verified against PyPI directly: piper-tts 1.6.1 ships
+# real macosx_11_0_arm64 and macosx_10_9_x86_64 wheels.
+piper-tts==1.6.1

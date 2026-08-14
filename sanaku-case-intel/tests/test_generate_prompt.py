@@ -5,7 +5,7 @@ human_entered/approximate/undated flags actually reach the prompt text,
 since prompts/answer_contract.txt's rule #3 depends on the model being able
 to see those flags to honor them."""
 from core.generate import build_user_prompt
-from core.retrieve import RetrievedChunk
+from core.retrieve import ConversationTurn, RetrievedChunk
 
 
 def test_build_user_prompt_includes_citation_ready_headers():
@@ -71,3 +71,35 @@ def test_build_user_prompt_numbers_passages_sequentially():
     prompt = build_user_prompt("question", passages)
     assert "Passage 1 — cite this as [a.pdf, p.1]" in prompt
     assert "Passage 2 — cite this as [b.pdf, p.2]" in prompt
+
+
+def test_build_user_prompt_omitting_history_is_byte_identical_to_before():
+    """Regression guard: history support must be additive. A single-turn
+    request (the overwhelming majority of calls, and everything before
+    this feature existed) must produce the exact same prompt whether
+    history=None is passed explicitly or omitted entirely."""
+    passage = RetrievedChunk(
+        doc_id="doc", doc_name="a.pdf", page=1, chunk_index=0, source_type="digital",
+        event_date=None, date_confidence="undated", human_entered=False, text="text", distance=0.1,
+    )
+    assert build_user_prompt("question", [passage]) == build_user_prompt("question", [passage], history=None)
+    assert build_user_prompt("question", [passage]) == build_user_prompt("question", [passage], history=[])
+
+
+def test_build_user_prompt_labels_history_as_context_only_not_a_source():
+    passage = RetrievedChunk(
+        doc_id="doc", doc_name="medical_record_dr_chen.pdf", page=4, chunk_index=0, source_type="digital",
+        event_date=None, date_confidence="undated", human_entered=False, text="prior injury text", distance=0.1,
+    )
+    history = [ConversationTurn(
+        question="What did the treating physician say about causation?",
+        answer="Dr. Chen concluded causation. [medical_record_dr_chen.pdf, p.3]",
+    )]
+    prompt = build_user_prompt("What about her prior injuries?", [passage], history=history)
+    assert "CONVERSATION HISTORY" in prompt
+    assert "Not a source" in prompt
+    assert "What did the treating physician say about causation?" in prompt
+    assert "Dr. Chen concluded causation." in prompt
+    # The current question must still be the literal QUESTION, not the
+    # augmented retrieval query some other layer might build.
+    assert "QUESTION: What about her prior injuries?" in prompt
