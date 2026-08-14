@@ -1,1 +1,5 @@
 sanaku/site/*.pdf
+
+# Local harness state (session settings, background-agent worktrees) — not
+# project content, never belongs in the repo.
+.claude/

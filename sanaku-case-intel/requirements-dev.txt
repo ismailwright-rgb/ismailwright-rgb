@@ -1,0 +1,5 @@
+# Dev/test-only dependencies — never installed on a firm's machine by
+# scripts/setup.sh. reportlab + the runtime deps above are what
+# scripts/generate_sample_case.py uses to build fictional fixture PDFs.
+pytest==8.3.4
+reportlab==5.0.0

@@ -1,0 +1,10 @@
+{
+  "firm_name": "Example Firm LLP",
+  "logo_path": "config/assets/logo.png",
+  "colors": { "primary": "#0B3D2E", "secondary": "#C9A24B", "accent": "#F4F1EA" },
+  "tier": "standard",
+  "data_root": "data",
+  "gen_model": "llama3.1:8b",
+  "embed_model": "nomic-embed-text",
+  "license_path": "config/license.key"
+}

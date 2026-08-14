@@ -1,0 +1,15 @@
+# Per-firm config — never committed, this is where client identity/branding lives.
+config/client.json
+config/assets/
+config/license.key
+
+# All case data — client documents, vector indexes. Never leaves the box,
+# never enters version control either.
+data/
+
+# Dev-only virtualenv used to install requirements.txt + requirements-dev.txt.
+.venv-dev/
+
+__pycache__/
+*.pyc
+.pytest_cache/
