@@ -226,8 +226,19 @@ started* before `/speak` will work — a third terminal, same shape as
 ```bash
 python3 -m piper.download_voices en_US-lessac-medium --data-dir ~/.local/share/sanaku-case-intel/piper-voices
 python3 -m piper.http_server --model en_US-lessac-medium \
-  --data-dir ~/.local/share/sanaku-case-intel/piper-voices --host 127.0.0.1 --port 5000
+  --data-dir ~/.local/share/sanaku-case-intel/piper-voices --host 127.0.0.1 --port 5000 \
+  --sentence-silence 0.4
 ```
+
+`--sentence-silence` defaults to `0.0` in Piper's own server — literally
+zero silence between sentences unless set explicitly, which reads as one
+run-on utterance regardless of how clean the sentence boundaries in the
+text are. `0.4` (seconds) is a reasonable starting point for a real
+pause between an answer's thesis and each supporting point; adjust to
+taste. This only does anything useful paired with
+`stripCitationsForSpeech` (`web/src/App.jsx`) actually producing real
+sentence-terminal punctuation between points in the first place - Piper
+can't pause on a sentence boundary that isn't there.
 
 **What was actually verified in this sandbox** (no microphone, no audio
 hardware here, same constraint that applied to live Ollama generation):

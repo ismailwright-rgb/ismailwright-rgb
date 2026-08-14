@@ -17,7 +17,15 @@ Start the local voice service (its own terminal, same shape as
 `ollama serve`):
     python3 -m piper.download_voices en_US-lessac-medium --data-dir <dir>
     python3 -m piper.http_server --model en_US-lessac-medium \
-        --data-dir <dir> --host 127.0.0.1 --port 5000
+        --data-dir <dir> --host 127.0.0.1 --port 5000 --sentence-silence 0.4
+
+--sentence-silence defaults to 0.0 in Piper's own server - literally no
+pause between sentences unless set explicitly, which is what made an
+early real run sound like one run-on utterance instead of distinct
+points. Only useful paired with web/src/App.jsx's
+stripCitationsForSpeech actually producing real sentence-terminal
+punctuation between points in the first place - Piper can't pause on a
+sentence boundary that isn't there.
 
 Synthesizer is the seam that keeps api/main.py decoupled from Piper
 specifically: production code uses PiperSynthesizer; tests substitute a
@@ -72,7 +80,8 @@ class PiperSynthesizer:
             raise PiperUnavailableError(
                 f"Cannot reach the local voice service at {self._client.base_url}. "
                 f"Is it running? Try: python3 -m piper.http_server --model "
-                f"en_US-lessac-medium --data-dir <dir> --host 127.0.0.1 --port 5000"
+                f"en_US-lessac-medium --data-dir <dir> --host 127.0.0.1 --port 5000 "
+                f"--sentence-silence 0.4"
             ) from e
         except httpx.HTTPStatusError as e:
             raise SynthesisError(f"The local voice service returned an error: {e}") from e

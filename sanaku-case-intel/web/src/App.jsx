@@ -50,17 +50,38 @@ function StopIcon() {
   );
 }
 
-/** Citation tokens like [doc.pdf, p.3] are fine to read on screen, tedious
- * to hear spoken aloud on every sentence - strip them from what's sent to
- * /speak; they stay fully visible in the answer panel regardless. Same
- * for the leading "* "/"- " bullet markers AnswerBody's own /^[*-]\s+/
- * regex strips when rendering a list visually - without this, a voice
- * reads the literal character aloud as "asterisk" before every point. */
+/** Prepares answer text for /speak: strips citation brackets and bullet
+ * markers (same reasons as before - a voice shouldn't read "bracket doc
+ * pdf comma p dot 3 bracket" or "asterisk" aloud), but also splits the
+ * text into the same blocks/points AnswerBody renders as separate
+ * paragraphs or list items, and guarantees each one ends with terminal
+ * punctuation before rejoining them. Without that, points that already
+ * lack a trailing period (the answer contract doesn't require one) blur
+ * together into what sounds like one run-on sentence once newlines stop
+ * meaning anything to the TTS engine - a period is the one thing every
+ * speech synthesizer reliably treats as a pause boundary. */
 function stripCitationsForSpeech(text) {
-  return text
-    .replace(/^[*-]\s+/gm, '')
-    .replace(/\[[^\]]+\]/g, '')
-    .replace(/[ \t]{2,}/g, ' ');
+  const blocks = text.trim().split(/\n\s*\n/);
+  const sentences = [];
+  for (const block of blocks) {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    const isList = lines.length > 0 && lines.every((l) => /^[*-]\s+/.test(l));
+    const points = isList ? lines.map((l) => l.replace(/^[*-]\s+/, '')) : [lines.join(' ')];
+    for (const rawPoint of points) {
+      const point = rawPoint.replace(/\[[^\]]+\]/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+      if (!point) continue;
+      if (/[.!?]$/.test(point)) {
+        sentences.push(point);
+      } else if (point.endsWith(':')) {
+        // A trailing colon ("Supporting points:") reads oddly with a
+        // period appended after it - swap it for one instead.
+        sentences.push(`${point.slice(0, -1)}.`);
+      } else {
+        sentences.push(`${point}.`);
+      }
+    }
+  }
+  return sentences.join(' ');
 }
 
 /** Very small formatter for the answer text: blocks separated by a blank
