@@ -581,7 +581,18 @@ export default function App() {
   // guard fails (no case selected, already mid-answer, empty text), this
   // silently does nothing and leaves whatever text was passed in the
   // question box for the user to deal with by hand.
-  async function askQuestion(rawQuestion) {
+  //
+  // `viaVoice` marks a question that was asked out loud (mic button,
+  // ⌘⇧M, or hands-free) rather than typed - real feedback, changing this
+  // on explicit direction: a voice-asked question should get a voice
+  // answer back with no "Listen to this answer" click needed, completing
+  // the actual conversation loop instead of talking-in/reading-out. Typed
+  // questions deliberately still need a manual click - asking by voice is
+  // the explicit signal that an audible answer is wanted right now;
+  // typing doesn't carry that same signal, and auto-playing audio after
+  // every typed question in what might be a quiet office would be a
+  // worse default, not a better one.
+  async function askQuestion(rawQuestion, { viaVoice = false } = {}) {
     const askedQuestion = rawQuestion.trim();
     if (!caseId.trim() || !askedQuestion || loading || streamingTurnId) return;
     audioRef.current?.pause();
@@ -642,6 +653,10 @@ export default function App() {
             prev.map((t) => (t.id === turnId ? { ...t, data: { ...t.data, answer: event.answer, streaming: false } } : t)),
           );
           setStreamingTurnId(null);
+          // event.answer (the final, complete text), not turn.data.answer
+          // from React state - that state update above hasn't necessarily
+          // committed yet by the time this line runs.
+          if (viaVoice) playAnswerAudio(turnId, event.answer);
         } else if (event.type === 'error') {
           throw new Error(event.detail || 'Something went wrong.');
         }
@@ -803,8 +818,10 @@ export default function App() {
         // nothing else is already mid-answer, the text isn't blank) - if
         // that guard fails, this is a no-op and the transcribed text is
         // simply left sitting in the question box instead, same as
-        // before this asked itself automatically.
-        askQuestion(text);
+        // before this asked itself automatically. viaVoice: true - this
+        // question was spoken, so its answer gets spoken back too, with
+        // no "Listen to this answer" click needed.
+        askQuestion(text, { viaVoice: true });
       } catch (err) {
         setError(err.message);
       } finally {
@@ -978,22 +995,23 @@ export default function App() {
   // process (core/speak.py), never a cloud voice API and never the
   // browser's own speechSynthesis (whose default OS voices are what
   // prompted this in the first place). Per-turn: audioRef holds at most
-  // one playing clip, mirroring the old single-utterance behavior.
-  async function handleListenClick(turn) {
-    if (speakingId === turn.id) {
-      audioRef.current?.pause();
-      setSpeakingId(null);
-      return;
-    }
+  // one playing clip, mirroring the old single-utterance behavior. Takes
+  // the text directly rather than pulling it off the turn, so
+  // askQuestion's 'done' handler (see above) can call this with the
+  // stream's final event.answer the instant it lands, without waiting on
+  // a React state update to commit first - the same reason askQuestion
+  // itself takes the question text as a parameter rather than reading
+  // `question` state.
+  async function playAnswerAudio(turnId, text) {
     audioRef.current?.pause();
     setSpeakingId(null);
-    setSynthesizingId(turn.id);
+    setSynthesizingId(turnId);
     setError(null);
     try {
       const r = await fetch('/speak', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: stripCitationsForSpeech(turn.data.answer) }),
+        body: JSON.stringify({ text: stripCitationsForSpeech(text) }),
       });
       if (!r.ok) {
         const data = await r.json().catch(() => ({}));
@@ -1012,13 +1030,22 @@ export default function App() {
         URL.revokeObjectURL(url);
       };
       setSynthesizingId(null);
-      setSpeakingId(turn.id);
+      setSpeakingId(turnId);
       await audio.play();
     } catch (err) {
       setError(err.message);
       setSynthesizingId(null);
       setSpeakingId(null);
     }
+  }
+
+  async function handleListenClick(turn) {
+    if (speakingId === turn.id) {
+      audioRef.current?.pause();
+      setSpeakingId(null);
+      return;
+    }
+    await playAnswerAudio(turn.id, turn.data.answer);
   }
 
   return (

@@ -99,6 +99,12 @@ question box.
 - Once it stops, your question is transcribed and **asked automatically**
   — you don't need to click Ask yourself. Talk to it the way you'd talk
   to a voice assistant: ask, and it starts researching right away.
+- **The answer is read back to you automatically too** — no need to click
+  "Listen to this answer." Ask by voice, and the whole exchange happens
+  out loud, start to finish. (Typed questions still show the answer on
+  screen only, with **Listen to this answer** available if you want it
+  read aloud — asking out loud is what signals you want to hear the
+  answer back too.)
 - If it mishears something, just say a follow-up out loud to correct it
   — "actually, I meant..." — the same way you'd clarify with a person.
   Every answer is still built only from real cited passages either way,
@@ -118,8 +124,8 @@ can start a question just by saying:
 
 Say that phrase, and it starts recording your actual question
 automatically — no click needed at all. Once you stop talking, it
-transcribes and asks the question on its own too, exactly like the
-microphone button above — the whole exchange, start to finish, never
+transcribes, asks the question, and reads the answer back — exactly like
+the microphone button above — the whole exchange, start to finish, never
 needs your hands.
 
 A few things worth knowing about this mode:
@@ -148,10 +154,12 @@ A few things worth knowing about this mode:
 
 ## Listening to an answer
 
-Click **Listen to this answer** underneath any answer to have it read
-aloud. Click it again (it now says **Stop**) to stop playback early.
-While it's being prepared you'll briefly see "Synthesizing…" — that's
-normal for longer answers.
+Any answer to a question you asked out loud is read back to you
+automatically once it's ready — see "Asking by voice" above. For a typed
+question, click **Listen to this answer** underneath the answer to have
+it read aloud. Either way, click the button again (it now says **Stop**)
+to stop playback early. While it's being prepared you'll briefly see
+"Synthesizing…" — that's normal for longer answers.
 
 ## Adding a note
 

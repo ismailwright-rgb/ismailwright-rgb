@@ -472,7 +472,43 @@ renders. Confirms the whole auto-submit path end to end through the same
 stub-backed dev server used for every other voice verification this
 session.
 
-## Auto-stop recording on silence
+### ...and voice-asked answers read themselves back too
+
+Same feedback, same session, one step further: once a voice-asked
+question's answer finishes streaming, it's read aloud automatically — no
+"Listen to this answer" click needed either. Completes the actual
+conversation loop (talk in, talk back) rather than talk-in/read-out.
+
+**Deliberately scoped to voice-asked questions only, not every answer.**
+`askQuestion` takes a new `{ viaVoice }` option — `true` from
+`startRecording`'s post-transcription call, left at its default `false`
+from `handleAsk` (the typed-question submit path). The `'done'` stream
+event only triggers playback when the turn that just finished was
+`viaVoice`. Reasoning, not an oversight: asking out loud is the explicit
+signal that an audible answer is wanted right now; typing carries no such
+signal, and auto-playing audio after every *typed* question - in what
+might be a quiet office, or a firm that's never even set up voice at all
+- would be a worse default, not a better one (a firm without voice set up
+would otherwise get a `SynthesisError` banner after every single typed
+answer). The existing manual **Listen to this answer** button still works
+identically for typed answers.
+
+Implementation: `handleListenClick`'s body was extracted into
+`playAnswerAudio(turnId, text)` (unchanged logic, just no longer tied to
+reading `turn.data.answer` off React state) so both the manual button and
+the stream's own `'done'` handler can call it - the `'done'` handler
+passes `event.answer` (the stream's own final, complete text) directly,
+not `turn.data.answer`, since that state update hasn't necessarily
+committed by the time the same tick runs.
+
+**Verified directly in this sandbox with Playwright**, not assumed, two
+separate runs: (1) mic click → fake-audio recording → stop → transcribe
+→ auto-ask → **the voice button auto-activates to "Stop" with no manual
+click**, confirming playback started on its own; (2) a typed question
+submitted via the Ask button confirmed the voice button stays at "Listen
+to this answer" with no auto-activation and no synthesis request fired -
+proving the `viaVoice` gate actually gates, not just that the happy path
+works.
 
 Real feedback: having to click the mic button again to say "I'm done
 talking" was friction against the actual goal ("this is supposed to be
