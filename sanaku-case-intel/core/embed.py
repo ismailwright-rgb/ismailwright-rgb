@@ -61,6 +61,11 @@ class OllamaEmbedder:
                 f"Cannot reach Ollama at {self._client.base_url}. "
                 f"Is it running? Try: ollama serve"
             ) from e
+        except httpx.TimeoutException as e:
+            raise OllamaUnavailableError(
+                "Ollama took too long to respond (model cold-start can be slow "
+                "the first time) - try again."
+            ) from e
         except httpx.HTTPStatusError as e:
             raise OllamaError(f"Ollama returned an error embedding text: {e}") from e
         data = resp.json()

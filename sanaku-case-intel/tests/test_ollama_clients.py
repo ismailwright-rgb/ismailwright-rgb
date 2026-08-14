@@ -16,6 +16,22 @@ def test_embedder_raises_when_unreachable():
         embedder.embed_texts(["hello"])
 
 
+def test_embedder_raises_ollama_unavailable_on_timeout():
+    """Real bug found on a live run: a plain httpx.ReadTimeout (e.g. Ollama
+    cold-starting a model) fell through uncaught, past api/main.py's
+    except OllamaError clause, into an unhandled 500 with a non-JSON body -
+    which crashed the frontend's response parsing. Deterministic via a
+    mock transport that raises the timeout, no real 3-second wait needed."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://localhost:11434")
+    embedder = OllamaEmbedder(model="nomic-embed-text", client=client)
+    with pytest.raises(OllamaUnavailableError):
+        embedder.embed_texts(["hello"])
+
+
 def test_embedder_parses_response_shape():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/embed"
@@ -41,6 +57,15 @@ def test_chat_raises_when_unreachable():
         generate_answer(
             "question", [], model="llama3.1:8b", base_url="http://localhost:11434", timeout=3.0
         )
+
+
+def test_chat_raises_ollama_unavailable_on_timeout():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://localhost:11434")
+    with pytest.raises(OllamaUnavailableError):
+        generate_answer("question", [], model="llama3.1:8b", client=client)
 
 
 def test_chat_parses_response_and_uses_stream_false():

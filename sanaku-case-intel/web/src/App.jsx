@@ -225,7 +225,13 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ case_id: caseId.trim(), question: askedQuestion, history: historyPayload }),
       });
-      const data = await r.json();
+      // A non-JSON error body (a bare 500 from an uncaught exception, a
+      // proxy error page, anything unanticipated) shouldn't crash with a
+      // raw "Unexpected token" parse error - fall back to the generic
+      // message instead. Real fix for the actual known cause (an Ollama
+      // timeout falling through uncaught) is in core/generate.py; this is
+      // defense in depth on top of that, not a substitute for it.
+      const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.detail || 'Something went wrong.');
       setTurns((prev) => [...prev, { id: crypto.randomUUID(), question: askedQuestion, data }]);
       setQuestion('');
@@ -286,7 +292,7 @@ export default function App() {
         const form = new FormData();
         form.append('audio', blob, 'clip.webm');
         const r = await fetch('/transcribe', { method: 'POST', body: form });
-        const data = await r.json();
+        const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.detail || 'Could not transcribe that.');
         setQuestion(data.text || '');
       } catch (err) {

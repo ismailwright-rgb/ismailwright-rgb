@@ -113,6 +113,11 @@ def generate_answer(
         raise OllamaUnavailableError(
             f"Cannot reach Ollama at {http.base_url}. Is it running? Try: ollama serve"
         ) from e
+    except httpx.TimeoutException as e:
+        raise OllamaUnavailableError(
+            "Ollama took too long to respond (model cold-start can be slow "
+            "the first time) - try again."
+        ) from e
     except httpx.HTTPStatusError as e:
         raise OllamaError(f"Ollama returned an error generating the answer: {e}") from e
 
