@@ -160,7 +160,7 @@ Real run, against real Ollama:
 # terminal 1 - the API
 cd sanaku-case-intel
 source .venv-dev/bin/activate  # or your real venv
-uvicorn api.main:app --port 8000
+uvicorn api.main:app --port 8001
 
 # terminal 2 - the UI
 cd sanaku-case-intel/web
@@ -170,8 +170,18 @@ npm run dev
 
 Open the printed `localhost:5173` URL, pick (or type) a case ID, ask a
 question. `vite.config.js` proxies `/theme`, `/cases`, `/ask`,
-`/transcribe`, and `/branding-assets` to port 8000 so the browser only
+`/transcribe`, and `/branding-assets` to port 8001 so the browser only
 ever talks same-origin.
+
+**Port 8001, not the more conventional 8000** — moved here after a real
+port collision on a real Mac: an unrelated program already listening on
+8000 silently intercepted every API call (its own 404 page for
+everything), and every single symptom that produced — no case list, no
+transcription, hands-free never responding — looked exactly like a bug in
+this app until `lsof -i :8000` identified an unrelated process actually
+answering there. If 8001 ever collides on a given machine too, change the
+port in both this command and `web/vite.config.js`'s proxy targets
+together - they have to agree.
 
 Dev-only stub run (no Ollama needed, what was actually used to verify this
 phase in this sandbox):

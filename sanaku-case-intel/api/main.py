@@ -35,8 +35,9 @@ SUPPORTED_SUFFIXES = {".pdf", ".txt"}
 # This API and the web UI both run on the same machine, on-site at the firm
 # - there is no multi-tenant/public-internet exposure to guard against here,
 # only the browser's own same-origin restriction between Vite's dev server
-# (5173) and this API (8000). Wide open on localhost is fine for that; this
-# is not a public API.
+# (5173) and this API (8001 - see web/vite.config.js's own comment on why
+# not the more conventional 8000). Wide open on localhost is fine for
+# that; this is not a public API.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
