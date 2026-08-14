@@ -44,8 +44,20 @@ def build_user_prompt(question: str, passages: list[RetrievedChunk]) -> str:
             flags.append("human_entered")
         if p.date_confidence != "exact":
             flags.append(f"date_confidence={p.date_confidence}")
-        flag_str = f" [{', '.join(flags)}]" if flags else ""
-        lines.append(f"[{i}] {p.doc_name}, p.{p.page} (source_type={p.source_type}){flag_str}\n{p.text}\n")
+        flag_str = f", {', '.join(flags)}" if flags else ""
+        citation = f"[{p.doc_name}, p.{p.page}]"
+        # "Passage N" is a locator so the model can find this block in the
+        # list; "cite this as [doc_name, p.X]" is the only string that
+        # should ever end up in the answer. Keeping the citation-ready text
+        # separate from the list index (rather than leading with "[N] ...")
+        # is what stops the model from citing the list position itself -
+        # confirmed live: an earlier version of this prompt led exactly to
+        # that failure mode ("(passage [2], p.3)" instead of the contract's
+        # required format).
+        lines.append(
+            f"Passage {i} — cite this as {citation} "
+            f"(source_type={p.source_type}{flag_str})\n{p.text}\n"
+        )
     return "\n".join(lines)
 
 
