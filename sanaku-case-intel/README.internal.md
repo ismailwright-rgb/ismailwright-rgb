@@ -31,8 +31,9 @@ of any client-facing surface.
   conversation, not just one answer), voice input/output (local Whisper
   + a separate local Piper process — see "Voice" below), hands-free
   wake-phrase listening ("Let's do a case review." — see "Hands-free
-  listening mode" below), and multi-turn conversation memory (see
-  "Conversation memory" below) — all still Phase 4 surface, no new
+  listening mode" below), streaming answers (see "Streaming answers"
+  below), and multi-turn conversation memory (see "Conversation memory"
+  below) — all still Phase 4 surface, no new
   config schema.
 
 **Stopped after Phase 4's core build**, per the master prompt's own build
@@ -362,12 +363,87 @@ alike) stays visible under the header with its own always-reachable
 "Turn off" button — a second kill switch beyond the header toggle,
 warranted given the privacy stakes.
 
+## Streaming answers — POST /ask/stream
+
+Real feedback from actually using this: waiting for an entire non-
+streamed completion from an 8B model on ordinary hardware before
+anything appears reads as "did this hang?", not "this is working" — the
+exact "lawyers waiting forever" problem this exists to fix. Streaming
+doesn't make the model faster; it moves time-to-first-visible-content
+from "the whole answer's generation time" down to roughly the retrieval
+time plus one token.
+
+`core/generate.py`'s `stream_answer` is a generator-based sibling of
+`generate_answer` — same prompt, same contract, same citation guarantees,
+same error mapping (`OllamaUnavailableError` on a connect failure or
+timeout) — the only difference is `"stream": True` against Ollama's own
+`/api/chat`, yielding each `message.content` delta as it arrives instead
+of blocking for the full completion. `generate_answer` (non-streaming)
+stays as-is for `cli.py`, which has nowhere to stream *to*.
+
+`POST /ask/stream` (new, alongside the existing `POST /ask`) does
+retrieval synchronously first — it's the fast part — and sends the
+retrieved sources as the response's very first line, before generation
+even starts, so the web UI's source panel renders before the answer's
+first word exists. Body is newline-delimited JSON, not Server-Sent
+Events (a POST with a JSON body can't use `EventSource`, which is
+GET-only): one `{"type":"sources",...}` line, then repeated
+`{"type":"delta","text":"..."}` lines, then exactly one of
+`{"type":"done","answer":"..."}` or `{"type":"error","detail":"..."}`. A
+generation failure reachable only *after* streaming has begun can't
+become a real `HTTPException` — the 200 response and its headers are
+already committed by the time the first line is written — so it's
+reported as that final `error` line instead; `web/src/App.jsx` treats it
+identically to a rejected `/ask` either way.
+
+`web/src/App.jsx`'s `handleAsk` reads the response body via `fetch` +
+`response.body.getReader()` (no library — a hand-rolled newline-buffered
+reader, since this project has stayed dependency-light throughout), and
+threads state carefully so a turn appears in the conversation thread the
+instant sources arrive, then grows in place as delta lines land, rather
+than only existing once everything is done. Two new pieces of turn/app
+state make this legible: `turn.data.streaming` (a small "Generating…"
+indicator on that turn's Answer heading, and its own Listen button
+disabled until the text is final and citations are stable) and
+`streamingTurnId` (blocks asking a follow-up mid-stream — sending an
+unfinished answer as this turn's own history to the next question would
+be wrong). "Start a new conversation" now actually aborts an in-flight
+stream (`AbortController`), rather than leaving it running to completion
+in the background against a `turns` array that's already been cleared.
+
+**Verified in this sandbox**: `tests/test_ollama_clients.py` covers
+`stream_answer`'s request shape (`"stream": true`), delta ordering, and
+both error paths (unreachable, timeout) via a mocked transport carrying
+real Ollama streaming NDJSON shape;
+`tests/test_api.py` covers `/ask/stream`'s three-line contract (sources
+→ deltas → done) end to end, that concatenated deltas exactly equal the
+final `done` answer, and the mid-stream-failure → final `error` line
+path — all deterministic, no real Ollama needed. `scripts/
+dev_server_stub.py` got a `fake_stream_generate` (same fake text as the
+existing `fake_generate`, yielded word-by-word with a small real delay)
+specifically so Playwright could observe genuine incremental behavior —
+confirmed directly, not assumed: sources visible in the DOM before any
+answer text exists, the answer panel's text growing as a strict prefix
+extension over successive samples (not one paste), the "Generating…"
+indicator and disabled Ask button through the whole stream and clearing
+the instant `done` arrives, "Start a new conversation" mid-stream
+producing zero leftover turns and no error banner, and a second
+follow-up question still resolving conversation-memory context correctly
+after switching to the streaming path.
+
+**Only confirmable on your Mac**: whether streaming actually *feels*
+faster with a real 8B model under real hardware constraints — this
+sandbox has no Ollama to generate anything, real or timed, so the actual
+perceived-latency improvement (the entire point of this change) is a
+live check, not something provable from here.
+
 ## Conversation memory — follow-up questions in the same session
 
-`POST /ask` accepts an optional `history: [{question, answer}, ...]`
-array. The web UI keeps this client-side (`web/src/App.jsx`'s `turns`
-state) and sends the whole prior thread with each new question — no new
-backend session store. This API has no session/identity concept anywhere
+`POST /ask` (and `POST /ask/stream`, its streaming sibling — see
+"Streaming answers" above) accepts an optional `history: [{question,
+answer}, ...]` array. The web UI keeps this client-side (`web/src/App.jsx`'s
+`turns` state) and sends the whole prior thread with each new question —
+no new backend session store. This API has no session/identity concept anywhere
 else (single browser tab, single attorney, same machine), and a new
 server-side store would raise a real question a tab-scoped design avoids
 by construction: what expires attorney-client-privileged history sitting

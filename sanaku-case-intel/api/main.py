@@ -1,4 +1,4 @@
-"""FastAPI app exposing /health, /ingest, /ask.
+"""FastAPI app exposing /health, /ingest, /ask, /ask/stream.
 
 Every Ollama-dependent piece (embedder, generator) is wired in via FastAPI's
 own Depends() so it can be swapped for a test double in tests/test_api.py —
@@ -7,19 +7,21 @@ this file special-cases "am I under test".
 """
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
 from pathlib import Path
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from core.chunk import chunk_pages
 from core.config import ClientConfig, load_config
 from core.embed import DEFAULT_OLLAMA_URL, EmbeddingFunction, OllamaEmbedder, OllamaError
-from core.generate import AnswerResult, generate_answer
+from core.generate import AnswerResult, generate_answer, stream_answer
 from core.ingest import extract_document
 from core.retrieve import ConversationTurn, build_retrieval_query, retrieve_passages
 from core.speak import PiperSynthesizer, SynthesisError, Synthesizer
@@ -68,6 +70,16 @@ def get_generator():
     """Returns the real Ollama-backed generate_answer by default. Tests
     override this dependency with a fake via app.dependency_overrides."""
     return generate_answer
+
+
+def get_stream_generator():
+    """Returns the real Ollama-backed stream_answer by default - a
+    separate seam from get_generator (not a flag on the same one) since
+    the streaming and non-streaming code paths have a genuinely
+    different shape, an iterator vs. a single return value. Tests
+    override this dependency with a fake iterator via
+    app.dependency_overrides, same pattern as every other seam here."""
+    return stream_answer
 
 
 def get_transcriber() -> Transcriber:
@@ -233,6 +245,73 @@ def ask(
     except OllamaError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     return {"answer": result.answer, "sources": [asdict(s) for s in result.sources]}
+
+
+@app.post("/ask/stream")
+def ask_stream(
+    req: AskRequest,
+    config: ClientConfig = Depends(get_config),
+    embedder: EmbeddingFunction = Depends(get_embedder),
+    stream_generator=Depends(get_stream_generator),
+):
+    """Same question/history contract as POST /ask, but the answer
+    streams to the client as Ollama produces it instead of arriving all
+    at once - what the web UI actually calls; /ask stays as-is for
+    cli.py and anything else that wants a single blocking call.
+
+    Retrieval (embed the query, search the local vector store) happens
+    synchronously first - it's the fast part - and its sources are sent
+    as the very first line, so the web UI's source panel can render
+    before the answer's first word exists. Body is newline-delimited
+    JSON, one object per line: {"type":"sources","sources":[...]} once,
+    then {"type":"delta","text":"..."} repeated as generation produces
+    text, then exactly one of {"type":"done","answer":"..."} (full
+    concatenated text, for exactness) or {"type":"error","detail":"..."}
+    - never both. Not Server-Sent Events (no "data:"/blank-line framing)
+    since this is a POST with a JSON body, which EventSource can't send;
+    plain newline-delimited JSON is simpler and web/src/App.jsx already
+    has to hand-parse it with its own fetch + ReadableStream reader
+    either way.
+
+    Errors reachable only *after* streaming has begun (a generation
+    failure partway through) can't become an HTTPException - the 200
+    response and its headers are already committed the instant the first
+    line is written, so FastAPI has no way to rewrite the status code
+    after the fact. Reported as a final {"type":"error"} line instead;
+    web/src/App.jsx treats it exactly like a rejected /ask, same message
+    text either way. A failure caught before the first line is written
+    (retrieval itself failing) is reported the same way for a uniform
+    client-side error path, rather than a real HTTPException for that
+    one case and a fake one for every other.
+    """
+    history = [ConversationTurn(question=t.question, answer=t.answer) for t in req.history]
+
+    def event_stream():
+        try:
+            retrieval_query = build_retrieval_query(req.question, history)
+            passages = retrieve_passages(
+                req.case_id, retrieval_query, embedder, config.data_root, top_k=req.top_k
+            )
+        except OllamaError as e:
+            yield json.dumps({"type": "error", "detail": str(e)}) + "\n"
+            return
+
+        yield json.dumps({"type": "sources", "sources": [asdict(s) for s in passages]}) + "\n"
+
+        full_answer_parts = []
+        try:
+            for delta in stream_generator(
+                req.question, passages, model=config.gen_model, history=history
+            ):
+                full_answer_parts.append(delta)
+                yield json.dumps({"type": "delta", "text": delta}) + "\n"
+        except OllamaError as e:
+            yield json.dumps({"type": "error", "detail": str(e)}) + "\n"
+            return
+
+        yield json.dumps({"type": "done", "answer": "".join(full_answer_parts)}) + "\n"
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 
 @app.post("/transcribe")

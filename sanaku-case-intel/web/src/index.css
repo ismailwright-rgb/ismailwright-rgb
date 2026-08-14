@@ -648,10 +648,43 @@ body {
 .answer-heading,
 .source-heading {
   margin: 0 0 var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ink-soft);
+}
+
+/* Shown on a turn's own Answer heading while its text is still streaming
+   in via POST /ask/stream - distinct wording and dot color from both
+   .mic-dot (recording your question) and .listening-dot (hands-free
+   armed), so none of the three can be misread as describing the same
+   thing. Normal-case and not letter-spaced like its heading, so it reads
+   as a live status update, not part of the label. */
+.generating-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
+  color: var(--color-secondary);
+}
+
+.generating-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-secondary);
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .generating-dot {
+    animation: pulse 1s ease-in-out infinite;
+  }
 }
 
 .answer-panel p {
@@ -899,7 +932,8 @@ body {
   .logo-monogram,
   .handsfree-toggle,
   .handsfree-banner,
-  .theme-toggle {
+  .theme-toggle,
+  .generating-indicator {
     display: none;
   }
 

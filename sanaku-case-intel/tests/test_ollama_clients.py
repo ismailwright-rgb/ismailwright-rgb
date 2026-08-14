@@ -2,11 +2,13 @@
 unreachable-Ollama error path (real — Ollama genuinely isn't running in
 this environment, so this exercises the actual connection-refused branch,
 not a simulation of it)."""
+import json
+
 import httpx
 import pytest
 
 from core.embed import OllamaEmbedder, OllamaUnavailableError
-from core.generate import generate_answer
+from core.generate import generate_answer, stream_answer
 from core.retrieve import RetrievedChunk
 
 
@@ -88,3 +90,45 @@ def test_chat_parses_response_and_uses_stream_false():
     result = generate_answer("question", [passage], model="llama3.1:8b", client=client)
     assert result.answer == "The answer is X [doc.pdf, p.3]."
     assert result.sources == [passage]
+
+
+def test_stream_answer_uses_stream_true_and_yields_deltas_in_order():
+    # Real shape of Ollama's own streaming /api/chat response - one JSON
+    # object per line, each carrying a message.content delta, the final
+    # line marked done: true.
+    ndjson_lines = [
+        {"message": {"content": "The "}, "done": False},
+        {"message": {"content": "answer "}, "done": False},
+        {"message": {"content": "is X."}, "done": False},
+        {"message": {"content": ""}, "done": True},
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/chat"
+        body = json.loads(request.content)
+        assert body["stream"] is True
+        return httpx.Response(200, content=("\n".join(json.dumps(l) for l in ndjson_lines) + "\n").encode())
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://localhost:11434")
+    deltas = list(stream_answer("question", [], model="llama3.1:8b", client=client))
+    assert deltas == ["The ", "answer ", "is X."]
+
+
+def test_stream_answer_raises_ollama_unavailable_on_timeout():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://localhost:11434")
+    with pytest.raises(OllamaUnavailableError):
+        # stream_answer is a generator function - the request isn't made
+        # until iteration actually starts, so the exception only surfaces
+        # once something consumes it (list(...) here, api/main.py's
+        # event_stream in production).
+        list(stream_answer("question", [], model="llama3.1:8b", client=client))
+
+
+def test_stream_answer_raises_when_unreachable():
+    with pytest.raises(OllamaUnavailableError):
+        list(stream_answer(
+            "question", [], model="llama3.1:8b", base_url="http://localhost:11434", timeout=3.0
+        ))

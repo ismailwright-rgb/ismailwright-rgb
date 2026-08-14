@@ -225,6 +225,10 @@ function computeRms(byteData) {
  * supporting points). No markdown library - the shape is simple and
  * fixed enough not to need one. */
 function AnswerBody({ text }) {
+  // Genuinely empty for a brief instant while a streamed turn's sources
+  // have arrived but its first delta hasn't yet - nothing to render, not
+  // an empty paragraph.
+  if (!text.trim()) return null;
   const blocks = text.trim().split(/\n\s*\n/);
   return (
     <>
@@ -303,7 +307,11 @@ export default function App() {
   // Rule 5 for how that stays honest about citations.
   const [turns, setTurns] = useState([]);
   const [pendingQuestion, setPendingQuestion] = useState(null);
+  // `loading` covers only the retrieval wait (before sources exist to
+  // show anything); `streamingTurnId` covers the answer actually
+  // streaming in afterward - see handleAsk for why these are kept apart.
   const [loading, setLoading] = useState(false);
+  const [streamingTurnId, setStreamingTurnId] = useState(null);
   const [error, setError] = useState(null);
   const [printExpand, setPrintExpand] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -317,6 +325,10 @@ export default function App() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioRef = useRef(null);
+  // Lets handleNewConversation actually stop an in-flight /ask/stream
+  // read rather than leaving it running to completion in the background
+  // against a turns array that's already been cleared.
+  const streamAbortRef = useRef(null);
   // recordingRef/transcribingRef mirror the `recording`/`transcribing`
   // state but update synchronously (not on React's next render) - the
   // hands-free loop is a plain async function outside React's render
@@ -407,8 +419,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeydown);
   }, [micSupported, handleMicClick]);
 
-  const canAsk = useMemo(() => caseId.trim() && question.trim() && !loading, [caseId, question, loading]);
+  // Non-null while a turn's answer is actively streaming in - a distinct
+  // state from `loading` (which now only covers the retrieval wait,
+  // before sources exist to show). Ask/mic stay disabled across both:
+  // asking again mid-stream would mean sending an incomplete answer as
+  // this turn's own history to the next question.
+  const canAsk = useMemo(
+    () => caseId.trim() && question.trim() && !loading && !streamingTurnId,
+    [caseId, question, loading, streamingTurnId],
+  );
 
+  // POST /ask/stream, not /ask: the answer streams in as Ollama produces
+  // it instead of arriving all at once - see api/main.py's own docstring
+  // on that route for why (waiting for an entire non-streamed completion
+  // to land before showing anything reads as "did this hang?", not "this
+  // is working"). Sources arrive as the stream's first line (retrieval is
+  // the fast part) and populate the source panel immediately, well before
+  // the answer's first word exists.
   async function handleAsk(e) {
     e.preventDefault();
     if (!canAsk) return;
@@ -419,27 +446,88 @@ export default function App() {
     setLoading(true);
     setPendingQuestion(askedQuestion);
     setError(null);
+    setQuestion('');
+
+    const turnId = crypto.randomUUID();
+    let turnStarted = false;
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
+
     try {
-      const r = await fetch('/ask', {
+      const r = await fetch('/ask/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ case_id: caseId.trim(), question: askedQuestion, history: historyPayload }),
+        signal: abortController.signal,
       });
-      // A non-JSON error body (a bare 500 from an uncaught exception, a
-      // proxy error page, anything unanticipated) shouldn't crash with a
-      // raw "Unexpected token" parse error - fall back to the generic
-      // message instead. Real fix for the actual known cause (an Ollama
-      // timeout falling through uncaught) is in core/generate.py; this is
-      // defense in depth on top of that, not a substitute for it.
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.detail || 'Something went wrong.');
-      setTurns((prev) => [...prev, { id: crypto.randomUUID(), question: askedQuestion, data }]);
-      setQuestion('');
+      if (!r.ok || !r.body) {
+        // A non-JSON error body (a proxy error page, anything
+        // unanticipated before the stream even starts) shouldn't crash
+        // with a raw parse error - fall back to the generic message.
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.detail || 'Something went wrong.');
+      }
+
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const handleLine = (line) => {
+        if (!line.trim()) return;
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          return; // an unparsable line isn't worth aborting the whole stream over
+        }
+        if (event.type === 'sources') {
+          turnStarted = true;
+          setLoading(false);
+          setPendingQuestion(null);
+          setStreamingTurnId(turnId);
+          setTurns((prev) => [
+            ...prev,
+            { id: turnId, question: askedQuestion, data: { answer: '', sources: event.sources, streaming: true } },
+          ]);
+        } else if (event.type === 'delta') {
+          setTurns((prev) =>
+            prev.map((t) => (t.id === turnId ? { ...t, data: { ...t.data, answer: t.data.answer + event.text } } : t)),
+          );
+        } else if (event.type === 'done') {
+          setTurns((prev) =>
+            prev.map((t) => (t.id === turnId ? { ...t, data: { ...t.data, answer: event.answer, streaming: false } } : t)),
+          );
+          setStreamingTurnId(null);
+        } else if (event.type === 'error') {
+          throw new Error(event.detail || 'Something went wrong.');
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // last element may be a partial line - carried to the next read
+        for (const line of lines) handleLine(line);
+      }
+      if (buffer.trim()) handleLine(buffer);
     } catch (err) {
-      setError(err.message);
+      // A deliberate abort (handleNewConversation, see streamAbortRef)
+      // isn't a failure worth an error banner - the user already moved
+      // on, that's the whole point of cancelling.
+      if (err.name !== 'AbortError') setError(err.message);
+      if (turnStarted) {
+        // Sources had already rendered a turn before the failure - drop
+        // the partial turn rather than leaving a card stuck forever on
+        // "still generating" with no way to finish.
+        setTurns((prev) => prev.filter((t) => t.id !== turnId));
+      }
+      setStreamingTurnId(null);
     } finally {
       setLoading(false);
       setPendingQuestion(null);
+      if (streamAbortRef.current === abortController) streamAbortRef.current = null;
     }
   }
 
@@ -451,6 +539,11 @@ export default function App() {
     audioRef.current?.pause();
     setSpeakingId(null);
     setSynthesizingId(null);
+    // Actually stop an in-flight /ask/stream read, rather than leaving
+    // it running to completion in the background against a turns array
+    // that's about to be cleared.
+    streamAbortRef.current?.abort();
+    setStreamingTurnId(null);
     setTurns([]);
     setQuestion('');
     setError(null);
@@ -810,11 +903,11 @@ export default function App() {
               </button>
             )}
             <button
-              className={`ask-button${loading ? ' is-loading' : ''}`}
+              className={`ask-button${loading || streamingTurnId ? ' is-loading' : ''}`}
               type="submit"
               disabled={!canAsk}
             >
-              {loading ? 'Asking…' : 'Ask'}
+              {loading ? 'Asking…' : streamingTurnId ? 'Generating…' : 'Ask'}
             </button>
           </div>
           {(recording || transcribing) && (
@@ -833,7 +926,7 @@ export default function App() {
         {error && <div className="error-banner">{error}</div>}
 
         <span className="sr-only" role="status">
-          {loading ? 'Searching case documents…' : ''}
+          {loading ? 'Searching case documents…' : streamingTurnId ? 'Generating your answer…' : ''}
         </span>
 
         {turns.length > 0 && (
@@ -863,7 +956,8 @@ export default function App() {
                       synthesizingId === turn.id ? ' is-synthesizing' : ''
                     }`}
                     onClick={() => handleListenClick(turn)}
-                    disabled={synthesizingId === turn.id}
+                    disabled={synthesizingId === turn.id || turn.data.streaming}
+                    title={turn.data.streaming ? 'Still generating this answer' : undefined}
                   >
                     {synthesizingId === turn.id
                       ? 'Synthesizing…'
@@ -874,7 +968,14 @@ export default function App() {
                 </div>
                 <div className="answer-layout">
                   <section className="answer-panel" aria-label="Answer">
-                    <h2 className="answer-heading">Answer</h2>
+                    <h2 className="answer-heading">
+                      Answer
+                      {turn.data.streaming && (
+                        <span className="generating-indicator" role="status">
+                          <span className="generating-dot" aria-hidden="true" /> Generating…
+                        </span>
+                      )}
+                    </h2>
                     <AnswerBody text={turn.data.answer} />
                   </section>
                   <aside className="source-panel" aria-label="Sources">

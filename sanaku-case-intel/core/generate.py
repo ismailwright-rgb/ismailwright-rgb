@@ -12,7 +12,9 @@ later phase, not Phase 3's scope).
 """
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import Iterator
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
@@ -123,3 +125,74 @@ def generate_answer(
 
     content = resp.json()["message"]["content"]
     return AnswerResult(answer=content, sources=passages)
+
+
+def stream_answer(
+    question: str,
+    passages: list[RetrievedChunk],
+    model: str,
+    base_url: str = DEFAULT_OLLAMA_URL,
+    timeout: float = 180.0,
+    client: httpx.Client | None = None,
+    history: list[ConversationTurn] | None = None,
+) -> Iterator[str]:
+    """Same prompt, same contract, same citation guarantees as
+    generate_answer - the only difference is *when* the caller gets the
+    text: this yields it incrementally as Ollama produces it (`"stream":
+    True`) instead of blocking until the entire completion has landed.
+
+    Real motivation, not a nice-to-have: waiting for a full non-streamed
+    completion from an 8B model on ordinary hardware before showing
+    anything is genuinely slow, and it reads to the person waiting as
+    "did this hang?" rather than "this is working." Streaming doesn't
+    make the model faster, but it moves time-to-first-visible-text from
+    "the whole answer's generation time" down to roughly one token's
+    worth - see api/main.py's POST /ask/stream for the other half of
+    this (retrieved sources are sent to the client before generation
+    even starts, since retrieval is the fast part).
+
+    Ollama's own streaming /api/chat shape (same endpoint as the
+    non-streaming call above, just with stream: true instead of false):
+    one JSON object per line, each with a `message.content` delta and a
+    `done` flag that's only true on the final line - verified against
+    the same upstream contract generate_answer already relies on for the
+    non-streaming case, not guessed from scratch.
+    """
+    http = client or httpx.Client(base_url=base_url, timeout=timeout)
+    contract = CONTRACT_PATH.read_text()
+    user_prompt = build_user_prompt(question, passages, history=history)
+
+    try:
+        with http.stream(
+            "POST",
+            "/api/chat",
+            json={
+                "model": model,
+                "stream": True,
+                "messages": [
+                    {"role": "system", "content": contract},
+                    {"role": "user", "content": user_prompt},
+                ],
+            },
+        ) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                event = json.loads(line)
+                delta = event.get("message", {}).get("content", "")
+                if delta:
+                    yield delta
+                if event.get("done"):
+                    break
+    except httpx.ConnectError as e:
+        raise OllamaUnavailableError(
+            f"Cannot reach Ollama at {http.base_url}. Is it running? Try: ollama serve"
+        ) from e
+    except httpx.TimeoutException as e:
+        raise OllamaUnavailableError(
+            "Ollama took too long to respond (model cold-start can be slow "
+            "the first time) - try again."
+        ) from e
+    except httpx.HTTPStatusError as e:
+        raise OllamaError(f"Ollama returned an error generating the answer: {e}") from e
