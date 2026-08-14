@@ -546,6 +546,74 @@ the whole prior thread into retrieval and prompt history forever.
 `cli.py` stays single-turn — it's a one-shot process invocation with
 nowhere for conversation state to live between runs.
 
+## Error-handling audit — catching the rest of a real pattern
+
+Three real bugs this session (Ollama timeouts, `WhisperTranscriber.
+transcribe()`, and `get_config()` on an invalid `config/client.json`) all
+turned out to be the same shape: an exception that wasn't the one specific
+type a `try`/`except` was watching for propagated all the way up as an
+unhandled exception, producing an opaque 500 with a plain-text body -
+which a firm's staff (or a browser DevTools Network tab) would see as
+"nothing works," with no indication why. Once that pattern was visible
+across three unrelated bugs, it was worth auditing the rest of the API for
+the same gap deliberately, rather than waiting to hit each remaining one
+live:
+
+- **`POST /ingest`** only caught `FileNotFoundError`/`OllamaError` -
+  `core/ingest.py`'s `extract_document()` can raise `ValueError` for an
+  unsupported file type, and the real PDF/OCR libraries underneath it
+  (PyMuPDF on a corrupted PDF, `pytesseract` if the `tesseract-ocr` system
+  binary isn't installed - a real first-run gap, not hypothetical) can
+  raise their own exceptions. Now has a catch-all mapping anything
+  unexpected to a clean 500 with the real reason.
+- **`POST /ask`** and **`POST /ask/stream`** got the same catch-all
+  treatment, on top of their existing `OllamaError` handling - for the
+  streaming route specifically, an uncaught exception mid-generator used
+  to mean the ASGI response just cut off with no error event at all, the
+  worst version of this failure mode since the client has nothing to show.
+- **`POST /transcribe`** and **`POST /speak`** got a defensive catch-all
+  too, on top of `core/transcribe.py`'s/`core/speak.py`'s own error
+  mapping - belt-and-suspenders, not a substitute for fixing gaps at the
+  source.
+
+Every catch-all follows the same rule already established for
+`get_config()`: it comes *after* the specific, better-typed exception
+handlers, so a real `OllamaUnavailableError` still gets its clean 503 -
+the catch-all only ever fires for something genuinely unanticipated,
+turning it into a real error message instead of a swallowed bug. Covered
+by `tests/test_api.py` - each route gets a test with a fake
+embedder/generator/transcriber/synthesizer that raises a plain
+`RuntimeError` (deliberately not any of this project's own typed
+exceptions), confirming the catch-all - not the more specific handlers -
+is what's actually reachable and working.
+
+**`scripts/setup.sh`** also grew three checks directly motivated by real
+failures hit live on a real Mac this session, not hypothetical ones:
+- **Config validation** (step 3) runs the real `core.config.load_config()`
+  - not a separate, looser hand-rolled check - so a `config/client.json`
+  that's present but invalid gets caught with a clear, specific message
+  *before* the server is ever started, instead of surfacing later as an
+  opaque 500 discovered live in a browser's Network tab (which is exactly
+  how this class of bug was actually found this session).
+- **`tesseract-ocr` presence** (step 5) - a real system dependency for
+  scanned-document ingestion that nothing in `requirements.txt` pulls in,
+  easy to forget on a fresh machine.
+- **Port 8001 availability** (step 6) - directly motivated by an actual
+  multi-hour debugging session this project went through when an
+  unrelated program was already listening on port 8000, silently
+  intercepting every request with its own 404 page. Every symptom that
+  produced (missing case list, failed transcription, hands-free never
+  responding) looked exactly like a bug in this app until `lsof -i :8000`
+  identified the real cause. This check exists so the *next* occurrence of
+  that exact failure mode is caught in one line of setup output instead of
+  a long live debugging session.
+
+All three new setup.sh checks were verified by actually running the
+script both ways - once against a genuinely valid config (reports
+"valid"), once against a deliberately broken one (missing every required
+field except `firm_name`) confirming it prints the real Pydantic
+validation errors and a clear warning, not a silent pass.
+
 ## Repo layout note
 
 This directory is a sibling of `sanaku/` in the same repo — `sanaku/` is

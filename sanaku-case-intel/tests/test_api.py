@@ -221,6 +221,123 @@ def test_speak_returns_audio_bytes(client):
     assert r.content == StubSynthesizer().fixed_audio
 
 
+def test_ingest_wraps_unexpected_exception_as_clean_500(client, sample_case_fixtures):
+    # Real gap found by auditing for the same class of bug get_config()
+    # had: extract_document()/PyMuPDF/pytesseract can raise things that
+    # are neither FileNotFoundError nor OllamaError (an unsupported file
+    # type, a corrupted PDF, a missing tesseract-ocr system binary) -
+    # simulated here via an embedder whose embed_texts raises a plain
+    # RuntimeError, since any exception mid-ingest should be caught the
+    # same way regardless of which call inside it actually raised.
+    class _RaisingEmbedder:
+        def embed_texts(self, texts):
+            raise RuntimeError("simulated ingestion failure")
+
+        def embed_query(self, text):
+            raise RuntimeError("simulated ingestion failure")
+
+    app.dependency_overrides[get_embedder] = lambda: _RaisingEmbedder()
+    r = client.post(
+        "/ingest",
+        json={"case_id": "maria_delgado", "doc_paths": [str(sample_case_fixtures["medical_record"])]},
+    )
+    assert r.status_code == 500
+    assert "Ingestion failed" in r.json()["detail"]
+    assert "simulated ingestion failure" in r.json()["detail"]
+
+
+def test_ask_wraps_unexpected_exception_as_clean_500(client, sample_case_fixtures):
+    def _raising_generate(question, passages, model, **kwargs):
+        raise RuntimeError("simulated generation failure")
+
+    client.post(
+        "/ingest",
+        json={"case_id": "maria_delgado", "doc_paths": [str(sample_case_fixtures["medical_record"])]},
+    )
+    app.dependency_overrides[get_generator] = lambda: _raising_generate
+    r = client.post(
+        "/ask",
+        json={"case_id": "maria_delgado", "question": "What did the treating physician say about causation?"},
+    )
+    assert r.status_code == 500
+    assert "simulated generation failure" in r.json()["detail"]
+
+
+def test_ask_stream_wraps_unexpected_generation_exception_as_error_event(client, sample_case_fixtures):
+    def _raising_stream_generate(question, passages, model, **kwargs):
+        if False:
+            yield ""  # pragma: no cover - makes this a generator function
+        raise RuntimeError("simulated stream failure")
+
+    client.post(
+        "/ingest",
+        json={"case_id": "maria_delgado", "doc_paths": [str(sample_case_fixtures["medical_record"])]},
+    )
+    app.dependency_overrides[get_stream_generator] = lambda: _raising_stream_generate
+    r = client.post(
+        "/ask/stream",
+        json={"case_id": "maria_delgado", "question": "What did the treating physician say about causation?"},
+    )
+    assert r.status_code == 200
+    events = _parse_ndjson(r.text)
+    assert events[0]["type"] == "sources"
+    assert events[-1]["type"] == "error"
+    assert "simulated stream failure" in events[-1]["detail"]
+
+
+def test_ask_stream_wraps_unexpected_retrieval_exception_as_error_event(client, sample_case_fixtures):
+    # A never-ingested case short-circuits retrieve_passages before it
+    # ever calls embed_query (store.count() == 0 returns [] early) - so
+    # this needs a case with real chunks already stored, to actually
+    # exercise the embed_query call path this is testing.
+    client.post(
+        "/ingest",
+        json={"case_id": "maria_delgado", "doc_paths": [str(sample_case_fixtures["medical_record"])]},
+    )
+
+    class _RaisingEmbedder:
+        def embed_texts(self, texts):
+            return []
+
+        def embed_query(self, text):
+            raise RuntimeError("simulated retrieval failure")
+
+    app.dependency_overrides[get_embedder] = lambda: _RaisingEmbedder()
+    r = client.post(
+        "/ask/stream",
+        json={"case_id": "maria_delgado", "question": "What did the treating physician say about causation?"},
+    )
+    assert r.status_code == 200
+    events = _parse_ndjson(r.text)
+    assert events[0]["type"] == "error"
+    assert "simulated retrieval failure" in events[0]["detail"]
+
+
+def test_transcribe_wraps_unexpected_exception_as_clean_500(client):
+    class _RaisingTranscriber:
+        def transcribe(self, audio_bytes):
+            raise RuntimeError("simulated transcription failure")
+
+    app.dependency_overrides[get_transcriber] = lambda: _RaisingTranscriber()
+    r = client.post(
+        "/transcribe",
+        files={"audio": ("clip.webm", b"fake-audio-bytes-not-real-audio", "audio/webm")},
+    )
+    assert r.status_code == 500
+    assert "simulated transcription failure" in r.json()["detail"]
+
+
+def test_speak_wraps_unexpected_exception_as_clean_500(client):
+    class _RaisingSynthesizer:
+        def synthesize(self, text):
+            raise RuntimeError("simulated synthesis failure")
+
+    app.dependency_overrides[get_synthesizer] = lambda: _RaisingSynthesizer()
+    r = client.post("/speak", json={"text": "hello"})
+    assert r.status_code == 500
+    assert "simulated synthesis failure" in r.json()["detail"]
+
+
 def test_ask_accepts_conversation_history(client, sample_case_fixtures):
     client.post(
         "/ingest",

@@ -242,6 +242,20 @@ def ingest(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except OllamaError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        # Same class of gap as get_config()'s fix above, found by auditing
+        # for it rather than hitting it live this time: extract_document()
+        # can raise ValueError for an unsupported file type, and the real
+        # PDF/OCR libraries underneath it (PyMuPDF on a corrupted PDF,
+        # pytesseract if the tesseract-ocr system binary isn't installed -
+        # a real first-run gap on a fresh machine, not hypothetical) can
+        # raise their own exceptions that aren't FileNotFoundError or
+        # OllamaError. A catch-all here specifically (not on every route)
+        # is warranted: ingestion is the one place this app processes
+        # arbitrary, unpredictable input files from the filesystem, so
+        # "something about this document failed, here's why" is genuinely
+        # useful, not a swallowed bug.
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}") from e
 
 
 @app.post("/ask")
@@ -258,6 +272,12 @@ def ask(
         )
     except OllamaError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        # Defensive net, same reasoning as /ingest's - anything genuinely
+        # unanticipated (a malformed stored chunk, a chromadb hiccup)
+        # becomes a clean 500 with the real reason instead of an opaque
+        # crash a firm's staff would have no way to explain to anyone.
+        raise HTTPException(status_code=500, detail=f"Something went wrong answering that: {e}") from e
     return {"answer": result.answer, "sources": [asdict(s) for s in result.sources]}
 
 
@@ -309,6 +329,15 @@ def ask_stream(
         except OllamaError as e:
             yield json.dumps({"type": "error", "detail": str(e)}) + "\n"
             return
+        except Exception as e:
+            # Same defensive net as /ask and /ingest, applied here too -
+            # without this, anything other than OllamaError during
+            # retrieval would propagate out of this generator and the
+            # ASGI response would just cut off mid-stream with no
+            # explanation, the worst version of this failure mode since
+            # there's no error event at all for the client to show.
+            yield json.dumps({"type": "error", "detail": f"Something went wrong answering that: {e}"}) + "\n"
+            return
 
         yield json.dumps({"type": "sources", "sources": [asdict(s) for s in passages]}) + "\n"
 
@@ -321,6 +350,9 @@ def ask_stream(
                 yield json.dumps({"type": "delta", "text": delta}) + "\n"
         except OllamaError as e:
             yield json.dumps({"type": "error", "detail": str(e)}) + "\n"
+            return
+        except Exception as e:
+            yield json.dumps({"type": "error", "detail": f"Something went wrong generating that: {e}"}) + "\n"
             return
 
         yield json.dumps({"type": "done", "answer": "".join(full_answer_parts)}) + "\n"
@@ -342,6 +374,12 @@ async def transcribe(
         text = transcriber.transcribe(audio_bytes)
     except TranscriptionError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        # Defense in depth on top of core/transcribe.py's own wrapping
+        # (see its docstring) - belt-and-suspenders, not a substitute for
+        # fixing the real gap at the source, same pattern as every other
+        # catch-all added in this pass.
+        raise HTTPException(status_code=500, detail=f"Could not transcribe that: {e}") from e
     return {"text": text}
 
 
@@ -362,4 +400,6 @@ def speak(
         audio_bytes = synthesizer.synthesize(req.text)
     except SynthesisError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not read this answer aloud: {e}") from e
     return Response(content=audio_bytes, media_type="audio/wav")
