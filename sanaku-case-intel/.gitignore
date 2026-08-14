@@ -10,10 +10,19 @@ data/
 # Dev-only virtualenv used to install requirements.txt + requirements-dev.txt.
 .venv-dev/
 
-# scripts/dev.sh's log files for the API/UI servers it starts.
+# scripts/dev.sh's log files for the API/UI/voice servers it starts.
 .dev-api.log
 .dev-ui.log
+.dev-piper.log
 
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# scripts/package-release.sh's output — rebuilt on demand, not a source file.
+dist/
+
+# scripts/new-client.sh backs up a pre-existing config/client.json here
+# before overwriting it — never a source file, and per-firm like the
+# thing it's a backup of.
+config/client.json.bak-*
