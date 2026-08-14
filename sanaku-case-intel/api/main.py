@@ -11,7 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -23,6 +23,7 @@ from core.generate import AnswerResult, generate_answer
 from core.ingest import extract_document
 from core.retrieve import retrieve_passages
 from core.store import CaseStore
+from core.transcribe import Transcriber, TranscriptionError, WhisperTranscriber
 
 app = FastAPI(title="Sanaku Case-Intel API")
 
@@ -66,6 +67,13 @@ def get_generator():
     """Returns the real Ollama-backed generate_answer by default. Tests
     override this dependency with a fake via app.dependency_overrides."""
     return generate_answer
+
+
+def get_transcriber() -> Transcriber:
+    """Returns the real local Whisper-backed transcriber by default. Tests
+    override this dependency with tests/stub_transcriber.py's fake via
+    app.dependency_overrides, same pattern as get_embedder/get_generator."""
+    return WhisperTranscriber()
 
 
 # ---- shared orchestration (also used directly by cli.py, no HTTP needed) --
@@ -201,3 +209,20 @@ def ask(
     except OllamaError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     return {"answer": result.answer, "sources": [asdict(s) for s in result.sources]}
+
+
+@app.post("/transcribe")
+async def transcribe(
+    audio: UploadFile,
+    transcriber: Transcriber = Depends(get_transcriber),
+):
+    """Speech-to-text for the web UI's mic button - runs entirely locally
+    via core/transcribe.py's Whisper model, never a cloud API. Returns the
+    transcribed text for the browser to drop into the question box; it
+    does not itself ask a question, the user still reviews and submits."""
+    audio_bytes = await audio.read()
+    try:
+        text = transcriber.transcribe(audio_bytes)
+    except TranscriptionError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    return {"text": text}

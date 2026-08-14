@@ -1,0 +1,9 @@
+# Optional voice-input dependencies — not installed by scripts/setup.sh by
+# default, since not every install needs voice. Install with:
+#   pip install -r requirements-voice.txt
+# Requires macOS 14 (Sonoma) or newer — onnxruntime (a faster-whisper
+# dependency) only ships wheels for macosx_14_0_arm64 as of this writing.
+# Verified against PyPI directly before pinning, not guessed: ctranslate2
+# 4.8.1 (faster-whisper's own dependency) ships real macosx_11_0_arm64
+# wheels through cp314; onnxruntime is the one with the higher macOS floor.
+faster-whisper==1.2.1

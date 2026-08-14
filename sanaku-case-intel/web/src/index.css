@@ -189,6 +189,74 @@ body {
   border-color: transparent;
 }
 
+.question-input:disabled {
+  background: var(--primary-soft);
+  color: var(--ink-soft);
+}
+
+.mic-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.mic-button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--primary-soft);
+}
+
+.mic-button:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.mic-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mic-button.is-recording {
+  background: #a12622;
+  border-color: #a12622;
+  color: #fff;
+}
+
+.voice-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.mic-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #a12622;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mic-dot {
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .ask-button {
   display: inline-flex;
   align-items: center;
@@ -264,6 +332,7 @@ body {
 .answer-toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: var(--space-3);
   margin-top: var(--space-7);
 }
 
@@ -271,7 +340,8 @@ body {
   margin-top: var(--space-3);
 }
 
-.print-button {
+.print-button,
+.voice-button {
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
@@ -283,14 +353,22 @@ body {
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
-.print-button:hover {
+.print-button:hover,
+.voice-button:hover {
   border-color: var(--color-primary);
   background: var(--primary-soft);
 }
 
-.print-button:focus-visible {
+.print-button:focus-visible,
+.voice-button:focus-visible {
   outline: 2px solid var(--color-secondary);
   outline-offset: 2px;
+}
+
+.voice-button.is-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
 }
 
 /* Empty state - shown before any question has been asked. Describes only

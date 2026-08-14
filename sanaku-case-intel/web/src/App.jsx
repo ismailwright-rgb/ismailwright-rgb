@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 // This file is the entire client-facing surface. Per the project's white-
 // label guardrail: no vendor name, no model name, no mention of retrieval/
@@ -26,6 +26,28 @@ function initials(name) {
     .map((w) => w[0])
     .join('')
     .toUpperCase();
+}
+
+/** Small inline icons - not emoji, to match the rest of this app's
+ * restrained visual language, and not an icon library (no new
+ * dependency for two shapes). currentColor so they inherit whatever
+ * button state they're drawn in. */
+function MicIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor" />
+      <path d="M5 11a7 7 0 0 0 14 0" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+      <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" />
+    </svg>
+  );
 }
 
 /** Very small formatter for the answer text: blocks separated by a blank
@@ -99,6 +121,14 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [printExpand, setPrintExpand] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  const micSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+  const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
   // Printing needs every source card expanded first (so the printed page
   // has the full passage text, not just collapsed toggles) - flip every
@@ -136,6 +166,13 @@ export default function App() {
         if (list.length === 1) setCaseId(list[0]);
       })
       .catch(() => {});
+
+    // Some browsers return an empty voice list until this fires once -
+    // warm the cache early so speakAnswer() has real voices to filter by
+    // the first time someone clicks "Listen to this answer".
+    if (speechSupported) {
+      window.speechSynthesis.getVoices();
+    }
   }, []);
 
   const canAsk = useMemo(() => caseId.trim() && question.trim() && !loading, [caseId, question, loading]);
@@ -143,6 +180,10 @@ export default function App() {
   async function handleAsk(e) {
     e.preventDefault();
     if (!canAsk) return;
+    if (speechSupported) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+    }
     setLoading(true);
     setError(null);
     setAnswer(null);
@@ -160,6 +201,89 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Click to start recording, click again to stop - transcription runs
+  // entirely on this project's own /transcribe endpoint (a local model,
+  // see core/transcribe.py), never the browser's built-in speech
+  // recognition, which on Chrome typically sends audio to Google's
+  // servers. The transcribed text fills the question box; it does not
+  // submit on its own - a misheard word silently becoming the actual
+  // question is the wrong failure mode for legal software.
+  async function handleMicClick() {
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    setError(null);
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError('Microphone access was blocked or unavailable.');
+      return;
+    }
+
+    const recorder = new MediaRecorder(stream);
+    audioChunksRef.current = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      setRecording(false);
+      setTranscribing(true);
+      try {
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const form = new FormData();
+        form.append('audio', blob, 'clip.webm');
+        const r = await fetch('/transcribe', { method: 'POST', body: form });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Could not transcribe that.');
+        setQuestion(data.text || '');
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setTranscribing(false);
+      }
+    };
+
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+    setRecording(true);
+  }
+
+  // Reads the answer aloud using an on-device voice only (localService
+  // === true) - never a network voice - so this stays consistent with the
+  // "nothing leaves the building" guarantee even though speechSynthesis
+  // itself isn't something this project controls the internals of.
+  function speakAnswer() {
+    if (!speechSupported || !answer) return;
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+    // Citation tokens like [doc.pdf, p.3] are fine to read on screen,
+    // tedious to hear spoken aloud on every sentence - strip them from
+    // what's spoken; they stay fully visible in the answer panel.
+    const spokenText = answer.answer.replace(/\[[^\]]+\]/g, '').replace(/[ \t]{2,}/g, ' ');
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    try {
+      const localVoices = window.speechSynthesis.getVoices().filter((v) => v.localService);
+      if (localVoices.length > 0) {
+        utterance.voice = localVoices.find((v) => v.lang?.startsWith('en')) || localVoices[0];
+      }
+    } catch {
+      // Picking a preferred voice is a nicety, not a requirement - if
+      // anything about voice selection fails, fall through and let
+      // speechSynthesis use its own default rather than not speaking at
+      // all.
+    }
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    setSpeaking(true);
+    window.speechSynthesis.speak(utterance);
   }
 
   return (
@@ -208,11 +332,25 @@ export default function App() {
           <div className="question-row">
             <input
               className="question-input"
-              placeholder="Ask a question about this case…"
+              placeholder={transcribing ? 'Transcribing…' : 'Ask a question about this case…'}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               aria-label="Question"
+              disabled={transcribing}
             />
+            {micSupported && (
+              <button
+                type="button"
+                className={`mic-button${recording ? ' is-recording' : ''}`}
+                onClick={handleMicClick}
+                disabled={transcribing}
+                aria-pressed={recording}
+                aria-label={recording ? 'Stop recording' : 'Ask by voice'}
+                title={recording ? 'Stop recording' : 'Ask by voice'}
+              >
+                {recording ? <StopIcon /> : <MicIcon />}
+              </button>
+            )}
             <button
               className={`ask-button${loading ? ' is-loading' : ''}`}
               type="submit"
@@ -221,6 +359,17 @@ export default function App() {
               {loading ? 'Asking…' : 'Ask'}
             </button>
           </div>
+          {(recording || transcribing) && (
+            <p className="voice-status" role="status">
+              {recording ? (
+                <>
+                  <span className="mic-dot" aria-hidden="true" /> Listening…
+                </>
+              ) : (
+                'Transcribing…'
+              )}
+            </p>
+          )}
         </form>
 
         {error && <div className="error-banner">{error}</div>}
@@ -252,6 +401,15 @@ export default function App() {
               <p className="print-question">Question: {question}</p>
             </div>
             <div className="answer-toolbar">
+              {speechSupported && (
+                <button
+                  type="button"
+                  className={`voice-button${speaking ? ' is-active' : ''}`}
+                  onClick={speakAnswer}
+                >
+                  {speaking ? 'Stop' : 'Listen to this answer'}
+                </button>
+              )}
               <button type="button" className="print-button" onClick={() => setPrintExpand(true)}>
                 Print this answer
               </button>

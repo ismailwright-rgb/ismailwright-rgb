@@ -1,11 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Proxies /theme, /cases, /ask, /branding-assets to the FastAPI backend
-// (api/main.py, port 8000 by default) during `npm run dev`, so the app
-// code always calls same-origin paths - no API base URL hardcoded into
-// the client bundle, and no CORS involved once this is built and served
-// for real.
+// Proxies /theme, /cases, /ask, /transcribe, /branding-assets to the
+// FastAPI backend (api/main.py, port 8000 by default) during `npm run
+// dev`, so the app code always calls same-origin paths - no API base URL
+// hardcoded into the client bundle, and no CORS involved once this is
+// built and served for real.
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -13,6 +13,7 @@ export default defineConfig({
       '/theme': 'http://localhost:8000',
       '/cases': 'http://localhost:8000',
       '/ask': 'http://localhost:8000',
+      '/transcribe': 'http://localhost:8000',
       '/branding-assets': 'http://localhost:8000',
     },
   },

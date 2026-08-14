@@ -24,10 +24,20 @@ of any client-facing surface.
   doc + page, each expandable to the actual passage text. Themed entirely
   from `config/client.json` — no code touched to reskin it, see Phase 4
   verification below for how that was actually proven, not just claimed.
+  Since extended past the initial build with a design-token/visual pass
+  (derived neutrals via `color-mix()`, empty/loading states, a header
+  logo-monogram fallback), a print feature (a formatted, court-ready
+  answer + citations document via the browser's print dialog), and voice
+  input/output (see "Voice" below) — all still Phase 4 surface, no new
+  config schema.
 
-**Stopped after Phase 4**, per the master prompt's own build order — Phases
-5–9 (paralegal manual-entry, hardware licensing/encryption, voice, archive,
-packaging) are not built.
+**Stopped after Phase 4's core build**, per the master prompt's own build
+order — Phases 5, 6, 8, 9 (paralegal manual-entry, hardware licensing/
+encryption, archive, packaging) are not built. Voice was pulled forward
+from Phase 7 ahead of that order at explicit request, scoped and verified
+the same way everything else here has been (see "Voice" below) rather
+than treated as an exception to the discipline the rest of this file
+documents.
 
 ## Why some choices differ slightly from what you'd get by following an
 ## older tutorial
@@ -152,8 +162,9 @@ npm run dev
 ```
 
 Open the printed `localhost:5173` URL, pick (or type) a case ID, ask a
-question. `vite.config.js` proxies `/theme`, `/cases`, `/ask`, and
-`/branding-assets` to port 8000 so the browser only ever talks same-origin.
+question. `vite.config.js` proxies `/theme`, `/cases`, `/ask`,
+`/transcribe`, and `/branding-assets` to port 8000 so the browser only
+ever talks same-origin.
 
 Dev-only stub run (no Ollama needed, what was actually used to verify this
 phase in this sandbox):
@@ -166,6 +177,51 @@ PYTHONPATH=. python3 scripts/dev_server_stub.py   # instead of uvicorn, terminal
 excludes `gen_model`/`embed_model`/`tier`/`data_root`/`license_path`. That
 split is what enforces the white-label guardrail structurally: the UI
 can't leak a model name or architecture detail it was never given.
+
+## Voice — ask by mic, listen to the answer
+
+Two independent, deliberately different-shaped pieces, not one feature:
+
+- **Listening (speech → text)** runs entirely locally via
+  `core/transcribe.py`'s `WhisperTranscriber` (faster-whisper), exposed as
+  `POST /transcribe`. This is a real local model, not the browser's
+  built-in `SpeechRecognition` — on Chrome that typically round-trips
+  audio through Google's servers, which would violate guardrail #1 the
+  same way `tiktoken`'s network fetch would have.
+- **Speaking (text → voice)** is client-side only, via
+  `window.speechSynthesis`, filtered to `voice.localService === true`
+  before picking one — guarantees an on-device voice, no server round
+  trip, and needed zero new dependency.
+
+**Optional dependency, not installed by default:**
+
+```bash
+pip install -r requirements-voice.txt   # faster-whisper
+```
+
+Requires **macOS 14 (Sonoma) or newer** — `onnxruntime` (a faster-whisper
+dependency) only ships wheels for `macosx_14_0_arm64` as of this writing;
+confirmed directly against PyPI, not assumed. `python-multipart` (needed
+for `/transcribe`'s multipart upload) is in the *base* `requirements.txt`
+instead — FastAPI inspects `UploadFile` parameters at route-registration
+time, not just per-request, so the app won't even start without it,
+regardless of whether voice is actually used.
+
+The whisper model itself downloads once from Hugging Face on first real
+`/transcribe` call (same one-time-pull shape as `ollama pull` for the
+gen/embed models) — needs internet access on setup, not at every use.
+
+**What was actually verified in this sandbox** (no microphone, no audio
+hardware here, same constraint that applied to live Ollama generation):
+`scripts/dev_server_stub.py` also overrides `get_transcriber` with
+`tests/stub_transcriber.py`, so the whole request/response contract and
+the UI's mic → upload → fill-question-box flow were proven end-to-end
+with Playwright, using Chromium's fake-media-device flags to simulate a
+microphone. What that *cannot* prove: real transcription accuracy against
+a real spoken legal question, and that the on-device voice is actually
+audible and actually local on your Mac — both need to be confirmed for
+real, the same as semantic embedding quality and live cited-answer output
+were in Phase 2/3.
 
 ## Repo layout note
 

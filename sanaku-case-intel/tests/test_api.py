@@ -3,10 +3,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from api.main import app, get_config, get_embedder, get_generator
+from api.main import app, get_config, get_embedder, get_generator, get_transcriber
 from core.config import ClientConfig, Colors
 from core.generate import AnswerResult
 from tests.stub_embedder import StubEmbedder
+from tests.stub_transcriber import StubTranscriber
 
 
 def _test_config(data_root: Path) -> ClientConfig:
@@ -36,6 +37,7 @@ def client(tmp_data_root):
     app.dependency_overrides[get_config] = lambda: config
     app.dependency_overrides[get_embedder] = lambda: StubEmbedder()
     app.dependency_overrides[get_generator] = lambda: _fake_generate
+    app.dependency_overrides[get_transcriber] = lambda: StubTranscriber()
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -85,3 +87,13 @@ def test_ask_on_empty_case_returns_empty_sources(client):
     r = client.post("/ask", json={"case_id": "never_ingested", "question": "anything?"})
     assert r.status_code == 200
     assert r.json()["sources"] == []
+
+
+def test_transcribe_returns_text_from_uploaded_audio(client):
+    r = client.post(
+        "/transcribe",
+        files={"audio": ("clip.webm", b"fake-audio-bytes-not-real-audio", "audio/webm")},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["text"] == "What did the treating physician say about causation?"
