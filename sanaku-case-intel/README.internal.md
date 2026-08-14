@@ -4,6 +4,14 @@ Internal ops/dev documentation. **Not shipped to any client** — this file,
 like everything under `core/` and `prompts/`, is proprietary and stays out
 of any client-facing surface.
 
+**Customer-facing documentation lives in `docs/`, not here:**
+[`docs/installation-guide.md`](docs/installation-guide.md) (for whoever
+installs it — names real components, since that's operationally
+necessary) and [`docs/user-guide.md`](docs/user-guide.md) (for attorneys
+and paralegals — strictly white-label, no vendor/model/architecture
+language, matches this project's own guardrail). Keep both in sync with
+this file's own build notes when a client-visible feature changes.
+
 ## What's built (Phases 0–3, per the build order in the master prompt)
 
 - **Phase 0** — scaffold, `core/config.py` (per-client config loader),
