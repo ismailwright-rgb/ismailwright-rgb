@@ -338,6 +338,102 @@ def test_speak_wraps_unexpected_exception_as_clean_500(client):
     assert "simulated synthesis failure" in r.json()["detail"]
 
 
+def test_manual_entry_becomes_a_citable_retrievable_source(client, sample_case_fixtures):
+    client.post(
+        "/ingest",
+        json={"case_id": "maria_delgado", "doc_paths": [str(sample_case_fixtures["medical_record"])]},
+    )
+    r = client.post(
+        "/manual-entries",
+        json={
+            "case_id": "maria_delgado",
+            "text": "Client confirmed by phone she had no prior lower-back injury before the collision.",
+            "doc_name": "Phone call with client, 3/10/2024",
+            "event_date": "2024-03-10",
+            "date_confidence": "exact",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["case_id"] == "maria_delgado"
+    assert body["doc_name"] == "Phone call with client, 3/10/2024"
+    assert body["doc_id"].startswith("manual-")
+
+    # The medical record has 4 chunks; with this one manual entry that's 5
+    # total against the default top_k=8, so every chunk (including this
+    # one) comes back regardless of the stub embedder's non-semantic
+    # vectors - real semantic ranking is a live-Ollama-only property,
+    # covered elsewhere in this project's own verification notes.
+    r = client.post(
+        "/ask",
+        json={"case_id": "maria_delgado", "question": "What did the treating physician say about causation?"},
+    )
+    assert r.status_code == 200
+    sources = r.json()["sources"]
+    manual_sources = [s for s in sources if s["doc_id"].startswith("manual-")]
+    assert len(manual_sources) == 1
+    entry = manual_sources[0]
+    assert entry["doc_name"] == "Phone call with client, 3/10/2024"
+    assert entry["source_type"] == "manual"
+    assert entry["human_entered"] is True
+    assert entry["date_confidence"] == "exact"
+    assert entry["event_date"] == "2024-03-10"
+
+
+def test_manual_entry_on_a_brand_new_case_makes_it_listable(client):
+    r = client.get("/cases")
+    assert "brand_new_case" not in r.json()["cases"]
+
+    r = client.post(
+        "/manual-entries",
+        json={
+            "case_id": "brand_new_case",
+            "text": "Intake call summary: new client, potential premises-liability claim.",
+            "doc_name": "Intake call, 1/5/2024",
+        },
+    )
+    assert r.status_code == 200
+
+    # No documents/ folder existed for this case before the manual entry -
+    # GET /cases only lists case_ids with that folder present, so without
+    # add_manual_entry creating it, this case would never show up at all.
+    r = client.get("/cases")
+    assert "brand_new_case" in r.json()["cases"]
+
+
+def test_manual_entry_normalizes_date_confidence_when_no_date_given(client):
+    r = client.post(
+        "/manual-entries",
+        json={
+            "case_id": "maria_delgado",
+            "text": "A fact with no known date attached.",
+            "doc_name": "Undated staff note",
+            "date_confidence": "exact",  # nonsensical without event_date - should be normalized
+        },
+    )
+    assert r.status_code == 200
+    r = client.post("/ask", json={"case_id": "maria_delgado", "question": "anything?"})
+    entry = next(s for s in r.json()["sources"] if s["doc_id"].startswith("manual-"))
+    assert entry["date_confidence"] == "undated"
+    assert entry["event_date"] is None
+
+
+def test_manual_entry_rejects_blank_text(client):
+    r = client.post(
+        "/manual-entries",
+        json={"case_id": "maria_delgado", "text": "   ", "doc_name": "A label"},
+    )
+    assert r.status_code == 400
+
+
+def test_manual_entry_rejects_blank_label(client):
+    r = client.post(
+        "/manual-entries",
+        json={"case_id": "maria_delgado", "text": "Some real text.", "doc_name": "   "},
+    )
+    assert r.status_code == 400
+
+
 def test_ask_accepts_conversation_history(client, sample_case_fixtures):
     client.post(
         "/ingest",

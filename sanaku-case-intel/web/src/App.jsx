@@ -400,6 +400,19 @@ export default function App() {
   // off by default (an explicit choice, not always-on), see the
   // WAKE_PHRASE block above for the full design reasoning.
   const [listeningMode, setListeningMode] = useState(false);
+  // Phase 5, "paralegal manual-entry": a small collapsible form for a
+  // staff-known fact that isn't in any ingested document (a phone call
+  // summary, a correction) - saved via POST /manual-entries as its own
+  // citable source, same as any ingested passage. Deliberately separate
+  // state from the ask-form above it - this isn't a question, it doesn't
+  // touch `turns`/`loading`/streaming at all.
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualLabel, setManualLabel] = useState('');
+  const [manualText, setManualText] = useState('');
+  const [manualEventDate, setManualEventDate] = useState('');
+  const [manualDateConfidence, setManualDateConfidence] = useState('exact');
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualSuccess, setManualSuccess] = useState(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioRef = useRef(null);
@@ -611,6 +624,48 @@ export default function App() {
       setLoading(false);
       setPendingQuestion(null);
       if (streamAbortRef.current === abortController) streamAbortRef.current = null;
+    }
+  }
+
+  // Phase 5: saves a staff-known fact as its own citable source via
+  // POST /manual-entries - see api/main.py's add_manual_entry for the
+  // full reasoning. The confidence field only matters when a date was
+  // actually given (an "exact" or "approximate" confidence with no date
+  // at all is a nonsensical combination) - enforced here client-side by
+  // disabling that field until a date is entered, and enforced again
+  // server-side (silently normalized, not rejected) for any other future
+  // caller that skips this same form.
+  async function handleManualEntrySubmit(e) {
+    e.preventDefault();
+    const label = manualLabel.trim();
+    const text = manualText.trim();
+    if (!caseId.trim() || !label || !text) return;
+    setManualSaving(true);
+    setError(null);
+    setManualSuccess(null);
+    try {
+      const r = await fetch('/manual-entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          case_id: caseId.trim(),
+          text,
+          doc_name: label,
+          event_date: manualEventDate || null,
+          date_confidence: manualEventDate ? manualDateConfidence : 'undated',
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || 'Could not save that note.');
+      setManualLabel('');
+      setManualText('');
+      setManualEventDate('');
+      setManualDateConfidence('exact');
+      setManualSuccess('Note saved. It will be available as a source for future questions.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setManualSaving(false);
     }
   }
 
@@ -1017,6 +1072,81 @@ export default function App() {
             </p>
           )}
         </form>
+
+        {caseId.trim() && (
+          <div className="manual-entry-section">
+            <button
+              type="button"
+              className="manual-entry-toggle"
+              onClick={() => {
+                setShowManualEntry((v) => !v);
+                setManualSuccess(null);
+              }}
+              aria-expanded={showManualEntry}
+            >
+              {showManualEntry ? 'Cancel' : '+ Add a note'}
+            </button>
+            {showManualEntry && (
+              <form className="manual-entry-form" onSubmit={handleManualEntrySubmit}>
+                <label className="manual-entry-field">
+                  <span>Label</span>
+                  <input
+                    type="text"
+                    className="manual-entry-input"
+                    value={manualLabel}
+                    onChange={(e) => setManualLabel(e.target.value)}
+                    placeholder="e.g. Phone call with client, 3/10/2024"
+                    required
+                  />
+                </label>
+                <label className="manual-entry-field">
+                  <span>Note</span>
+                  <textarea
+                    className="manual-entry-input manual-entry-textarea"
+                    value={manualText}
+                    onChange={(e) => setManualText(e.target.value)}
+                    placeholder="What was said or confirmed…"
+                    rows={3}
+                    required
+                  />
+                </label>
+                <div className="manual-entry-date-row">
+                  <label className="manual-entry-field">
+                    <span>Date (optional)</span>
+                    <input
+                      type="date"
+                      className="manual-entry-input"
+                      value={manualEventDate}
+                      onChange={(e) => setManualEventDate(e.target.value)}
+                    />
+                  </label>
+                  <label className="manual-entry-field">
+                    <span>Confidence</span>
+                    <select
+                      className="manual-entry-input"
+                      value={manualDateConfidence}
+                      onChange={(e) => setManualDateConfidence(e.target.value)}
+                      disabled={!manualEventDate}
+                    >
+                      <option value="exact">Exact</option>
+                      <option value="approximate">Approximate</option>
+                    </select>
+                  </label>
+                </div>
+                <button
+                  type="submit"
+                  className="manual-entry-submit"
+                  disabled={manualSaving || !manualLabel.trim() || !manualText.trim()}
+                >
+                  {manualSaving ? 'Saving…' : 'Save note'}
+                </button>
+                {manualSuccess && (
+                  <p className="manual-entry-success" role="status">{manualSuccess}</p>
+                )}
+              </form>
+            )}
+          </div>
+        )}
 
         {error && <div className="error-banner">{error}</div>}
 

@@ -480,6 +480,127 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* Phase 5, "paralegal manual-entry" - a small collapsible form beneath
+   the ask-form for a staff-known fact that isn't in any ingested
+   document. Deliberately quieter than .ask-form (no card border/shadow
+   of its own until expanded) so it reads as a secondary, occasional
+   action, not a second primary input competing with the question box
+   above it. */
+.manual-entry-section {
+  margin-top: var(--space-3);
+}
+
+.manual-entry-toggle {
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.manual-entry-toggle:hover {
+  border-color: var(--color-primary);
+  color: var(--ink);
+}
+
+.manual-entry-toggle:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.manual-entry-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-5);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.manual-entry-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.manual-entry-date-row {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.manual-entry-date-row .manual-entry-field {
+  flex: 1;
+}
+
+.manual-entry-input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.manual-entry-input:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+  border-color: transparent;
+}
+
+.manual-entry-input:disabled {
+  background: var(--primary-soft);
+  color: var(--ink-soft);
+}
+
+.manual-entry-textarea {
+  resize: vertical;
+  min-height: 4.5em;
+}
+
+.manual-entry-submit {
+  align-self: flex-start;
+  padding: var(--space-2) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.manual-entry-submit:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.manual-entry-submit:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.manual-entry-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.manual-entry-success {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
 .error-banner {
   margin-top: var(--space-5);
   padding: var(--space-3) var(--space-4);
@@ -933,7 +1054,8 @@ body {
   .handsfree-toggle,
   .handsfree-banner,
   .theme-toggle,
-  .generating-indicator {
+  .generating-indicator,
+  .manual-entry-section {
     display: none;
   }
 

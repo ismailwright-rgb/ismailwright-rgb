@@ -38,13 +38,24 @@ of any client-facing surface.
   below) — all still Phase 4 surface, no new
   config schema.
 
-**Stopped after Phase 4's core build**, per the master prompt's own build
-order — Phases 5, 6, 8, 9 (paralegal manual-entry, hardware licensing/
-encryption, archive, packaging) are not built. Voice was pulled forward
-from Phase 7 ahead of that order at explicit request, scoped and verified
-the same way everything else here has been (see "Voice" below) rather
-than treated as an exception to the discipline the rest of this file
-documents.
+- **Phase 5** — paralegal manual-entry. `api/main.py`'s `add_manual_entry`
+  + `POST /manual-entries`, `cli.py manual-entry`, and a small collapsible
+  form in the web UI (below the ask-form, only shown once a case is
+  selected — see "Manual entry" below). Lets staff add a fact/note that
+  isn't in any ingested document (a phone call summary, a correction) as
+  its own citable source, stored and retrieved through the exact same
+  `CaseStore`/citation path every ingested passage already goes through —
+  not a bolted-on second-class mechanism. The schema for this
+  (`source_type="manual"`, `human_entered`/`date_confidence` fields) has
+  been in `core/chunk.py` since Phase 1, deliberately put in place before
+  this phase was built rather than added now to make it fit.
+
+**Stopped after Phase 5**, per the master prompt's own build order —
+Phases 6, 8, 9 (hardware licensing/encryption, archive, packaging) are not
+built. Voice was pulled forward from Phase 7 ahead of that order at
+explicit request, scoped and verified the same way everything else here
+has been (see "Voice" below) rather than treated as an exception to the
+discipline the rest of this file documents.
 
 ## Why some choices differ slightly from what you'd get by following an
 ## older tutorial
@@ -428,6 +439,75 @@ toggle reads "Hands-free is on," and a separate sticky banner (using
 alike) stays visible under the header with its own always-reachable
 "Turn off" button — a second kill switch beyond the header toggle,
 warranted given the privacy stakes.
+
+## Manual entry — Phase 5, "a fact staff know that isn't in any document"
+
+`POST /manual-entries` (`{case_id, text, doc_name, event_date, date_confidence}`)
+stores a staff-typed fact/note as its own `Chunk` with `source_type=
+"manual"` and `human_entered=True`, embeds it, and upserts it into that
+case's `CaseStore` — the exact same storage/retrieval path an ingested
+document's chunks go through. It shows up in a later question's `sources`
+list like any other passage, with the source panel's existing "Human-
+entered note" badge (and "Undated"/"Approximate date" alongside it, if
+applicable) — none of that UI had to change, it already handled a
+`human_entered` chunk correctly since Phase 4.
+
+`doc_name` here is a short, staff-written label — what actually appears in
+the citation (e.g. `[Phone call with client, 3/10/2024, p.1]`) — not a
+filename. `page` is fixed at `1` for every manual entry (there's no real
+pagination for a note); safe because each entry gets its own fresh
+`doc_id` (`manual-<uuid>`), so `CaseStore`'s id scheme never collides
+across different manual entries in the same case.
+
+**Not re-chunked.** `chunk_pages` (used for ingested documents) splits
+long text into ~650-token pieces with overlap; a manual entry is stored as
+a single chunk, whole. Manual entries are meant to be short, staff-typed
+facts, not full documents — an entry long enough to actually need
+splitting is arguably not what this feature is for. A real scoping line,
+not an oversight, the same way `core/chunk.py`'s own docstring already
+flags date-extraction as out of scope for ingestion.
+
+**`date_confidence` only means something if there's a date.** An "exact"
+or "approximate" confidence with no `event_date` at all is a nonsensical
+combination — the web UI's form disables the confidence field until a
+date is entered, and the API silently normalizes to `"undated"` server-
+side too (not rejected — `POST /manual-entries` isn't the only caller;
+`cli.py manual-entry` goes through the same normalization), so this can't
+happen regardless of which caller skips the UI-level guard.
+
+**Answer contract, unchanged.** Rule 3 in `prompts/answer_contract.txt`
+(the model must flag `human_entered`/`date_confidence` content in the
+sentence using it, never present it as an established hard fact) already
+applied to any `human_entered` chunk — a manual entry doesn't need its own
+new rule, it's covered by the same one that already governs a paralegal's
+handwritten-note-turned-digital-chunk from Phase 1's original schema.
+
+**A manual entry can create a case.** If the very first thing added to a
+brand-new case is a manual entry (no documents ingested yet),
+`add_manual_entry` creates that case's `documents/` directory itself —
+without that, `GET /cases` (which only lists case ids with a `documents/`
+folder present) would never list a manual-entry-only case at all.
+
+**Web UI**: a small collapsible "+ Add a note" section below the ask-form,
+shown only once a case is selected — deliberately quieter than the
+ask-form itself (a dashed-border toggle, not a second prominent input) so
+it reads as a secondary, occasional action. Label, note text, an optional
+date, and a confidence selector (disabled until a date is entered) —
+submitting clears the form and shows a brief confirmation; the note is
+usable as a source on the very next question, no separate "re-index" step.
+
+**Verified**: `tests/test_api.py` covers the full round trip (a manual
+entry added, then confirmed present — with correct `source_type`,
+`human_entered`, `date_confidence`, `event_date` — in a subsequent `/ask`
+call's sources), the brand-new-case-becomes-listable behavior, the
+no-date-forces-undated normalization, and both validation rejections
+(blank text, blank label). Playwright confirms the same end to end
+through the real UI against the dev stub: the toggle only appears once a
+case is selected, the confidence field's enable/disable state tracks the
+date field, the request payload is shaped correctly, the form clears and
+shows a success message, and — the property that actually matters — a
+saved note shows up as a real, badged source on the very next question
+asked through the same UI.
 
 ## Streaming answers — POST /ask/stream
 

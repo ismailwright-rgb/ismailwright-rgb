@@ -8,8 +8,10 @@ this file special-cases "am I under test".
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import asdict
 from pathlib import Path
+from typing import Literal
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile
@@ -18,7 +20,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from core.chunk import chunk_pages
+from core.chunk import Chunk, chunk_pages
 from core.config import ClientConfig, load_config
 from core.embed import DEFAULT_OLLAMA_URL, EmbeddingFunction, OllamaEmbedder, OllamaError
 from core.generate import AnswerResult, generate_answer, stream_answer
@@ -142,6 +144,81 @@ def ingest_case_documents(
     return {"case_id": case_id, "documents_ingested": len(doc_paths), "chunks_stored": total_chunks}
 
 
+def add_manual_entry(
+    case_id: str,
+    config: ClientConfig,
+    embedder: EmbeddingFunction,
+    text: str,
+    doc_name: str,
+    event_date: str | None = None,
+    date_confidence: str = "undated",
+) -> dict:
+    """Phase 5 of the master spec, "paralegal manual-entry": a fact staff
+    know but that doesn't exist in any ingested document (a phone call
+    summary, a correction, a date confirmed by phone) needs to be usable -
+    and citable - the same way an ingested document's text is, not a
+    second-class source bolted on separately. Storing it as its own Chunk
+    with source_type="manual" and human_entered=True reuses the exact same
+    CaseStore/retrieval/citation path every ingested passage already goes
+    through - retrieve_passages(), generate_answer()/stream_answer(), and
+    SourceCard's "Human-entered note" badge (web/src/App.jsx) all already
+    handle a human_entered chunk correctly, since the schema for this
+    (core/chunk.py's source_type Literal already includes "manual", and
+    human_entered/date_confidence have been schema-complete since Phase 1)
+    was deliberately put in place before this phase was built, not added
+    now to make it fit.
+
+    The answer contract's Rule 3 (prompts/answer_contract.txt) is what
+    actually enforces the "never present this as an established hard
+    fact" requirement, keyed on the human_entered flag this sets - this
+    function's only job is getting the entry stored with the right
+    metadata, not policing how the model uses it.
+
+    Deliberately not re-chunked/split the way chunk_pages splits a whole
+    ingested document - manual entries are short, staff-typed facts, not
+    full documents; splitting a two-sentence note into multiple retrieval
+    chunks would only fragment it for no benefit. An entry long enough to
+    actually need splitting is arguably not what this feature is for -
+    a real scoping line, not an oversight, the same way core/chunk.py's
+    own docstring already flags date-extraction as out of scope for
+    ingestion.
+
+    page is fixed at 1 for every manual entry (there's no real pagination
+    for a note) - safe because doc_id is a fresh uuid per entry, so
+    CaseStore's id scheme (doc_id + page + chunk_index) never collides
+    across different manual entries in the same case.
+
+    Also ensures the case's documents/ directory exists (even if this is
+    the very first thing ever added to a brand-new case, with no ingested
+    documents yet) - GET /cases only lists case_ids with that directory
+    present, so a manual-entry-only case would otherwise never show up in
+    the picker at all.
+    """
+    if date_confidence not in ("exact", "approximate", "undated"):
+        raise ValueError(f"Invalid date_confidence: {date_confidence!r}")
+
+    case_docs_dir = Path(config.data_root) / "cases" / case_id / "documents"
+    case_docs_dir.mkdir(parents=True, exist_ok=True)
+
+    doc_id = f"manual-{uuid.uuid4().hex[:12]}"
+    chunk = Chunk(
+        case_id=case_id,
+        doc_id=doc_id,
+        doc_name=doc_name,
+        page=1,
+        chunk_index=0,
+        source_type="manual",
+        event_date=event_date,
+        date_confidence=date_confidence,
+        human_entered=True,
+        text=text,
+    )
+    vectors = embedder.embed_texts([chunk.text])
+    store = CaseStore(config.data_root, case_id)
+    store.add_chunks([chunk], vectors)
+    return {"case_id": case_id, "doc_id": doc_id, "doc_name": doc_name}
+
+
 def ask_case_question(
     case_id: str,
     question: str,
@@ -217,6 +294,14 @@ class IngestRequest(BaseModel):
     doc_paths: list[str] | None = None  # if None, ingest everything under data/cases/<case_id>/documents/
 
 
+class ManualEntryRequest(BaseModel):
+    case_id: str
+    text: str
+    doc_name: str  # short staff-facing label - what an attorney sees in the citation, e.g. "Phone call with client, 3/10/2024"
+    event_date: str | None = None
+    date_confidence: Literal["exact", "approximate", "undated"] = "undated"
+
+
 class ConversationTurnIn(BaseModel):
     question: str
     answer: str
@@ -256,6 +341,48 @@ def ingest(
         # "something about this document failed, here's why" is genuinely
         # useful, not a swallowed bug.
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}") from e
+
+
+@app.post("/manual-entries")
+def manual_entry(
+    req: ManualEntryRequest,
+    config: ClientConfig = Depends(get_config),
+    embedder: EmbeddingFunction = Depends(get_embedder),
+):
+    """Phase 5, "paralegal manual-entry" - lets staff add a fact/note that
+    doesn't exist in any ingested document, storing it as its own citable
+    source (see add_manual_entry's own docstring for the full reasoning).
+    Validates here, not in add_manual_entry, so a request-shape problem
+    (blank text/label) is a clean 400 - a user-input mistake, not a server
+    fault - while add_manual_entry's own ValueError (an invalid
+    date_confidence, which can't happen through this route since the
+    Literal type already rejects it at the request-parsing layer, but can
+    happen from a direct/CLI caller) stays a genuine 500."""
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="Note text can't be empty.")
+    if not req.doc_name.strip():
+        raise HTTPException(status_code=400, detail="A short label for this note is required.")
+    # A date_confidence of "exact"/"approximate" with no actual date is a
+    # nonsensical combination - silently normalized rather than rejected,
+    # since the web UI's own form (see web/src/App.jsx) already can't
+    # produce it (the confidence field there is disabled until a date is
+    # entered), so this only ever fires for another future caller (a
+    # future CLI command, say) that skipped that same UI-level guard.
+    date_confidence = req.date_confidence if req.event_date else "undated"
+    try:
+        return add_manual_entry(
+            req.case_id,
+            config,
+            embedder,
+            req.text.strip(),
+            req.doc_name.strip(),
+            event_date=req.event_date,
+            date_confidence=date_confidence,
+        )
+    except OllamaError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not save that note: {e}") from e
 
 
 @app.post("/ask")
