@@ -137,6 +137,17 @@ you dig into a case. If you don't have a follow-up, just don't say
 anything — it stops listening for one on its own after a few seconds and
 goes back to waiting for the wake phrase.
 
+**Or end it yourself by saying:**
+
+> **"That will be all."**
+
+Say that any time you're done with a line of questioning, and it stops
+listening for a follow-up right away instead of you having to wait it
+out or stay quiet. It won't be treated as a question — nothing gets
+asked, nothing shows up in your conversation. Hands-free itself stays on
+though, still ready for "Let's do a case review" whenever your next
+question comes.
+
 A few things worth knowing about this mode:
 
 - **It only listens for that phrase — it isn't recording your

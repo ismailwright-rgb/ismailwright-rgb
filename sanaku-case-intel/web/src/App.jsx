@@ -189,7 +189,6 @@ function stripCitationsForSpeech(text) {
 // zero backend changes - phrase matching is pure client-side string logic
 // over text /transcribe already returns.
 const WAKE_PHRASE = "let's do a case review";
-const WAKE_PHRASE_WORD_COUNT = WAKE_PHRASE.split(' ').length;
 const LISTEN_CHUNK_MS = 4000;
 const LISTEN_PAUSE_RETRY_MS = 500;
 // 10 minutes, reset only when a chunk actually matches the wake phrase -
@@ -219,10 +218,30 @@ const LISTEN_ENERGY_THRESHOLD = 0.02;
 // in README.internal.md's Voice section - this is a starting point.
 const LISTEN_MATCH_MAX_RATIO = 0.25;
 
+// Expands a small, deliberately narrow set of contractions before
+// matching - specifically "'ll" ("that'll" -> "that will"), the one
+// contraction shape that came up as a real gap tuning
+// matchesConversationEndPhrase below (a genuine, natural way to say
+// "that will be all" that word-level matching would otherwise miss
+// entirely, see that function's own comment for why word-level matching
+// is used at all). Deliberately not a general contraction-expansion
+// pass (no "'re", no "'s" - "'s" is ambiguous between "is" and
+// possessive, expanding it wrong would be worse than leaving it alone) -
+// scoped to exactly the one shape actually needed.
 function normalizeForMatch(text) {
-  return text.toLowerCase().replace(/[^a-z0-9'\s]/g, '').replace(/\s+/g, ' ').trim();
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s]/g, '')
+    .replace(/(\w+)'ll\b/g, '$1 will')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
+/** Generic Levenshtein edit distance - works over any indexable sequence
+ * via .length/[i-1], so the same implementation serves both a sequence of
+ * characters (a string) and a sequence of words (an array) depending on
+ * what's passed in. matchesShortPhrase below passes word arrays, not
+ * strings - see its own comment for why that distinction matters here. */
 function levenshteinDistance(a, b) {
   const m = a.length;
   const n = b.length;
@@ -243,27 +262,78 @@ function levenshteinDistance(a, b) {
 }
 
 /** True if some contiguous word-window of `transcript` is close enough to
- * WAKE_PHRASE to count as a match. A sliding window over word count
- * rather than comparing the whole transcript, since a 4-second chunk can
+ * `phrase` to count as a match. A sliding window over word count rather
+ * than comparing the whole transcript, since a chunk/recording can
  * contain speech before or after the phrase itself ("okay, let's do a
- * case review" or "let's do a case review, please"). Window sizes span
- * the phrase's own word count plus/minus one, tolerating a dropped or
- * extra word without needing an exact length match. */
-function matchesWakePhrase(transcript) {
-  const normalizedPhrase = normalizeForMatch(WAKE_PHRASE);
+ * case review" or "that will be all, thanks"). Window sizes span the
+ * phrase's own word count plus/minus one, tolerating a dropped or extra
+ * word without needing an exact length match. Shared by matchesWakePhrase
+ * and matchesConversationEndPhrase below - same fuzzy-matching need, two
+ * different short phrases, each with its own tolerance (see
+ * CONVERSATION_END_MATCH_MAX_RATIO's own comment for why theirs differ).
+ *
+ * Distance is computed **word-by-word, not character-by-character** -
+ * real bug found live tuning "that will be all": a real, unrelated
+ * question like "what will be the next step in discovery" scored well
+ * within the wake phrase's own character-level tolerance, because
+ * short common English words differ from each other by only a couple of
+ * characters regardless of meaning ("the" vs "all" is 3 character
+ * substitutions - indistinguishable, at the character level, from a
+ * genuine mishearing). Word-level distance treats "the" vs "all" as one
+ * whole-word substitution, the same cost as any other wrong word,
+ * which lines up with what's actually being judged: is this a close
+ * variant of the *phrase*, not of its individual letters. */
+function matchesShortPhrase(transcript, phrase, maxRatio) {
+  const phraseWords = normalizeForMatch(phrase).split(' ').filter(Boolean);
   const words = normalizeForMatch(transcript).split(' ').filter(Boolean);
   if (words.length === 0) return false;
-  const minSize = Math.max(1, WAKE_PHRASE_WORD_COUNT - 1);
-  const maxSize = WAKE_PHRASE_WORD_COUNT + 1;
+  const minSize = Math.max(1, phraseWords.length - 1);
+  const maxSize = phraseWords.length + 1;
   for (let size = minSize; size <= maxSize; size++) {
     for (let start = 0; start + size <= words.length; start++) {
-      const window = words.slice(start, start + size).join(' ');
-      const distance = levenshteinDistance(window, normalizedPhrase);
-      const ratio = distance / Math.max(window.length, normalizedPhrase.length, 1);
-      if (ratio <= LISTEN_MATCH_MAX_RATIO) return true;
+      const window = words.slice(start, start + size);
+      const distance = levenshteinDistance(window, phraseWords);
+      const ratio = distance / Math.max(window.length, phraseWords.length, 1);
+      if (ratio <= maxRatio) return true;
     }
   }
   return false;
+}
+
+function matchesWakePhrase(transcript) {
+  return matchesShortPhrase(transcript, WAKE_PHRASE, LISTEN_MATCH_MAX_RATIO);
+}
+
+// Spoken counterpart to the wake phrase, for ending an ongoing
+// conversation on purpose rather than either asking whatever got
+// transcribed as if it were a real question, or waiting out the "is
+// anyone going to say anything" follow-up timeout (see
+// FOLLOW_UP_NO_SPEECH_TIMEOUT_MS / "ongoing conversation" further down).
+// Checked against any voice recording's transcript while hands-free is
+// currently armed - not scoped to only the automatic follow-up
+// recording specifically - so it works the same way whether it's said as
+// a genuine follow-up or as the very first thing said after the wake
+// phrase.
+//
+// Tighter tolerance than the wake phrase (0.15, not 0.25) - deliberately,
+// not an oversight: "that will be all" is built entirely from short,
+// common words, which real unrelated legal questions can drift close to
+// by coincidence ("that will not be all we need", "will that be all the
+// documents we need" both scored ~0.2-0.25 during tuning - genuine
+// questions, not mishearings, that a looser tolerance here would
+// wrongly treat as "end the conversation"). Every genuine phrasing of
+// the actual phrase tried during tuning - the exact phrase, "that'll be
+// all" (a natural contraction), the phrase with filler words before or
+// after it - scored a clean 0, so 0.15 leaves real margin for the
+// intended matches while excluding the false positives found. Real
+// false-positive-rate tuning against actual speech is still a
+// real-Mac-only question (see README.internal.md's Voice section) - this
+// is evidence-based, not guessed, but it's still a starting point.
+const CONVERSATION_END_PHRASE = 'that will be all';
+const CONVERSATION_END_MATCH_MAX_RATIO = 0.15;
+
+function matchesConversationEndPhrase(transcript) {
+  return matchesShortPhrase(transcript, CONVERSATION_END_PHRASE, CONVERSATION_END_MATCH_MAX_RATIO);
 }
 
 /** Root-mean-square of a Web Audio AnalyserNode's time-domain byte data
@@ -890,15 +960,28 @@ export default function App() {
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.detail || 'Could not transcribe that.');
         const text = data.text || '';
-        setQuestion(text);
-        // askQuestion re-checks its own guard (a case is selected,
-        // nothing else is already mid-answer, the text isn't blank) - if
-        // that guard fails, this is a no-op and the transcribed text is
-        // simply left sitting in the question box instead, same as
-        // before this asked itself automatically. viaVoice: true - this
-        // question was spoken, so its answer gets spoken back too, with
-        // no "Listen to this answer" click needed.
-        askQuestion(text, { viaVoice: true });
+        // Ending an ongoing conversation on purpose, checked before
+        // anything else happens with this transcript: "that will be all"
+        // is a command, not a question, while hands-free is armed - it's
+        // never sent to askQuestion (would read strangely as a "question"
+        // with no real answer) and it's never left sitting in the
+        // question box either. Not checked when hands-free is off - the
+        // whole notion of "ending a conversation" only applies to the
+        // continuous, no-click loop hands-free enables in the first
+        // place; a one-off manual mic click has nothing ongoing to end.
+        if (listeningModeRef.current && matchesConversationEndPhrase(text)) {
+          setQuestion('');
+        } else {
+          setQuestion(text);
+          // askQuestion re-checks its own guard (a case is selected,
+          // nothing else is already mid-answer, the text isn't blank) -
+          // if that guard fails, this is a no-op and the transcribed text
+          // is simply left sitting in the question box instead, same as
+          // before this asked itself automatically. viaVoice: true -
+          // this question was spoken, so its answer gets spoken back too,
+          // with no "Listen to this answer" click needed.
+          askQuestion(text, { viaVoice: true });
+        }
       } catch (err) {
         setError(err.message);
       } finally {

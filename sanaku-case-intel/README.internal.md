@@ -613,6 +613,81 @@ confirmed the mirror case: the exact same voice question asked with
 hands-free *off* does **not** auto-reopen the mic afterward - the gate
 actually gates in both directions, not just the happy path.
 
+### Ending an ongoing conversation by voice - "that will be all"
+
+The spoken counterpart to the wake phrase: while hands-free is armed,
+saying **"That will be all"** ends the conversation on purpose instead of
+either being sent to the model as if it were a real question, or just
+waiting out the 8-second follow-up timeout above. Checked against *any*
+voice recording's transcript while hands-free is currently armed - not
+scoped to only the automatic follow-up recording - so it works whether
+it's said as a genuine follow-up or as the very first thing said after
+the wake phrase. Implementation-wise this is a guard in
+`startRecording`'s `onstop` handler, checked before `askQuestion` is ever
+called: a match clears the question box and stops there - no request
+sent, nothing left sitting in the input for the user to wonder about.
+`listeningModeRef` gates it the same way it gates the follow-up
+continuation above, and for the same reason (a fresh, current read of
+hands-free's state, not a stale closure).
+
+**A real false-positive bug found and fixed *during tuning*, before it
+ever shipped** - worth walking through since it changed how phrase
+matching works for both this phrase and the wake phrase: the first
+version reused `matchesWakePhrase`'s exact approach unchanged (character-
+level Levenshtein distance over a sliding word-window, same `0.25`
+tolerance). Probing it against a battery of real, unrelated legal
+questions turned up a genuine false positive - "what will be the next
+step in discovery" scored `0.235`, comfortably inside a `0.25` tolerance,
+because character-level distance can't tell the difference between "a
+few letters changed" and "an entirely different word": `the` → `all` is
+only 3 character substitutions, the same cost a character-level metric
+would assign to a genuine mishearing. Word-level distance fixes this at
+the root - `the` vs `all` becomes one whole-word substitution, matching
+what's actually being judged (is this a variant of the *phrase*, not of
+its individual letters) - so `matchesShortPhrase` (the function both
+`matchesWakePhrase` and this share) now diffs arrays of words, not
+strings of characters. `levenshteinDistance` itself didn't need to
+change - it already worked generically over any indexable sequence via
+`.length`/`[i-1]`, so passing word arrays instead of strings was the
+entire fix. `normalizeForMatch` also gained a narrow, deliberately-scoped
+contraction expansion (`'ll` → ` will`, e.g. `"that'll"` → `"that will"`)
+- word-level matching would otherwise have lost the "let's" ↔ "lets"-style
+tolerance for this specific contraction, which real speech naturally
+produces.
+
+Retuned against a wider probe set with the word-level metric: every
+genuine phrasing of the actual phrase tried (the exact phrase, "that'll
+be all," filler words before or after it) scored a clean `0`, while every
+near-miss real sentence tried - including ones that share the phrase's
+own words, like "that will **not** be all we need" and "will that be all
+the documents we need" - scored `0.2` or higher. That gap is why
+`CONVERSATION_END_MATCH_MAX_RATIO` is `0.15`, tighter than the wake
+phrase's `0.25`: real margin below the true positives, real margin above
+the false positives found, not a guess split down the middle.
+
+**Verified directly**, not assumed: 16 synthetic cases run under plain
+Node against the actual extracted matching functions - wake-phrase
+matching unaffected by the word-level switch (4 cases, all still pass
+exactly as before), the exact phrase and natural variants of the closing
+phrase all matching (5 cases), and every near-miss real-question probe
+from tuning - including the specific sentence that originally
+false-positived and the negation case - correctly *not* matching (7
+cases). Then genuinely end-to-end with Playwright against the stub-backed
+dev server, two runs: hands-free armed, a recording transcribes to "that
+will be all" → confirmed no turn was created, nothing was sent to
+`/ask/stream`, the question box stayed empty, and the mic did not
+auto-reopen; a mirror run with hands-free *off* confirmed the exact same
+transcript is asked as a normal (if odd-sounding) literal question
+instead - the gate requires hands-free to be armed, it isn't a global
+"never ask this" filter.
+
+**Only confirmable on a real Mac with a real microphone**: whether `0.15`
+is actually the right tolerance against real speech and a real Whisper
+model's real transcription noise - this tuning is evidence-based against
+a real, deliberately adversarial probe set, not guessed, but it's still a
+starting point, the same honest caveat every other match-tolerance value
+in this project carries.
+
 Real feedback: having to click the mic button again to say "I'm done
 talking" was friction against the actual goal ("this is supposed to be
 an interactive system that has live conversation," in the words that
