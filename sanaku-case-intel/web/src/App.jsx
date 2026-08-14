@@ -52,9 +52,15 @@ function StopIcon() {
 
 /** Citation tokens like [doc.pdf, p.3] are fine to read on screen, tedious
  * to hear spoken aloud on every sentence - strip them from what's sent to
- * /speak; they stay fully visible in the answer panel regardless. */
+ * /speak; they stay fully visible in the answer panel regardless. Same
+ * for the leading "* "/"- " bullet markers AnswerBody's own /^[*-]\s+/
+ * regex strips when rendering a list visually - without this, a voice
+ * reads the literal character aloud as "asterisk" before every point. */
 function stripCitationsForSpeech(text) {
-  return text.replace(/\[[^\]]+\]/g, '').replace(/[ \t]{2,}/g, ' ');
+  return text
+    .replace(/^[*-]\s+/gm, '')
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/[ \t]{2,}/g, ' ');
 }
 
 /** Very small formatter for the answer text: blocks separated by a blank
@@ -183,6 +189,24 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  // ⌘⇧M (⌃⇧M off Mac) toggles the mic exactly like clicking its button -
+  // a modifier combo specifically so it's safe to leave active regardless
+  // of focus, including while typing in the question box, without a
+  // special case for text-entry contexts. Left active globally rather
+  // than gated to "not in a text field" the way a bare key like spacebar
+  // would need to be.
+  useEffect(() => {
+    if (!micSupported) return undefined;
+    function handleKeydown(e) {
+      const isMicShortcut = (e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'm';
+      if (!isMicShortcut) return;
+      e.preventDefault();
+      handleMicClick();
+    }
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, [micSupported, handleMicClick]);
+
   const canAsk = useMemo(() => caseId.trim() && question.trim() && !loading, [caseId, question, loading]);
 
   async function handleAsk(e) {
@@ -234,6 +258,7 @@ export default function App() {
   // submit on its own - a misheard word silently becoming the actual
   // question is the wrong failure mode for legal software.
   async function handleMicClick() {
+    if (transcribing) return;
     if (recording) {
       mediaRecorderRef.current?.stop();
       return;
@@ -382,8 +407,8 @@ export default function App() {
                 onClick={handleMicClick}
                 disabled={transcribing}
                 aria-pressed={recording}
-                aria-label={recording ? 'Stop recording' : 'Ask by voice'}
-                title={recording ? 'Stop recording' : 'Ask by voice'}
+                aria-label={recording ? 'Stop recording (⌘⇧M)' : 'Ask by voice (⌘⇧M)'}
+                title={recording ? 'Stop recording (⌘⇧M)' : 'Ask by voice (⌘⇧M)'}
               >
                 {recording ? <StopIcon /> : <MicIcon />}
               </button>
