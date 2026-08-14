@@ -12,6 +12,8 @@ from pathlib import Path
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from core.chunk import chunk_pages
@@ -25,6 +27,26 @@ from core.store import CaseStore
 app = FastAPI(title="Sanaku Case-Intel API")
 
 SUPPORTED_SUFFIXES = {".pdf", ".txt"}
+
+# This API and the web UI both run on the same machine, on-site at the firm
+# - there is no multi-tenant/public-internet exposure to guard against here,
+# only the browser's own same-origin restriction between Vite's dev server
+# (5173) and this API (8000). Wide open on localhost is fine for that; this
+# is not a public API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# The logo file itself isn't proprietary - serving it is how the browser
+# actually gets a firm's branding onto the page. Nothing else in config/ is
+# mounted here; model names, credentials, and license data never go near
+# this route.
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "config" / "assets"
+ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/branding-assets", StaticFiles(directory=str(ASSETS_DIR)), name="branding-assets")
 
 
 # ---- dependencies -----------------------------------------------------
@@ -90,6 +112,36 @@ def ask_case_question(
 
 
 # ---- routes -------------------------------------------------------------
+
+@app.get("/theme")
+def theme(config: ClientConfig = Depends(get_config)):
+    """Branding only - firm_name, a servable logo URL, and colors. This is
+    the ONLY config-derived endpoint the client-facing web UI is meant to
+    call. Deliberately excludes gen_model/embed_model/tier/data_root/
+    license_path - the white-label guardrail (never surface the vendor
+    name, model names, or architecture detail to the client) is enforced
+    by what this endpoint does not return, not by UI-side discipline."""
+    logo_filename = Path(config.logo_path).name
+    return {
+        "firm_name": config.firm_name,
+        "logo_url": f"/branding-assets/{logo_filename}",
+        "colors": config.colors.model_dump(),
+    }
+
+
+@app.get("/cases")
+def list_cases(config: ClientConfig = Depends(get_config)):
+    """Case IDs with a documents/ folder on this machine - lets the UI
+    offer a picker instead of asking staff to type an opaque case_id."""
+    cases_dir = Path(config.data_root) / "cases"
+    if not cases_dir.exists():
+        return {"cases": []}
+    return {
+        "cases": sorted(
+            p.name for p in cases_dir.iterdir() if p.is_dir() and (p / "documents").exists()
+        )
+    }
+
 
 @app.get("/health")
 def health(config: ClientConfig = Depends(get_config)):

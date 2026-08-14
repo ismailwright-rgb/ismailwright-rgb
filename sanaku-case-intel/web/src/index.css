@@ -1,0 +1,269 @@
+:root {
+  /* Overwritten at runtime from /theme's colors - these are just a
+     sane default so the page never renders unstyled before that fetch
+     resolves. */
+  --color-primary: #0b3d2e;
+  --color-secondary: #c9a24b;
+  --color-accent: #f4f1ea;
+  --ink: #1b1f1d;
+  --ink-soft: #5c655f;
+  --line: #dfe3df;
+  --paper: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--color-accent);
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 28px;
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
+
+.firm-name {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.app-main {
+  flex: 1;
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+.ask-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.case-select {
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+  max-width: 260px;
+  color: var(--ink);
+}
+
+.question-row {
+  display: flex;
+  gap: 10px;
+}
+
+.question-input {
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.question-input:focus, .case-select:focus {
+  outline: 2px solid var(--color-secondary);
+  border-color: transparent;
+}
+
+.ask-button {
+  padding: 12px 22px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ask-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.error-banner {
+  margin-top: 18px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fdecea;
+  color: #a12622;
+  font-size: 14px;
+}
+
+.answer-layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 28px;
+  margin-top: 28px;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .answer-layout { grid-template-columns: 1fr; }
+}
+
+.answer-panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 26px 28px;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.answer-panel p {
+  margin: 0 0 16px;
+}
+
+.answer-panel p:last-child {
+  margin-bottom: 0;
+}
+
+.answer-list {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+
+.answer-list li {
+  margin-bottom: 10px;
+}
+
+.source-panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.source-heading {
+  margin: 0 0 12px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.no-sources {
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-card {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.source-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--color-accent);
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.source-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.source-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 13.5px;
+  min-width: 0;
+}
+
+.source-doc {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-page {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.source-chevron {
+  font-size: 16px;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+.source-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(201, 162, 75, 0.18);
+  color: #8a6516;
+}
+
+.source-text {
+  margin: 0;
+  padding: 10px 12px 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  border-top: 1px dashed var(--line);
+}
