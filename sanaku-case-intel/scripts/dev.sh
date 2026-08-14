@@ -128,7 +128,7 @@ PIPER_PID=""
 if [ "$START_PIPER" = "1" ]; then
   echo "==> Starting the voice service on port $PIPER_PORT..."
   python3 -m piper.http_server --model "$PIPER_VOICE" --data-dir "$PIPER_DATA_DIR" \
-    --host 127.0.0.1 --port "$PIPER_PORT" --sentence-silence 0.4 > "$PIPER_LOG" 2>&1 &
+    --host 127.0.0.1 --port "$PIPER_PORT" --sentence-silence 0.6 > "$PIPER_LOG" 2>&1 &
   PIPER_PID=$!
 fi
 

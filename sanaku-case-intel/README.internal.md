@@ -357,7 +357,7 @@ log directly) — same shape as `ollama serve`:
 ```bash
 python3 -m piper.http_server --model en_US-lessac-medium \
   --data-dir ~/.local/share/sanaku-case-intel/piper-voices --host 127.0.0.1 --port 5001 \
-  --sentence-silence 0.4
+  --sentence-silence 0.6
 ```
 
 **Port 5001, not Piper's own default of 5000** — real bug hit live:
@@ -378,26 +378,99 @@ side, `--port` on Piper's).
 `--sentence-silence` defaults to `0.0` in Piper's own server — literally
 zero silence between sentences unless set explicitly, which reads as one
 run-on utterance regardless of how clean the sentence boundaries in the
-text are. `0.4` (seconds) is a reasonable starting point for a real
-pause between an answer's thesis and each supporting point; adjust to
-taste. This only does anything useful paired with
-`stripCitationsForSpeech` (`web/src/App.jsx`) actually producing real
-sentence-terminal punctuation between points in the first place - Piper
-can't pause on a sentence boundary that isn't there.
+text are. Started at `0.4` (seconds), raised to **`0.6`** after a real
+live report that points still blurred together at `0.4` — adjust further
+to taste; this is one global value, Piper doesn't expose a
+bigger-pause-here-smaller-pause-there control. This only does anything
+useful paired with `stripCitationsForSpeech` (`web/src/App.jsx`) actually
+producing real sentence-terminal punctuation between points in the first
+place - Piper can't pause on a sentence boundary that isn't there.
+
+That same live report also named a second, separate issue:
+`stripCitationsForSpeech` originally stripped only the `[doc_name, p.X]`
+bracket itself, not any lead-in phrase introducing it ("according to
+[...]", "as documented in [...]") - the answer contract's own Rule 3
+example ("per a manually entered note (undated)...") is exactly this
+shape. Stripping just the bracket left the lead-in phrase dangling with
+nothing after it ("...experienced pain, according to ."), which read as
+a garbled, cut-off fragment, not a clean pause - a materially different
+bug from the plain pacing gap even though both produced the same
+complaint ("it sounds like it's all part of the sentence"). Fixed by
+stripping the whole lead-in-phrase-plus-bracket clause together
+(`CITATION_LEAD_IN_PATTERN`), and separately, `stripCitationsForSpeech`
+now inserts a spoken-only "Here is why:" the first time a bulleted list
+of supporting points follows the thesis paragraph - narration structure,
+not a factual claim, so it needs no citation of its own, and it gives the
+thesis→points shift an audible marker the way the bulleted list already
+marks it visually.
+
+**Verified directly**, not assumed: `stripCitationsForSpeech` is pure
+string logic with no DOM/browser dependency (same reason
+`matchesWakePhrase` was written that way), so it was extracted and run
+directly under plain Node against seven synthetic cases covering both
+fixes - a dangling "according to [...]", a dangling "as documented in
+[...]", the Rule-3-shaped "per [...]", a plain trailing bracket with no
+lead-in phrase (the pre-existing, still-working case), the thesis→list
+transition appearing exactly once, no transition on a single-paragraph
+answer, and the pre-existing title/date expansion still working
+alongside both new fixes. All seven passed. What that *can't* prove:
+whether `0.6` seconds of `--sentence-silence` (up from `0.4`) actually
+*sounds* like enough of a pause on real hardware, and whether "Here is
+why:" reads as a natural transition rather than an odd interjection -
+both need a real ear on your Mac.
 
 **What was actually verified in this sandbox** (no microphone, no audio
 hardware here, same constraint that applied to live Ollama generation):
 `scripts/dev_server_stub.py` overrides `get_transcriber`/`get_synthesizer`
 with `tests/stub_transcriber.py`/`tests/stub_synthesizer.py` (the latter
 returning a genuinely valid, playable silent WAV — not just WAV-shaped
-bytes), so the whole request/response contract and the UI's mic → upload
-→ fill-question-box and Listen → fetch → `<audio>` play/stop/auto-end
+bytes), so the whole request/response contract and the UI's
+mic → upload → transcribe → **ask automatically** (see "Voice questions
+ask themselves" below) and Listen → fetch → `<audio>` play/stop/auto-end
 flows were proven end-to-end with Playwright, using Chromium's
-fake-media-device flags to simulate a microphone. What that *cannot*
-prove: real transcription accuracy against a real spoken legal question,
-and real Piper voice naturalness/latency — both need confirming on your
-Mac, the same as semantic embedding quality and live cited-answer output
-were in Phase 2/3.
+fake-media-device flags (`--use-file-for-fake-audio-capture` against a
+real generated WAV, not just a silent/mocked stream) to simulate a
+microphone, plus `dev_server_stub.py`'s `WHISPER_STUB_TEXT` env var to
+control what a fake recording transcribes to. What that *cannot* prove:
+real transcription accuracy against a real spoken legal question, and
+real Piper voice naturalness/latency — both need confirming on your Mac,
+the same as semantic embedding quality and live cited-answer output were
+in Phase 2/3.
+
+## Voice questions ask themselves
+
+Real feedback, changing this feature's original design on purpose: a
+question asked by voice — mic button, `⌘⇧M`, or hands-free — now submits
+itself the instant it's transcribed. No Ask click needed, from either
+path. This deliberately reverses the original "fill the box, human still
+clicks Ask" design, on explicit direction: talking to this is supposed to
+work like talking to a voice assistant, not "transcribe, then still
+submit by hand." See `startRecording`'s own comment in
+`web/src/App.jsx` for the trade-off this accepts (a misheard word can
+become a real submitted question with no review step in between — the
+*answer's* trustworthiness is unaffected, since every claim is still
+cited from the case's own documents regardless of how the question was
+asked, but the question being answered might not be the one meant; a
+spoken follow-up corrects it the same way clarifying with a person
+would).
+
+Implementation: `handleAsk` (the form's submit handler) and
+`startRecording`'s post-transcription step both now funnel into one
+shared `askQuestion(text)` function, which re-checks the same guard
+`canAsk` already checked (a case is selected, nothing else is already
+loading or streaming, the text isn't blank) before actually submitting —
+so a stray/empty transcription, or one that lands while a previous
+answer is still generating, is a silent no-op that just leaves the
+transcribed text sitting in the box, not a broken or duplicate request.
+
+**Verified directly in this sandbox with Playwright**, not assumed: mic
+click → fake-audio recording → manual stop → transcribed text lands in
+the question box → **without any Ask click**, the app enters the
+"Generating…" state, a turn appears with the transcribed question, the
+question box clears itself, and the streamed fake answer's real content
+renders. Confirms the whole auto-submit path end to end through the same
+stub-backed dev server used for every other voice verification this
+session.
 
 ## Auto-stop recording on silence
 
@@ -504,9 +577,24 @@ rooms with privileged attorney-client conversations, so when the
 microphone is live can never be ambiguous. Armed, saying **"Let's do a
 case review"** starts a real question recording with no click needed —
 the same `startRecording()` the mic button and `⌘⇧M` already call, so
-there's exactly one recording path, not two. It only ever fills the
-question box; the human still reviews and clicks Ask, same as manual
-voice input — this feature doesn't auto-submit.
+there's exactly one recording path, not two.
+
+**The transcribed question asks itself — no Ask click needed, from
+either this or manual mic input.** This reverses this feature's original
+design (transcribe into the box, require a manual click to submit),
+changed on explicit direction: talking to this is supposed to work the
+way talking to a voice assistant does — ask, it researches, it answers —
+not "transcribe, then still submit by hand." Real trade-off this
+accepts, not hidden: a misheard word can become a real submitted
+question with no review step in between. The answer's own
+trustworthiness is unaffected — every claim is still cited straight from
+the case's documents regardless of how the question was asked — but the
+question being answered might not be the one that was meant. See
+`startRecording`'s own comment in `web/src/App.jsx` for the full
+reasoning; `askQuestion` (the function both `handleAsk` and this funnel
+into) re-checks the same guard `canAsk` checks before actually
+submitting, so a stray transcription with no case selected or arriving
+mid-answer is a silent no-op, not a broken state.
 
 **Architecture: reuses the existing local Whisper pipeline via short
 rolling audio chunks, not a dedicated wake-word engine.** `openwakeword`

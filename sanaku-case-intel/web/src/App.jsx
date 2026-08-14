@@ -80,26 +80,65 @@ function expandIsoDatesForSpeech(text) {
   });
 }
 
-/** Prepares answer text for /speak: strips citation brackets and bullet
- * markers (same reasons as before - a voice shouldn't read "bracket doc
- * pdf comma p dot 3 bracket" or "asterisk" aloud), expands title
- * abbreviations and ISO dates into how they're actually meant to sound,
- * and splits the text into the same blocks/points AnswerBody renders as
- * separate paragraphs or list items, guaranteeing each one ends with
- * terminal punctuation before rejoining them. Without that, points that
- * already lack a trailing period (the answer contract doesn't require
- * one) blur together into what sounds like one run-on sentence once
- * newlines stop meaning anything to the TTS engine - a period is the one
- * thing every speech synthesizer reliably treats as a pause boundary. */
+// A citation bracket is very often introduced by a lead-in phrase
+// ("according to [doc, p.3]", "as documented in [doc, p.3]") rather than
+// sitting bare at the end of a clause - the answer contract's Rule 3
+// example ("per a manually entered note (undated)...") is exactly this
+// shape. Stripping only the bracket itself, as the very first version of
+// this function did, leaves that lead-in phrase dangling with nothing
+// after it ("...experienced pain, according to ."), which is a real bug
+// found live: it reads as a garbled, cut-off fragment stitched onto the
+// end of the sentence, not as a clean pause - confusing in exactly the
+// way a listener can't place. Stripping the lead-in phrase together with
+// the bracket it introduces removes the whole dangling clause instead of
+// just the part of it that happened to be in brackets.
+const CITATION_LEAD_IN_PATTERN =
+  /,?\s*\b(?:according to|as (?:documented|noted|stated|shown|reflected) in|as per|per|citing|see)\s*\[[^\]]+\]/gi;
+
+/** Prepares answer text for /speak: strips citation brackets (and any
+ * lead-in phrase introducing one, see CITATION_LEAD_IN_PATTERN above)
+ * and bullet markers (a voice shouldn't read "bracket doc pdf comma p
+ * dot 3 bracket" or "asterisk" aloud), expands title abbreviations and
+ * ISO dates into how they're actually meant to sound, and splits the
+ * text into the same blocks/points AnswerBody renders as separate
+ * paragraphs or list items, guaranteeing each one ends with terminal
+ * punctuation before rejoining them. Without that, points that already
+ * lack a trailing period (the answer contract doesn't require one) blur
+ * together into what sounds like one run-on sentence once newlines stop
+ * meaning anything to the TTS engine - a period is the one thing every
+ * speech synthesizer reliably treats as a pause boundary.
+ *
+ * Also inserts a short spoken-only transition ("Here is why:") the first
+ * time a bulleted list of supporting points follows the thesis - a real
+ * gap found live: read straight through with nothing marking the shift,
+ * the thesis's last word and the first point's claim ran together with
+ * no audible signal that these are two different things now, the same
+ * "sounds like one sentence" confusion the lead-in-phrase fix above
+ * addresses for a different reason. This transition is pure narration
+ * structure, not a factual claim, so it isn't subject to (and doesn't
+ * need) a citation of its own. */
 function stripCitationsForSpeech(text) {
   const blocks = text.trim().split(/\n\s*\n/);
   const sentences = [];
+  let sawNonListBlock = false;
   for (const block of blocks) {
     const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
     const isList = lines.length > 0 && lines.every((l) => /^[*-]\s+/.test(l));
+    if (isList && sawNonListBlock) {
+      sentences.push('Here is why:');
+      sawNonListBlock = false; // only announce the transition once
+    } else if (!isList) {
+      sawNonListBlock = true;
+    }
     const points = isList ? lines.map((l) => l.replace(/^[*-]\s+/, '')) : [lines.join(' ')];
     for (const rawPoint of points) {
-      let point = rawPoint.replace(/\[[^\]]+\]/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+      let point = rawPoint
+        .replace(CITATION_LEAD_IN_PATTERN, '')
+        .replace(/\[[^\]]+\]/g, '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\s+([.,!?])/g, '$1') // a stripped bracket can leave a stray space before trailing punctuation
+        .replace(/,\s*([.!?])$/, '$1') // ...or a stray dangling comma right before it
+        .trim();
       point = expandIsoDatesForSpeech(expandTitlesForSpeech(point));
       if (!point) continue;
       if (/[.!?]$/.test(point)) {
@@ -532,12 +571,21 @@ export default function App() {
   // is working"). Sources arrive as the stream's first line (retrieval is
   // the fast part) and populate the source panel immediately, well before
   // the answer's first word exists.
-  async function handleAsk(e) {
-    e.preventDefault();
-    if (!canAsk) return;
+  //
+  // Takes the question text as a parameter rather than always reading
+  // `question` state, so startRecording's voice-completion handler below
+  // can submit the just-transcribed text directly without waiting a
+  // render for state to catch up. Re-checks the same guard handleAsk used
+  // to check via `canAsk` itself, since a caller here isn't necessarily
+  // coming from a submit event where that was already verified - if the
+  // guard fails (no case selected, already mid-answer, empty text), this
+  // silently does nothing and leaves whatever text was passed in the
+  // question box for the user to deal with by hand.
+  async function askQuestion(rawQuestion) {
+    const askedQuestion = rawQuestion.trim();
+    if (!caseId.trim() || !askedQuestion || loading || streamingTurnId) return;
     audioRef.current?.pause();
     setSpeakingId(null);
-    const askedQuestion = question.trim();
     const historyPayload = turns.map((t) => ({ question: t.question, answer: t.data.answer }));
     setLoading(true);
     setPendingQuestion(askedQuestion);
@@ -627,6 +675,11 @@ export default function App() {
     }
   }
 
+  async function handleAsk(e) {
+    e.preventDefault();
+    askQuestion(question);
+  }
+
   // Phase 5: saves a staff-known fact as its own citable source via
   // POST /manual-entries - see api/main.py's add_manual_entry for the
   // full reasoning. The confidence field only matters when a date was
@@ -693,11 +746,21 @@ export default function App() {
   // the browser's built-in speech recognition, which on Chrome typically
   // sends audio to Google's servers. Extracted out of handleMicClick so
   // the hands-free wake-phrase loop below can call the exact same
-  // function the mic button does - one recording path, not two. The
-  // transcribed text fills the question box; it does not submit on its
-  // own - a misheard word silently becoming the actual question is the
-  // wrong failure mode for legal software, and that stays true whether
-  // the recording was started by hand or by voice.
+  // function the mic button does - one recording path, not two.
+  //
+  // The transcribed text asks itself, no separate click needed - a
+  // deliberate reversal of this feature's original design (fill the box,
+  // require a manual Ask click), changed on explicit direction: talking
+  // to this is supposed to work like talking to a voice assistant - ask,
+  // it researches, it answers - not "transcribe, then still have to
+  // submit by hand." The trade-off that reversal accepts, worth stating
+  // plainly rather than pretending it disappeared: a misheard word can
+  // now become a real submitted question with no review step in between.
+  // Nothing about the answer itself gets less trustworthy - every claim
+  // is still cited straight from the case's own documents - but the
+  // question being asked might not be the one you meant to ask. If that
+  // happens, just ask the follow-up out loud to correct it, the same way
+  // you'd clarify with a person.
   async function startRecording() {
     if (recordingRef.current || transcribingRef.current) return;
     recordingRef.current = true;
@@ -734,7 +797,14 @@ export default function App() {
         const r = await fetch('/transcribe', { method: 'POST', body: form });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.detail || 'Could not transcribe that.');
-        setQuestion(data.text || '');
+        const text = data.text || '';
+        setQuestion(text);
+        // askQuestion re-checks its own guard (a case is selected,
+        // nothing else is already mid-answer, the text isn't blank) - if
+        // that guard fails, this is a no-op and the transcribed text is
+        // simply left sitting in the question box instead, same as
+        // before this asked itself automatically.
+        askQuestion(text);
       } catch (err) {
         setError(err.message);
       } finally {

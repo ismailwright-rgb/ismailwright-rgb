@@ -96,9 +96,14 @@ question box.
   question naturally. Recording stops on its own once you go quiet — you
   don't need to click anything to tell it you're done, though clicking
   the microphone again at any time stops it manually.
-- Once it stops, your words are transcribed into the question box for
-  you to review — it fills in the text, it does not ask the question for
-  you. Check that it heard you correctly, then press **Ask** yourself.
+- Once it stops, your question is transcribed and **asked automatically**
+  — you don't need to click Ask yourself. Talk to it the way you'd talk
+  to a voice assistant: ask, and it starts researching right away.
+- If it mishears something, just say a follow-up out loud to correct it
+  — "actually, I meant..." — the same way you'd clarify with a person.
+  Every answer is still built only from real cited passages either way,
+  so a misheard question can't quietly make up an answer — it just means
+  the wrong question got answered, which a quick follow-up fixes.
 - **Keyboard shortcut:** press **⌘⇧M** (or **Ctrl+Shift+M** if you're not
   on a Mac) to start or stop recording without touching the mouse — it
   works no matter where your cursor is, including while you're typing.
@@ -112,7 +117,10 @@ can start a question just by saying:
 > **"Let's do a case review."**
 
 Say that phrase, and it starts recording your actual question
-automatically — no click needed at all.
+automatically — no click needed at all. Once you stop talking, it
+transcribes and asks the question on its own too, exactly like the
+microphone button above — the whole exchange, start to finish, never
+needs your hands.
 
 A few things worth knowing about this mode:
 

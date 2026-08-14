@@ -17,7 +17,7 @@ Start the local voice service (its own terminal, same shape as
 `ollama serve`):
     python3 -m piper.download_voices en_US-lessac-medium --data-dir <dir>
     python3 -m piper.http_server --model en_US-lessac-medium \
-        --data-dir <dir> --host 127.0.0.1 --port 5001 --sentence-silence 0.4
+        --data-dir <dir> --host 127.0.0.1 --port 5001 --sentence-silence 0.6
 
 Port 5001, not Piper's own default of 5000 - real bug hit live: macOS's
 built-in AirPlay Receiver listens on port 5000 by default and intercepts
@@ -38,7 +38,13 @@ early real run sound like one run-on utterance instead of distinct
 points. Only useful paired with web/src/App.jsx's
 stripCitationsForSpeech actually producing real sentence-terminal
 punctuation between points in the first place - Piper can't pause on a
-sentence boundary that isn't there.
+sentence boundary that isn't there. Raised from an initial 0.4 to 0.6
+after a real live report that points still blurred together - a bigger
+pause between every sentence, not just points specifically, since Piper
+only exposes one global value here, not a per-boundary one. Paired with
+stripCitationsForSpeech's own fix for the same report: a dangling
+citation-lead-in phrase ("...experienced pain, according to .") reading
+as a garbled fragment, not a clean pause.
 
 Synthesizer is the seam that keeps api/main.py decoupled from Piper
 specifically: production code uses PiperSynthesizer; tests substitute a
@@ -95,7 +101,7 @@ class PiperSynthesizer:
                 f"Cannot reach the local voice service at {self._client.base_url}. "
                 f"Is it running? Try: python3 -m piper.http_server --model "
                 f"en_US-lessac-medium --data-dir <dir> --host 127.0.0.1 --port 5001 "
-                f"--sentence-silence 0.4"
+                f"--sentence-silence 0.6"
             ) from e
         except httpx.HTTPStatusError as e:
             # A 403 here on a Mac almost always means something other than
