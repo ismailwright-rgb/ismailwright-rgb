@@ -26,3 +26,13 @@ dist/
 # before overwriting it — never a source file, and per-firm like the
 # thing it's a backup of.
 config/client.json.bak-*
+
+# The repo root's own .gitignore excludes .claude/ broadly (personal/
+# local Claude Code session config, sensible as a repo-wide default).
+# These two files are the exception: project-scoped slash commands,
+# deliberately meant to be tracked and shipped with every client bundle
+# (see docs/new-client-playbook.md's "Slash commands" section) - not
+# personal config.
+!.claude/
+!.claude/commands/
+!.claude/commands/*.md

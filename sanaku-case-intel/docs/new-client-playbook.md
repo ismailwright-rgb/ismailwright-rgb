@@ -78,7 +78,7 @@ overwritten.
 
 ```bash
 cp /wherever/their/files/are/*.pdf data/cases/their_first_case/documents/
-python3 cli.py ingest --case-id their_first_case
+python3 cli.py ingest --case-id their_first_case   # or /ingest their_first_case in a Claude Code session
 bash scripts/dev.sh
 ```
 
@@ -93,11 +93,35 @@ download). See `docs/installation-guide.md`'s "Optional: set up voice"
 step — it's the same two commands for every client, run once per
 machine, not per client.
 
+## Slash commands
+
+If you're running this inside a Claude Code session with this repo
+open, you don't need to copy-paste anything below — just run:
+
+- **`/new-client`** — optionally with the firm's details already typed
+  after it (e.g. `/new-client Smith & Associates LLP, #0B3D2E #C9A24B
+  #F4F1EA, case id smith_v_acme`) — asks for whatever's missing, confirms
+  the exact command it's about to run before touching anything, then
+  walks the whole onboarding flow above.
+- **`/ingest <case-id>`** — re-indexes a case's documents any time files
+  are added, removed, or changed in its `documents/` folder. This is the
+  one to reach for any time you're not sure whether a newly-added
+  document is actually searchable yet — nothing watches that folder on
+  its own, so this is the step that makes new files count.
+
+Both are project-scoped commands defined under `.claude/commands/` in
+this repo, which means they're plain tracked files —
+`scripts/package-release.sh` sweeps them into every future client
+bundle automatically via `git archive`, the same way the rest of this
+playbook does, with no extra step required.
+
 ## The reusable prompt
 
-If you'd rather hand this whole checklist to an AI coding assistant
-(a fresh Claude Code session, given this bundle) instead of running it
-by hand, paste this in, filled out for the client at hand:
+For contexts without slash-command support — pasting into a plain web
+chat, or any session where this repo's `.claude/commands/` folder isn't
+loaded — hand this whole checklist to an AI assistant instead by pasting
+this in, filled out for the client at hand. Inside Claude Code with this
+repo checked out, prefer `/new-client` above instead.
 
 > I'm setting up this case-research tool for a new client. Follow
 > `docs/new-client-playbook.md` exactly. Their details:
