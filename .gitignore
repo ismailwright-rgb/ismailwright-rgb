@@ -4,9 +4,11 @@ sanaku/site/*.pdf
 # project content, never belongs in the repo.
 .claude/
 
-# Exception: project-scoped slash commands, deliberately tracked so they
-# persist across sessions and are available in this repo's own command
-# menu — not personal/local session state like the rest of .claude/.
+# Exception: project-scoped skills (/new-client, /ingest), deliberately
+# tracked so they persist across sessions and are available in this
+# repo's own command menu — not personal/local session state like the
+# rest of .claude/.
 !.claude/
-!.claude/commands/
-!.claude/commands/*.md
+!.claude/skills/
+!.claude/skills/*/
+!.claude/skills/*/SKILL.md

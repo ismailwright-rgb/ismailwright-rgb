@@ -109,16 +109,17 @@ open, you don't need to copy-paste anything below — just run:
   document is actually searchable yet — nothing watches that folder on
   its own, so this is the step that makes new files count.
 
-Both are project-scoped commands defined under `.claude/commands/` in
-this repo, which means they're plain tracked files —
-`scripts/package-release.sh` sweeps them into every future client
-bundle automatically via `git archive`, the same way the rest of this
-playbook does, with no extra step required.
+Both are project-scoped skills defined under `.claude/skills/` in this
+repo (`.claude/skills/new-client/SKILL.md` and
+`.claude/skills/ingest/SKILL.md`), which means they're plain tracked
+files — `scripts/package-release.sh` sweeps them into every future
+client bundle automatically via `git archive`, the same way the rest of
+this playbook does, with no extra step required.
 
 ## The reusable prompt
 
 For contexts without slash-command support — pasting into a plain web
-chat, or any session where this repo's `.claude/commands/` folder isn't
+chat, or any session where this repo's `.claude/skills/` folder isn't
 loaded — hand this whole checklist to an AI assistant instead by pasting
 this in, filled out for the client at hand. Inside Claude Code with this
 repo checked out, prefer `/new-client` above instead.
