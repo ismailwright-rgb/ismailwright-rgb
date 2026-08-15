@@ -1,4 +1,5 @@
 ---
+name: ingest
 description: Ingest (re-index) a case's documents so they become searchable
 argument-hint: "[case-id]"
 ---

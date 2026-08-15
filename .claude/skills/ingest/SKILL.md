@@ -1,4 +1,5 @@
 ---
+name: ingest
 description: Ingest (re-index) a sanaku-case-intel case's documents so they become searchable
 argument-hint: "[case-id]"
 ---
@@ -11,9 +12,9 @@ cd sanaku-case-intel
 ```
 
 Then follow these exact instructions (mirrors
-`sanaku-case-intel/.claude/commands/ingest.md`, the source of truth this
-file is kept in sync with — that copy is also what ships inside every
-future client bundle via `scripts/package-release.sh`):
+`sanaku-case-intel/.claude/skills/ingest/SKILL.md`, the source of truth
+this file is kept in sync with — that copy is also what ships inside
+every future client bundle via `scripts/package-release.sh`):
 
 Run this after adding, removing, or changing files in a case's
 `data/cases/<case_id>/documents/` folder. Nothing watches that folder

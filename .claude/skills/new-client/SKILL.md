@@ -1,7 +1,21 @@
 ---
-description: Onboard a new client (branding + first case) by following docs/new-client-playbook.md
+name: new-client
+description: Onboard a new client (branding + first case) for the sanaku-case-intel project
 argument-hint: "[firm name] [colors/logo/case-id/docs path — any subset, or leave blank to be asked]"
 ---
+
+This command operates on the `sanaku-case-intel/` sub-project. Every path
+and command below is relative to it, not to this repo's root — start by
+running:
+
+```
+cd sanaku-case-intel
+```
+
+Then follow these exact instructions (mirrors
+`sanaku-case-intel/.claude/skills/new-client/SKILL.md`, the source of
+truth this file is kept in sync with — that copy is also what ships
+inside every future client bundle via `scripts/package-release.sh`):
 
 You are onboarding a new client for this case-research tool. Follow
 `docs/new-client-playbook.md` exactly — it is the single source of truth
