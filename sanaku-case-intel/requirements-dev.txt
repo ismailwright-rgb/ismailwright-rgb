@@ -3,3 +3,8 @@
 # scripts/generate_sample_case.py uses to build fictional fixture PDFs.
 pytest==8.3.4
 reportlab==5.0.0
+
+# Used by scripts/record_demo.py (sales-demo video recording only).
+# `pip install` alone does not install a browser binary — after this,
+# also run: python3 -m playwright install chromium
+playwright==1.62.0

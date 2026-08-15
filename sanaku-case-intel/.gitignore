@@ -27,6 +27,11 @@ dist/
 # thing it's a backup of.
 config/client.json.bak-*
 
+# scripts/record_demo.py's one required input: a personal, machine-
+# specific voice recording (see DEMO-VIDEO.internal.md) — regeneratable
+# any time by speaking the question again, never a source file.
+scripts/demo-assets/
+
 # The repo root's own .gitignore excludes .claude/ broadly (personal/
 # local Claude Code session config, sensible as a repo-wide default).
 # These skills are the exception: project-scoped (/new-client, /ingest),
