@@ -1,50 +1,32 @@
-<h1>Hi, Ismail! <br/><a href="https://github.com/joshmadakor1">Programmer</a>, <a href="https://www.linkedin.com/in/joshmadakor/">Cybersecurity Professional</a>, <a href="https://www.youtube.com/c/joshmadakor">YouTuber</a></h1>
+I build production AI automation for revenue operations — voice agents that answer and book, LLM pipelines that qualify with a stated rationale, and outbound systems that run unattended without creating legal exposure.
 
-<h2>👨‍💻 Software Development Projects:</h2>
+## The through-line
 
-- <b>A.L.F.R.E.D </b>
-  - [Praciting DS & Algos in Python](https://github.com/ismailwright-rgb/Alfred)
-- <b>PowerShell</b>
-  - [Windows EventLog: Failed RDP Logins Source IP to full GeoData Conversion](https://github.com/joshmadakor1/Sentinel-Lab)
-  - [JWipe (Disk Wiping Utility)](https://github.com/joshmadakor1/Jwipe.PowerShell)
-  - [Active Directory Bulk User Creation](https://github.com/joshmadakor1/AD_PS)
-  - [FIM (File Integrity Monitor)](https://github.com/joshmadakor1/PowerShell-Integrity-FIM)
+**I find the revenue leak nobody is measuring, build the system that closes it, and prove the number.**
 
-<h2>📊 Data Projects</h2>
-<b>LAGOS LOGISTICS </b>
-- [Praciting DS & Algos in Python](https://github.com/ismailwright-rgb/Alfred)
+At a Los Angeles logistics facility I built the shipment tracking infrastructure from scratch. The operation wasn't failing to hit a number — it had no visibility into missed shipments at all, so the loss never appeared anywhere to be argued about. The tracking system created the visibility, and the visibility is what recovered roughly **$120,000 a month**. I supervised a floor team of about 40 while it was running.
 
-<h2>📺 Popular YouTube Videos</h2>
+Same move in a CRM. Expired-but-previously-interested contacts sit in every sales org, already paid for, and nobody works them because the hit rate doesn't justify a rep's hours. I stitched three APIs that had never spoken to each other — Pipeline CRM, RingCentral SMS, and the calendar — into a single path from dead record to booked call. A conversational agent re-engages, qualifies whether the person still intends to exit their timeshare, and books the discovery call. It books **8–10 appointments a week with no human in the loop**.
 
-- [How to get into Cybersecurity Starting From Zero](https://www.youtube.com/watch?v=a83ASGn_V_s)
-- [A Day in the Life of a Cybersecurity Anayst](https://www.youtube.com/watch?v=uHy3oM7NnoU)
-- [How to Create a KeyLogger (C#)](https://www.youtube.com/watch?v=N-L9hklSlNk)
-- [Ransomware Demonstration (C#)](https://www.youtube.com/watch?v=OfvdQeh79s0)
-- [Is WGU Legit?](https://www.youtube.com/watch?v=E2MwRWxDBkA)
+That system is also where the engineering matters most: **opt-out suppression and quiet hours (8am–8pm in the recipient's local timezone) are enforced at the send-queue layer as hard gates, not as branches inside the conversation.** Compliance written as a prompt fails the first time the model improvises. Compliance written as a gate cannot be talked around, even when every other part of the system tries to.
 
-<h2> 🤳 Connect with me:</h2>
+One warehouse, one CRM, same move.
 
-[<img align="left" alt="JoshMadakor | YouTube" width="22px" src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/youtube.svg" />][youtube]
-[<img align="left" alt="JoshMadakor | Twitter" width="22px" src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/twitter.svg" />][twitter]
-[<img align="left" alt="JoshMadakor | LinkedIn" width="22px" src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/linkedin.svg" />][linkedin]
-[<img align="left" alt="JoshMadakor | Instagram" width="22px" src="https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/instagram.svg" />][instagram]
+## Systems
 
-[twitter]: https://twitter.com/joshmadakor
-[youtube]: https://www.youtube.com/c/joshmadakor
-[instagram]: https://www.instagram.com/joshmadakor/
-[linkedin]: https://linkedin.com/in/joshmadakor
+**[ai-systems-portfolio](https://github.com/ismailwright-rgb/ai-systems-portfolio)** — architecture, design decisions, and diagrams for five builds:
+[Voice AI Intake](https://github.com/ismailwright-rgb/ai-systems-portfolio/tree/main/01-voice-intake) ·
+[Intent Monitoring Pipeline](https://github.com/ismailwright-rgb/ai-systems-portfolio/tree/main/02-intent-pipeline) ·
+[Alfred (multi-agent)](https://github.com/ismailwright-rgb/ai-systems-portfolio/tree/main/03-alfred-multi-agent) ·
+[ATS Scanner](https://github.com/ismailwright-rgb/ai-systems-portfolio/tree/main/04-ats-scanner) ·
+[Lead Reactivation](https://github.com/ismailwright-rgb/ai-systems-portfolio/tree/main/05-lead-reactivation)
 
-<!--
-**joshmadakor1/joshmadakor1** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+## Stack
 
-Here are some ideas to get you started:
+n8n · Vapi · Supabase/Postgres · Python · React · Netlify · ElevenLabs · OpenRouter · Apollo · RingCentral API · Cal.com
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+## Open to
+
+Solutions Engineer · GTM Engineer · Forward Deployed Engineer · Deployment Strategist — Los Angeles, open to remote.
+
+[ismailwright@gmail.com](mailto:ismailwright@gmail.com) · [LinkedIn](https://linkedin.com/in/thekeyispersistence)
